@@ -2955,6 +2955,11 @@ function fmtMessage(msg, config, selfId, target = '') {
     if (seg.type === 'text') return d.text || ''
     if (seg.type === 'face') return `[表情${d.id}]`
     if (seg.type === 'image') return '[图片]'
+    // at 段的 name 经常是空的（NapCat 不给），至少把 qq 带上，不然只显示 [at] 看不出 @ 了谁
+    if (seg.type === 'at') {
+      const nm = String(d.name || '').trim()
+      return `[at ${nm || d.qq || '?'}]`
+    }
     if (seg.type === 'json') {
       const card = parseShareCard(seg)
       return card ? ` ${cardTextOf(card)} ` : '[卡片]'
