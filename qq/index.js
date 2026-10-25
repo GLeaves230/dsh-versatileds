@@ -7686,8 +7686,10 @@ export function apply(ctx, config) {
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
           const wantVoice = config.voiceEnabled.get() === true && reply.includes('[语音]')
+          // 念出来的东西不能带 QQ 表情（[白眼][偷笑][表情 #32] 这些念出来就是「白眼」两个字）
+          const stripBrackets = (s) => String(s || '').replace(/\[[^\]]{1,10}\]/g, '').replace(/\s{2,}/g, ' ').trim()
           // 偶尔主动用声音说：像人聊着聊着突然来一句语音；长回复还是文字（念长文很怪）
-          const plainVoiceText = reply.replace(/\[语音\]/g, '').trim()
+          const plainVoiceText = stripBrackets(reply)
           const voiceChance = Math.max(0, Math.min(100, Number(config.voiceChance.get() ?? 0)))
           const casualVoice = !wantVoice && config.voiceEnabled.get() === true && isGroup
             && plainVoiceText && plainVoiceText.length <= 60
@@ -7695,7 +7697,7 @@ export function apply(ctx, config) {
           if ((wantVoice || casualVoice) && reply.trim()) {
             // 「念这句：『阿尔泽布，我已登神』」——引号里的原话优先，别被模型改写
             const quoted = text.match(/[：:，,\s]\s*[“"「『‘]([^”"」』’]{1,80})[”"」』’]/)
-            const voiceText = (quoted ? quoted[1] : reply.replace(/\[语音\]/g, '')).trim() || '嗯'
+            const voiceText = (quoted ? quoted[1] : stripBrackets(reply)).trim() || '嗯'
             try {
               await ob.call('send_group_ai_record', {
                 character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
