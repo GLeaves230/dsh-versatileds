@@ -2562,6 +2562,14 @@ function inQuiet(groupId) {
   return Number(quietState.get(String(groupId || '')) || 0) > Date.now()
 }
 
+/** 这句是不是让你用声音说（发语音）：关键词触发，命中就用配置的音色发一条语音。 */
+function looksLikeVoiceRequest(text) {
+  const t = String(text || '').trim()
+  if (!t || t.length > 40) return false
+  if (/(语音|声音)(有?点|太)?(难听|不好|怪)/.test(t)) return false
+  return /(发|回|来|整|说)(一)?(条|个|句|段)?(语音|声音)|语音(回|说|发|来)|用(声音|语音)(说|回|讲)|念一?(下|遍)|读一?(下|遍)|唱一?(首|个|句)|开(语音|麦)/.test(t)
+}
+
 /**
  * 这句是不是在让我安静 / 闭嘴。不只看字面「闭嘴」，
  * 「给老子安静点」「再吵把你踢了」「消停会儿」这类都算——判断的是意图，不是关键词。
@@ -7545,6 +7553,32 @@ export function apply(ctx, config) {
             if (reply.includes(token)) {
               reply = reply.split(token).join('').trim()
               if (!atUid) atUid = ownerQQOf(config)
+            }
+          }
+          // 让它「说句话」：用配置的音色发一条语音，发完这条自然回文本（不影响后续）
+          // 触发：关键词（发语音/用声音说/念一下…）或模型自己打了 [语音] 标记
+          const wantVoice = config.voiceEnabled.get() === true
+            && (looksLikeVoiceRequest(text) || reply.includes('[语音]'))
+          if (wantVoice && reply.trim()) {
+            const voiceText = reply.replace(/\[语音\]/g, '').trim() || '嗯'
+            try {
+              await ob.call('send_group_ai_record', {
+                character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
+                text: voiceText,
+                group_id: Number(data.group_id),
+              })
+              appendNote({
+                kind: 'group-auto',
+                role: String(config.selfLabel.get() || 'DS'),
+                from: sender,
+                name: senderName,
+                text,
+                reply: `（语音）${voiceText}`,
+                extra,
+              })
+              return
+            } catch (err) {
+              console.warn('[dsh-versatileds-plugin] 语音发送失败，回退文本:', err?.message ?? err)
             }
           }
           // 分段发：一句长话拆成两三条短消息，像人一段一段打
