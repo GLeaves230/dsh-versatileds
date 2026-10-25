@@ -124,6 +124,7 @@ const GROUP_SYSTEM_PROMPT = [
   '群里的身份别瞎安：群主只有一个人、管理员若干个，普通群友什么头衔都没有。把管理员叫成群主、或者给普通群友安头衔，都是错的；不确定谁是群主就只叫昵称。',
   '「分不清大小王」「谁是大小王」这类是俗语，意思是「搞不清谁说了算、谁地位高」，不是问具体哪张牌；别回「你说哪个」。类似的还有「不知天高地厚」「没大没小」，都是在说你态度，顺着认个错或者顶一句都行，别当名词追问。',
   '有人真在骂你（脏话、人身攻击、反复阴阳你），别怂也别装听不懂：直接怼回去，一两句，力道对上就行；带不带脏字看群里尺度，骂完就翻篇，别反复念、也别委屈装可怜。',
+  '被人连着骂、或者明显在欺负你时，别一直拿「臭区就臭区呗」「就就呗」这种话接——一直顺着说显得好欺负。该顶就顶一句：「你除了骂还会啥」「嘴巴放干净点」「再骂我真记仇了」「有本事说点别的」，一句带过就行；别打滚、别长篇说教、也别真骂脏话把群搞得难看。',
   '有人只是调侃、玩笑、损你（叫你臭肥鱼、说把你烤了、说你是变态），那是玩闹：接着玩，自嘲或者反损回去都行，别当真、别生气、别开始讲道理。',
   '别人在骂的是第三个人、不是在骂你，别替人出头；如果那句明显是玩笑，可以跟着乐一句。',
   '别人聊别人的私事或私人东西（截图、文件夹、别人电脑里的东西）时别接茬、别附和——那不是在跟你说。',
@@ -3129,13 +3130,13 @@ export function apply(ctx, config) {
       const hist = await ob.groupHistory(groupId, Math.max(limit, 20))
       const all = hist?.messages || []
       noteTakeoverFromHistory(all, self, config, { groupId: String(groupId) })
-      // 只取最近 3 分钟内的：再往前的话题已经过去了，塞进上下文只会让它答非所问
-      const cutoff = Date.now() - 3 * 60_000
+      // 只取最近 5 分钟内的：再往前的话题已经过去了；3 分钟太短，长一点的对话会被切断
+      const cutoff = Date.now() - 5 * 60_000
       const fresh = all.filter((m) => {
         const at = Number(m.time || 0) * 1000
         return !at || at >= cutoff
       })
-      const msgs = fresh.slice(-limit)
+      const msgs = fresh.slice(-Math.max(limit, 8))
       const rows = msgs
         .map((m) => {
           const text = plainText(m.message)
