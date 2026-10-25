@@ -66,18 +66,19 @@ QQ 模块的「登录」子页是我们自己的登录入口：状态检测、�
 
 ## 第三方组件声明：NapCat
 
-QQ 模块依赖本机安装的 [NapCat](https://github.com/NapNeko/NapCatQQ)（基于 NTQQ 的协议侧框架）完成与 QQ 的连接。NapCat 由使用者自行安装，**本插件不包含它的源码或二进制**，只在运行时启动它、读取它生成的登录二维码。
+QQ 模块依赖本机安装的 [NapCat](https://github.com/NapNeko/NapCatQQ)（基于 NTQQ 的协议侧框架）完成与 QQ 的连接。**本插件不包含 NapCat 的源码**，但**随包附带它的官方发布版压缩包** `vendor/napcat.zip`（首次启动时自动解压到 `<DSH_HOME>/napcat`）。需要源码请自行到[NapCat 官方 GitHub](https://github.com/NapNeko/NapCatQQ) 下载。插件只在运行时启动它、读取它生成的登录二维码，不改它任何代码。
 
 | 项 | 内容 |
 |---|---|
 | 项目 | https://github.com/NapNeko/NapCatQQ |
 | 版权 | Copyright © 2024 Mlikiowa |
 | 许可证 | Limited Redistribution License for NapCat（受限再分发许可） |
-| 本插件用法 | 通过 `launcher.bat` 启动本机 NapCat；读 `<NapCat>/cache/qrcode.png` 在设置页显示登录二维码；登录成功后删除该缓存；不改 NapCat 任何代码 |
+| 本插件用法 | 随包携带官方发布版 `vendor/napcat.zip`，首次启动解压到 `<DSH_HOME>/napcat`；通过 `launcher.bat` 启动它；读 `<NapCat>/cache/qrcode.png` 在设置页显示登录二维码；登录成功后删除该缓存；不改 NapCat 任何代码 |
 
 许可证要点（详见 NapCat 仓库 `LICENSE`）：
 
 - 再分发必须附带完整许可证文本，并注明来源与版权
+- 再分发本插件时，`vendor/napcat.zip` 必须原样保留，且一并附上 NapCat 的许可证文本
 - 禁止商业用途
 - 未经作者许可不得修改后再公开分发
 - 软件按原样提供，不附带任何担保
