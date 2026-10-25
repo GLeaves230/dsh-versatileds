@@ -2922,6 +2922,8 @@ export function apply(ctx, config) {
 
   /** 同会话正在回时，后来的消息排队等，别直接丢掉。 */
   const pendingQueue = new Map()
+  /** 图消息回复冷却：同一个人 15 秒内连发多图只回第一张 */
+  const imageReplyClock = new Map()
   let selfId = ''
 
   async function ensureSelf() {
@@ -5575,6 +5577,21 @@ export function apply(ctx, config) {
       const talkerIsOwner = (Boolean(owner) && String(sender) === String(owner))
         || (Boolean(talkerSelf) && String(sender) === String(talkerSelf)
           && !isSelfSent(data.message_id, text, data.group_id || data.user_id))
+      // 同一个人 15 秒内连发多图：图照常存、照常识图，但只回第一张，别一张一句刷屏
+      if (imageFiles.length && !talkerIsOwner && !reply) {
+        const imgKey = `img:${sender}`
+        const lastImgAt = imageReplyClock.get(imgKey) || 0
+        if (Date.now() - lastImgAt < 15_000) {
+          appendNote({
+            kind: 'image-skip',
+            role: 'DS',
+            to: isGroup ? String(data.group_id) : sender,
+            reply: '[连发图，没再回]',
+          })
+          return
+        }
+        imageReplyClock.set(imgKey, Date.now())
+      }
       if (!reply) {
         const rulesText = isGroup ? groupRuleText(data.group_id) : ''
         // 记忆直答只给私聊；群里全靠模型按群规接话
