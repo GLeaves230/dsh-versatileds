@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -35,12 +35,22 @@ export const Config = Schema.object({
 export const name = 'versatileds'
 export const inject = ['tools']
 
+const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)))
+
+/** 当前插件版本：从 package.json 读，改版本只改那一处，别的地方都引用这个。 */
+export const VERSION = (() => {
+  try {
+    return String(JSON.parse(readFileSync(join(PLUGIN_ROOT, 'package.json'), 'utf8')).version || '')
+  } catch {
+    return ''
+  }
+})()
+
 /** DSH_HOME：插件所有路径都从这里推，不写死绝对路径。 */
 function dshHome() {
   return process.env.DSH_HOME || join(process.env.USERPROFILE || '', '.dsh')
 }
 
-const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)))
 const VENDOR = join(PLUGIN_ROOT, 'vendor')
 
 /**
@@ -87,6 +97,9 @@ function extractDep(dep) {
 /** 两个模块都只依赖 tools；它们内部通过 ctx.get 读取可选服务。 */
 export function apply(ctx, config) {
   const home = dshHome()
+
+  // 启动先把版本打出来：排查问题时一眼知道跑的是哪一版
+  console.info(`[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
 
   // 自检 + 缺失时从自带包解压：后台跑，不挡插件启动
   for (const dep of depSpecs(home)) {
