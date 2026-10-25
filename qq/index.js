@@ -1051,6 +1051,30 @@ function faceSegsToText(segs) {
   return `[表情 ${names.join('、')}]`
 }
 
+/**
+ * 合并转发（聊天记录）转成可读文本：
+ * forward 段的 data 里有时自带 content（内联节点），没有就拿 id 去 get_forward_msg 拉。
+ */
+async function forwardToText(seg, ob) {
+  const data = seg?.data || {}
+  let nodes = Array.isArray(data.content) ? data.content : []
+  if (!nodes.length && (data.id || data.message_id)) {
+    try {
+      const r = await ob.call('get_forward_msg', { id: String(data.id || data.message_id) })
+      nodes = r?.messages || r?.data || []
+    } catch { /* 拉不到就空着 */ }
+  }
+  if (!Array.isArray(nodes) || !nodes.length) return '[合并转发的聊天记录（没拉到内容）]'
+  const lines = nodes.slice(0, 12).map((n) => {
+    const who = String(n.sender?.nickname || n.sender?.card || n.nickname || n.uin || '某人')
+    const segs = n.message || n.content || []
+    const body = plainText(segs) || (Array.isArray(segs) && segs.some((s) => s?.type === 'image') ? '[图片]' : '')
+    return `${who}：${body || '[空]'}`
+  })
+  const more = nodes.length > 12 ? `\n…（还有 ${nodes.length - 12} 条）` : ''
+  return `[合并转发]\n${lines.join('\n')}${more}`
+}
+
 /** Windows-1252 里 0x80–0x9F 那段特殊字符，解码乱码要用。 */
 const CP1252_BYTE = {
   '\u20AC': 0x80, '\u201A': 0x82, '\u0192': 0x83, '\u201E': 0x84,
@@ -5260,10 +5284,14 @@ export function apply(ctx, config) {
     const senderName = neighborName || realSenderName
     let imageFiles = await saveMessageImages(data.message, realSenderName)
     const faceText = faceSegsToText(data.message)
+    // 合并转发（聊天记录）以前直接读成空 → 整条不回；这里把内容拉出来
+    const forwardSeg = (data.message || []).find((s) => s && s.type === 'forward')
+    const forwardText = forwardSeg ? await forwardToText(forwardSeg, ob) : ''
     // 乱码先还原（UTF-8 被当 Latin-1 读的那种），还原不出来再按原文走
     const rawText = plainText(data.message)
     const fixedText = tryFixGarbled(rawText)
     const text = (fixedText !== rawText ? fixedText : rawText)
+      || forwardText
       || (imageFiles.length ? '[图片]' : '')
       || faceText
     // 「分析一下这个图」这类请求常常先把图单独发出来、再跟一句话：本条没图就回历史里捞最近那张
