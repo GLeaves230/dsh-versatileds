@@ -100,6 +100,95 @@ window.__ModuleLoader__.load({
       return [state, setState]
     }
 
+    /**
+     * 列表型配置：内部维护字符串数组，保存时转成逗号分隔写回。
+     * 以前让人自己敲「a,b,c」，敲错一个逗号整项就废了。
+     */
+    function ListRow(props) {
+      const { form, field, label, hint, value, disabled } = props
+      const [open, setOpen] = React.useState(false)
+      const [items, setItems] = React.useState([])
+      const [msg, setMsg] = React.useState('')
+      const parse = (raw) => String(raw || '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
+      const list = parse(value)
+      const inputStyle = {
+        flex: 1, padding: '5px 8px', borderRadius: '6px',
+        border: '1px solid rgba(128,128,128,0.35)',
+        background: 'transparent', color: 'inherit', fontSize: '13px',
+      }
+      const openEditor = () => {
+        setItems(list.length ? [...list, ''] : [''])
+        setMsg('')
+        setOpen(true)
+      }
+      const save = () => {
+        const clean = items.map((s) => String(s || '').trim()).filter(Boolean)
+        form.set(field, clean.join(','))
+        setMsg('已保存')
+        setOpen(false)
+      }
+      return React.createElement(
+        'label',
+        { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, label),
+        React.createElement('button', {
+          type: 'button', style: skipStyle, disabled, onClick: openEditor,
+        }, '编辑列表'),
+        React.createElement('span', { style: hintStyle }, `${list.length} 项${hint ? ` · ${hint}` : ''}`),
+        open ? React.createElement(
+          'div',
+          {
+            style: {
+              position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            },
+            onClick: (e) => { if (e.target === e.currentTarget) setOpen(false) },
+          },
+          React.createElement(
+            'div',
+            {
+              style: {
+                width: 'min(560px, 92vw)', maxHeight: '80vh', overflow: 'auto',
+                background: 'Canvas', color: 'CanvasText', padding: '14px',
+                border: '1px solid rgba(128,128,128,0.35)', borderRadius: '12px',
+                boxShadow: '0 12px 48px rgba(0,0,0,0.45)',
+              },
+            },
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' } },
+              React.createElement('strong', { style: { fontSize: '14px' } }, label),
+              React.createElement('span', { style: { flex: 1 } }),
+              React.createElement('button', { type: 'button', style: skipStyle, onClick: () => setOpen(false) }, '取消'),
+            ),
+            items.length
+              ? items.map((item, i) => React.createElement(
+                  'div',
+                  { key: `li${i}`, style: { display: 'flex', gap: '8px', marginBottom: '8px' } },
+                  React.createElement('input', {
+                    type: 'text',
+                    value: item,
+                    placeholder: i === items.length - 1 ? '新的一项（留空自动丢弃）' : '',
+                    onChange: (e) => setItems(items.map((x, j) => (j === i ? e.target.value : x))),
+                    style: inputStyle,
+                  }),
+                  React.createElement('button', {
+                    type: 'button', style: skipStyle,
+                    onClick: () => setItems(items.filter((_, j) => j !== i)),
+                  }, '删'),
+                ))
+              : React.createElement('div', { style: { ...hintStyle, marginBottom: '8px' } }, '还没有项'),
+            React.createElement('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' } },
+              React.createElement('button', {
+                type: 'button', style: skipStyle, onClick: () => setItems([...items, '']),
+              }, '+ 添加一项'),
+              React.createElement('span', { style: { flex: 1 } }),
+              msg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, msg) : null,
+              React.createElement('button', { type: 'button', style: skipStyle, onClick: save }, '保存'),
+            ),
+          ),
+        ) : null,
+      )
+    }
+
     function NumberRow(props) {
       const { form, field, label, value, disabled } = props
       const [draft, setDraft] = React.useState(String(value))
@@ -303,6 +392,10 @@ window.__ModuleLoader__.load({
       ['autoBrowseCount', '每轮看几条（1~3）', ''],
     ]
 
+    const BILI_LIST_FIELDS = [
+      ['autoBrowseTopics', '可评话题关键词', '命中标题/简介/UP/标签才评；留空就都不评'],
+    ]
+
     const BILI_TEXTAREA_FIELDS = [
       ['autoBrowseCommentStyle', '自动评论怎么写', '给模型的指令，默认一两句、说具体的、不水文'],
     ]
@@ -315,7 +408,6 @@ window.__ModuleLoader__.load({
       ['ffmpegPath', 'ffmpeg 路径', '抓直播帧和视频帧都用它；留空就找 PATH 和默认路径'],
       ['liveFrameDir', '抓图目录', '留空用 <DSH_HOME>/bili/image'],
       ['videoFrameDir', '视频帧目录', '留空用 <DSH_HOME>/bili/frame'],
-      ['autoBrowseTopics', '可评话题关键词', '逗号分隔，命中标题/简介/UP/标签才评；留空就都不评'],
       ['autoBrowseProvider', '自动刷模型路由', 'DSH 的 llm provider，默认 deepseek-account'],
       ['autoBrowseModel', '自动刷模型名', '默认 deepseek-flash'],
     ]
@@ -335,6 +427,20 @@ window.__ModuleLoader__.load({
     /** 冷却状态面板：倒计时 + 跳过。labels 决定显示哪些项，B站/QQ 共用。 */
     function CooldownPanel({ labels, cooldowns, onSkip }) {
       const rows = Object.keys(labels || {}).filter((a) => Number(cooldowns[a]) > 0)
+      // 跳过 / 倒计时结束都给一句反馈，否则点了按钮界面没有任何变化，看着像没生效
+      const [msg, setMsg] = React.useState('')
+      const prevRows = React.useRef([])
+      const rowKey = rows.join(',')
+      React.useEffect(() => {
+        const ended = prevRows.current.filter((a) => !rows.includes(a))
+        if (ended.length) setMsg(`「${labels[ended[0]] || ended[0]}」冷却结束`)
+        prevRows.current = rows
+      }, [rowKey])
+      React.useEffect(() => {
+        if (!msg) return undefined
+        const t = setTimeout(() => setMsg(''), 4000)
+        return () => clearTimeout(t)
+      }, [msg])
       return React.createElement(
         'div',
         {
@@ -352,14 +458,20 @@ window.__ModuleLoader__.load({
               'div',
               { key: a, style: rowStyle },
               React.createElement('span', { style: { minWidth: '90px', opacity: 0.9 } }, labels[a]),
-              React.createElement('span', { style: cdStyle }, fmtLeft(cooldowns[a])),
+              React.createElement('span', { style: cdStyle }, `${Number(cooldowns[a])} 秒`),
               React.createElement('button', {
                 type: 'button',
                 style: skipStyle,
-                onClick: () => onSkip(a),
+                onClick: () => {
+                  setMsg(`已跳过「${labels[a] || a}」`)
+                  onSkip(a)
+                },
               }, '跳过'),
             ))
           : React.createElement('div', { style: hintStyle }, '没有在冷却中的动作，可以直接调'),
+        msg
+          ? React.createElement('div', { style: { ...hintStyle, color: '#2e7d32', marginTop: '4px' } }, msg)
+          : null,
       )
     }
 
@@ -434,6 +546,16 @@ window.__ModuleLoader__.load({
           )
         }
 
+        for (const [field, label, hint] of BILI_LIST_FIELDS) {
+          children.push(
+            React.createElement(ListRow, {
+              key: field, form, field, label, hint,
+              value: v[field] ?? '',
+              disabled: !snap.writable,
+            }),
+          )
+        }
+
         for (const [field, label, hint] of BILI_TEXT_FIELDS) {
           if (biliGroupOf(field) !== activeTab) continue
           children.push(
@@ -472,6 +594,7 @@ window.__ModuleLoader__.load({
       ['proactive', '主动'],
       ['task', '任务/搜索'],
       ['memory', '记忆'],
+      ['balance', '余额'],
       ['system', '系统'],
       ['logs', '日志'],
     ]
@@ -596,6 +719,9 @@ window.__ModuleLoader__.load({
     function LoginPanel() {
       const [st, setSt] = React.useState({ phase: 'loading' })
       const [busy, setBusy] = React.useState(false)
+      const [stopping, setStopping] = React.useState(false)
+      const [confirmStop, setConfirmStop] = React.useState(false)
+      const [note, setNote] = React.useState('')
       React.useEffect(() => {
         let alive = true
         const poll = async () => {
@@ -623,20 +749,49 @@ window.__ModuleLoader__.load({
           .then((d) => { if (d && d.dir) setSt((s) => ({ ...s, dir: d.dir })) })
           .catch(() => {})
       }
+      /** 退出登录 = 让插件把 NapCat 进程杀掉。两次点击确认，防手滑。 */
+      const stopLogin = () => {
+        if (!confirmStop) {
+          setConfirmStop(true)
+          setNote('再点一次「确认退出」，NapCat 会被直接关掉')
+          setTimeout(() => setConfirmStop(false), 5000)
+          return
+        }
+        setConfirmStop(false)
+        setStopping(true)
+        setNote('正在关闭 NapCat…（会弹管理员授权，点「是」）')
+        fetch(`${QQ_STATUS_URL}/login/stop`, { method: 'POST' })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d && d.ok) {
+              setNote(`已退出登录${d.pid ? `（PID ${d.pid}）` : ''}。要重新登录就点「启动登录服务」。`)
+              setSt((s) => ({ ...s, loggedIn: false, loggedOut: true, phase: 'offline' }))
+            } else {
+              setNote(`没退成：${(d && d.error) || '未知原因'}`)
+            }
+          })
+          .catch((e) => setNote(`请求失败：${e && e.message ? e.message : e}`))
+          .finally(() => setStopping(false))
+      }
       const phase = st.phase || 'loading'
+      const loggedOut = Boolean(st.loggedOut) && phase !== 'ready'
       const pkgBusy = Boolean(st.pkgBusy)
       const pkgError = String(st.pkgError || '')
       const color = pkgBusy ? '#e6a23c'
         : pkgError ? '#c62828'
           : phase === 'ready' ? '#2e7d32'
             : phase === 'waiting_qrcode' ? '#e6a23c'
-              : phase === 'loading' ? '#999' : '#c62828'
+              : loggedOut ? '#999'
+                : phase === 'loading' ? '#999' : '#c62828'
       const text = pkgBusy ? '正在解压 NapCat（首次约 1 分钟）…'
         : pkgError ? 'NapCat 初始化失败'
           : phase === 'ready' ? '已登录，二维码已清理'
             : phase === 'waiting_qrcode' ? '等待扫码'
-              : phase === 'loading' ? '正在读取状态…'
-                : '登录服务没在运行'
+              : loggedOut ? '已退出登录（点「启动登录服务」重新登录）'
+                : phase === 'loading' ? '正在读取状态…'
+                  : '登录服务没在运行'
+      // 已登录时同一个按钮变「退出登录」，点了走退出那套
+      const loggedIn = phase === 'ready'
       return React.createElement(
         'div',
         { style: { padding: '8px 0' } },
@@ -650,6 +805,10 @@ window.__ModuleLoader__.load({
         ),
         pkgError
           ? React.createElement('div', { style: { fontSize: '12px', color: '#c62828', marginBottom: '8px' } }, pkgError)
+          : null,
+        st.pid
+          ? React.createElement('div', { style: { fontSize: '12px', opacity: 0.6, marginBottom: '8px' } },
+              `NapCat PID ${st.pid}（「退出登录」就是把它杀掉）`)
           : null,
         phase === 'waiting_qrcode'
           ? React.createElement(
@@ -669,18 +828,19 @@ window.__ModuleLoader__.load({
           { style: { marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
           React.createElement('button', {
             type: 'button',
-            onClick: start,
-            disabled: busy,
+            onClick: () => { if (loggedIn || confirmStop) stopLogin(); else start() },
+            disabled: busy || stopping,
+            title: loggedIn ? '关掉 NapCat 进程，相当于在手机上退出登录' : '',
             style: {
               padding: '5px 14px',
               borderRadius: '6px',
-              border: '1px solid rgba(128,128,128,0.3)',
+              border: (loggedIn || confirmStop) ? '1px solid #f56c6c' : '1px solid rgba(128,128,128,0.3)',
               background: 'transparent',
-              color: 'inherit',
-              cursor: busy ? 'default' : 'pointer',
-              opacity: busy ? 0.6 : 1,
+              color: (loggedIn || confirmStop) ? '#f56c6c' : 'inherit',
+              cursor: busy || stopping ? 'default' : 'pointer',
+              opacity: busy || stopping ? 0.6 : 1,
             },
-          }, busy ? '正在拉起…' : '启动登录服务'),
+          }, stopping ? '正在退出…' : (busy ? '正在拉起…' : (confirmStop ? '确认退出' : (loggedIn ? '退出登录' : '启动登录服务')))),
           React.createElement('button', {
             type: 'button',
             onClick: openDir,
@@ -694,11 +854,22 @@ window.__ModuleLoader__.load({
             },
           }, '打开 NapCat 目录'),
         ),
+        note
+          ? React.createElement('div', {
+              style: {
+                marginTop: '8px',
+                fontSize: '12px',
+                lineHeight: 1.6,
+                color: /没退成|失败/.test(note) ? '#c62828' : 'inherit',
+                opacity: /没退成|失败/.test(note) ? 1 : 0.75,
+              },
+            }, note)
+          : null,
         React.createElement(
           'div',
           { style: { marginTop: '10px', fontSize: '12px', lineHeight: 1.7, opacity: 0.75 } },
           React.createElement('div', null, '启动需要管理员权限，任选一种：'),
-          React.createElement('div', null, '① 点「启动登录服务」，在弹出 UAC 窗口点「是」'),
+          React.createElement('div', null, '① 点上面的按钮（已登录时是「退出登录」），在弹出 UAC 窗口点「是」'),
           React.createElement('div', null, '② 点「打开 NapCat 目录」，右键 launcher.bat → 以管理员身份运行'),
           React.createElement('div', { style: { marginTop: '4px', opacity: 0.8 } },
             'NapCat 目录：', React.createElement('code', null, st.dir || '<DSH_HOME>/napcat/napcat')),
@@ -714,6 +885,7 @@ window.__ModuleLoader__.load({
       ruleSync: '群规同步',
       balance: '余额检查',
       replyGap: '回复间隔',
+      quiet: '反思中',
       poke: '搓一搓',
     }
 
@@ -722,19 +894,19 @@ window.__ModuleLoader__.load({
       if (/^(enabled|napcatHttp|napcatWs|onebotToken|autoStartNapCat|napcatHiddenLaunch|napcatDir|napcatLauncher|napcatQrPath|napcatQuickLogin|ownerLabel|takeoverLabel|selfLabel)$/.test(field)) return 'conn'
       if (/^(autoReply|onlyReplyOwner|replyDelay|replyGapSec|groupReplyChance|groupHistoryLimit|groupQuoteChance|groupSplitReply|privateQuoteChance|faceReply|rant|swear|retort|relay)/.test(field)) return 'reply'
       if (/^poke/.test(field)) return 'poke'
-      if (/^(rule|neighbor)/.test(field)) return 'group'
+      if (/^(rule|neighbor|quiet)/.test(field)) return 'group'
       if (/^videoShare/.test(field)) return 'share'
       if (/^(image|sticker|live|shareCard)/.test(field)) return 'media'
       if (/^proactive/.test(field)) return 'proactive'
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
-      if (/^(memoryMode|isolateHostQq|isolateGroupPrivate|crossMemoryEnabled|sharedMemory)/.test(field)) return 'memory'
+      if (/^balance/.test(field)) return 'balance'
+      if (/^(isolateHostQq|isolateGroupPrivate|sharedMemory)/.test(field)) return 'memory'
       return 'system'
     }
 
     const QQ_BOOL_FIELDS = [
-      ['enabled', 'QQ模块启用', '关掉后不连 NapCat、不注册 qq 工具，自动回复和主动搭话全停'],
-      ['autoReplyPrivate', '自动回复私聊', '收到私聊后按延迟自动回一句'],
-      ['autoReplyGroup', '自动回复群聊', '只在被 @ 时回'],
+      ['enabled', 'QQ模块启用', '关掉后不连 NapCat、不注册 qq 工具，自动回复/主动搭话/群规/余额全停；登录页的「启动登录服务」「退出登录」仍然可用'],
+      ['autoReplyEnabled', '自动回复总开关', '私聊和群聊一起管；群里接话频率看下面的概率'],
       ['onlyReplyOwner', '只回复主人', '打开后其他人的消息一律不理'],
       ['proactiveEnabled', '主动搭话', '按随机间隔主动发消息'],
       ['ruleSyncEnabled', '主动记群规', '定时看群公告和群介绍，记成群规'],
@@ -743,8 +915,7 @@ window.__ModuleLoader__.load({
       ['liveRequestEnabled', '聊到直播时向 DSH 要一帧', '画面由 DSH 侧看，插件不看'],
       ['webSearchEnabled', '联网搜索（总开关）', '关掉就一句都不查'],
       ['webSearchPrivate', '私聊搜索', '私聊里带搜索意图时联网查'],
-      ['webSearchGroupAt', '群里被 @ 时搜索', '先查一下，能同步梗和热点'],
-      ['webSearchGroupAmbient', '群里随机接话时也搜', '没被 @ 时也查，靠冷却限频'],
+      ['webSearchInGroup', '群聊里也搜索', '被 @ 和随机接话共用；频率由「搜索最短间隔」控制'],
       ['searchDelegateEnabled', '搜索转交 DSH', '只写请求，由 DSH 侧搜（主人到电脑前再开）'],
       ['webSearchReport', '搜到后说出来', '关掉就只拿来自查，回复里不提「我查了一下」'],
       ['taskDelegateEnabled', '任务转交 DSH', '主人私聊派活时交给 DSH 侧开工会话'],
@@ -755,7 +926,6 @@ window.__ModuleLoader__.load({
       ['isolateHostQq', '前后端记忆隔离', '打开后 DS 侧（DSH）和大肥鱼各用各的记忆，互不读取；关着就是两边共用一份'],
       ['sharedMemorySummary', '共享记忆超长时留头留尾', '保留开头（身份/锚点）+ 结尾（最新），中间省略；关掉只读前面那截'],
       ['isolateGroupPrivate', '群与个人记忆隔离', '打开后群里聊的不带进私聊、私聊的不带进群，不同 QQ 之间也各记各的'],
-      ['crossMemoryEnabled', '隔离时仍读共享记忆', 'isolated 模式下是否还允许只读共享'],
       ['sharedMemoryPrivate', '私聊读共享记忆', '关掉就只用插件自己的记忆'],
       ['chatLogEnabled', '聊天日志', '按会话分文件记在 qq/chat，关掉就完全不记'],
       ['logSelfMessages', '记录自己发的', '插件自己发的消息也记一条 DS'],
@@ -780,6 +950,7 @@ window.__ModuleLoader__.load({
     const QQ_NUM_FIELDS = [
       ['replyDelayMinSec', '回复最短等待（秒）', ''],
       ['replyDelayMaxSec', '回复最长等待（秒）', ''],
+      ['neighborReplyChance', '跟隔壁家搭话的概率（0-100）', ''],
       ['replyGapSec', '自动回复最短间隔（秒，0＝不限）', '每回一条后就等这么久再回下一条；自己主动发的不受这个限制'],
       ['proactiveMinGapSec', '主动最短间隔（秒）', 'proactive'],
       ['proactiveMaxGapSec', '主动最长间隔（秒）', ''],
@@ -788,6 +959,7 @@ window.__ModuleLoader__.load({
       ['proactiveQuietEnd', '免打扰结束（小时）', ''],
       ['proactiveGroupMinGapSec', '群聊接话最短间隔（秒）', ''],
       ['groupReplyChance', '群聊随机接话概率（0-100）', ''],
+      ['quietAfterComplaintSec', '被说吵后安静多少秒', '被群友说吵/刷屏后，这段时间内只回 @ 和点名；0 关闭'],
       ['ruleSyncHours', '群规多久重看一次（小时）', 'ruleSync'],
       ['ruleMaxChars', '注入群规字数上限', ''],
       ['liveMaxAgeSec', '直播速记有效期（秒，1200＝20 分钟）', ''],
@@ -797,7 +969,7 @@ window.__ModuleLoader__.load({
       ['videoShareMaxAgeHours', '只分享几小时内看过的（0 不限）', ''],
       ['groupHistoryLimit', '群聊参考最近几条消息', ''],
       ['webSearchCooldownSec', '搜索最短间隔（秒）', 'webSearch'],
-      ['balanceWarnThreshold', '余额预警阈值（元）', ''],
+      ['balanceWarnThreshold', '余额预警阈值（元）', 'balance'],
       ['balanceCheckHours', '余额多久查一次（小时）', 'balance'],
       ['contextRotateRounds', '多少轮提醒归档/换会话', '0 关闭'],
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
@@ -814,16 +986,19 @@ window.__ModuleLoader__.load({
       ['privateQuoteChance', '私聊引用回复概率（0-100）', '问句和请求类更容易引用，闲聊偶尔引'],
     ]
 
+    const QQ_LIST_FIELDS = [
+      ['proactiveTargets', '主动搭话对象列表', '留空用主人'],
+      ['proactiveGroups', '主动接话的群号列表', '留空不在群里说话'],
+      ['ruleGroups', '要记群规的群号', '留空表示所有群'],
+      ['neighborBots', '隔壁家的 AI QQ 号', '这些号显示成「隔壁家的<名字>」，不跟它的人设'],
+      ['neighborNameKeywords', '按名字认隔壁家（可选）', '留空就别按名字猜，昵称带「肥鱼」的真人不少'],
+      ['sharedMemoryGroups', '读共享记忆的群号', '* 全部，none 都不读'],
+    ]
+
     const QQ_TEXT_FIELDS = [
       ['napcatHttp', 'NapCat HTTP 地址', 'http://127.0.0.1:3000'],
       ['napcatWs', 'NapCat WebSocket 地址', 'ws://127.0.0.1:3011，留空关闭自动回复'],
-      ['ownerQQ', '主人 QQ 号', 'onlyReplyOwner 打开时只认这个号'],
-      ['proactiveTargets', '主动搭话对象列表', '逗号分隔多个 QQ，留空用主人'],
-      ['proactiveTarget', '主动搭话对象 QQ', '留空用主人 QQ'],
-      ['proactiveGroups', '主动接话的群号列表', '逗号分隔多个群，留空不在群里说话'],
-      ['ruleGroups', '要记群规的群号', '逗号分隔，留空表示所有群'],
-      ['neighborBots', '隔壁家的 AI QQ 号', '逗号分隔；这些号在群里统一显示成「隔壁家的<名字>」，不跟着它的人设演'],
-      ['neighborNameKeywords', '按名字认隔壁家（可选）', '留空就别按名字猜——昵称带「肥鱼」的真人不少。填了才把群名片/昵称里带这些词的统一标成「隔壁家的<名字>」'],
+      ['ownerQQ', '主人 QQ 号', '必填：不填就认不出主人（没人叫得上「主人」、也不会 @ 主人）。留空时插件会把第一条私聊它的人自动当主人，之后在这儿改；多个号用逗号分隔'],
       ['liveUrl', '直播间链接', ''],
       ['liveFramePath', '抓图路径覆盖', ''],
       ['videoShareTarget', '分享视频的目标', '留空＝发主人私聊；*＝当前聚焦的 QQ 会话；也可以填群号或 QQ 号'],
@@ -831,8 +1006,6 @@ window.__ModuleLoader__.load({
       ['taskSessionName', 'DSH 会话名', '主人派活时新会话叫什么'],
       ['taskDefaultModel', '派活默认模型', 'flash 或 pro'],
       ['taskDefaultEffort', '派活默认强度', 'high / medium / low'],
-      ['memoryMode', '记忆底座（shared / isolated）', 'shared＝两边共用共享记忆；isolated＝只用插件目录自己的'],
-      ['sharedMemoryGroups', '读共享记忆的群号', '* 全部，none 都不读，或逗号分隔'],
 
       ['napcatLauncher', 'launcher.bat 路径', '留空用 <napcatDir>/napcat/launcher.bat'],
       ['napcatQrPath', '登录二维码路径', '留空用 <napcatDir>/napcat/cache/qrcode.png'],
@@ -848,7 +1021,6 @@ window.__ModuleLoader__.load({
       ['imageProvider', '识图模型路由', 'DSH 的 llm provider，默认 deepseek-account'],
       ['imageModel', '识图模型名', '默认 deepseek-flash（需要支持图片输入）'],
       ['apiKeyFile', 'API Key 文件路径', '留空用 <DSH_HOME>/qq/api-key.txt'],
-      ['stickerFfmpegPath', '缩图用 ffmpeg 路径', '留空自动找 PATH 和 B站 插件那个'],
     ]
 
     const QQ_SECRET_FIELDS = [
@@ -935,18 +1107,96 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function createQqPage(form) {
+    /**
+     * QQ 配置页。`onlyGroups` 传了就只显示那几个分类：
+     * 「通用模块」就是用它把「记忆 / 余额」单独展示，代码完全复用这一页。
+     */
+    function createQqPage(form, onlyGroups) {
+      const groups = Array.isArray(onlyGroups) && onlyGroups.length
+        ? QQ_GROUPS.filter(([key]) => onlyGroups.includes(key))
+        : QQ_GROUPS
       return function QQConfig() {
         const snap = useSnapshot(form)
         const [pending, setPending] = React.useState({})
         const [cleared, setCleared] = React.useState('')
         const [paths, setPaths] = React.useState(null)
         const [cooldowns, setCooldowns] = useCooldowns(QQ_STATUS_URL, { proactive: 0, exhausted: false, used: 0, limit: 0 })
-        const [activeTab, setActiveTab] = React.useState('conn')
+        // 初始分类取第一个可见分组：通用模块只显示「记忆/余额」时不至于落在不存在的页上
+        const [activeTab, setActiveTab] = React.useState(groups[0][0])
         const [stickers, setStickers] = React.useState([])
         const [stickerMsg, setStickerMsg] = React.useState('')
         const [stickerOpen, setStickerOpen] = React.useState(false)
         const [stickerSelected, setStickerSelected] = React.useState(new Set())
+        const [balMsg, setBalMsg] = React.useState('')
+        // 人设文件状态：没有就提示生成模板（主人 2026-10-25 要求）
+        const [personaInfo, setPersonaInfo] = React.useState(null)
+        const [personaMsg, setPersonaMsg] = React.useState('')
+        const loadPersona = () => {
+          fetch(`${QQ_STATUS_URL}/persona`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then(setPersonaInfo)
+            .catch(() => {})
+        }
+        React.useEffect(() => { loadPersona() }, [])
+        // 全局偏好（AGENTS.md）：不存在就生成含语言设置的模板
+        const [agentsInfo, setAgentsInfo] = React.useState(null)
+        const [agentsMsg, setAgentsMsg] = React.useState('')
+        const loadAgents = () => {
+          fetch(`${QQ_STATUS_URL}/agents`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then(setAgentsInfo)
+            .catch(() => {})
+        }
+        React.useEffect(() => { loadAgents() }, [])
+        const doMakeAgents = async () => {
+          try {
+            const r = await fetch(`${QQ_STATUS_URL}/agents`, { method: 'POST' })
+            const d = await r.json()
+            setAgentsMsg(d && d.created ? '已生成模板，去填语言吧' : '文件已存在，没覆盖')
+            loadAgents()
+          } catch {
+            setAgentsMsg('接口没响应')
+          }
+          setTimeout(() => setAgentsMsg(''), 5000)
+        }
+        const doMakePersona = async () => {
+          try {
+            const r = await fetch(`${QQ_STATUS_URL}/persona`, { method: 'POST' })
+            const d = await r.json()
+            setPersonaMsg(d && d.created ? '已生成模板，去填吧' : '人设文件已存在，没覆盖')
+            loadPersona()
+          } catch {
+            setPersonaMsg('接口没响应')
+          }
+          setTimeout(() => setPersonaMsg(''), 5000)
+        }
+        const doBalanceCheck = async () => {
+          setBalMsg('同步中…')
+          try {
+            const r = await fetch(`${QQ_STATUS_URL}/balance_check`, { cache: 'no-store' })
+            const d = await r.json()
+            setBalMsg(d && d.ok
+              ? `已同步：${Number(d.total).toFixed(2)} ${d.currency || ''}`
+              : `失败：${(d && d.error) || '未知'}`)
+          } catch {
+            setBalMsg('接口没响应')
+          }
+          setTimeout(() => setBalMsg(''), 6000)
+        }
+        // 倒计时归零就自动同步一次（从「还有剩余」变成 0 的那一刻）。
+        // 但用户主动点「跳过」时不能同步——否则跳过刚把倒计时清零，自动同步就立刻
+        // 又写回新的检查时间，表现成「跳过按钮不管用」（2026-10-25 主人反馈）。
+        const lastBalLeft = React.useRef(null)
+        const skipBalanceGuard = React.useRef(false)
+        React.useEffect(() => {
+          const cur = Number(cooldowns.balance || 0)
+          const prev = lastBalLeft.current
+          if (prev !== null && prev > 0 && cur === 0) {
+            if (skipBalanceGuard.current) skipBalanceGuard.current = false
+            else doBalanceCheck()
+          }
+          lastBalLeft.current = cur
+        }, [cooldowns.balance])
         const [memMsg, setMemMsg] = React.useState('')
         const doMemorySync = async () => {
           try {
@@ -1089,6 +1339,8 @@ window.__ModuleLoader__.load({
             .catch(() => setCleared('清理失败'))
         }
         const skipCooldown = (action) => {
+          // 余额的跳过是「这次别查」，不是「马上查」，所以别让它触发自动同步
+          if (action === 'balance') skipBalanceGuard.current = true
           fetch(`${QQ_STATUS_URL}/skip?action=${encodeURIComponent(action)}`, { method: 'POST' })
             .then(() => setCooldowns((s) => ({ ...s, [action]: 0, exhausted: false })))
             .catch(() => {})
@@ -1109,8 +1361,38 @@ window.__ModuleLoader__.load({
           ),
           React.createElement(
             'div',
+            { key: 'persona', style: rowStyle },
+            React.createElement('span', { style: labelStyle }, '人设文件'),
+            React.createElement('button', {
+              type: 'button', style: skipStyle, onClick: doMakePersona,
+            }, personaInfo && personaInfo.exists ? '重新生成模板' : '生成模板'),
+            React.createElement('span', { style: hintStyle },
+              personaInfo
+                ? (personaInfo.exists
+                  ? `已有（${personaInfo.chars} 字）· ${personaInfo.path}`
+                  : '还没有 —— 点「生成模板」，照着骨架改成你自己的')
+                : '读取中…'),
+            personaMsg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, personaMsg) : null,
+          ),
+          React.createElement(
+            'div',
+            { key: 'agents', style: rowStyle },
+            React.createElement('span', { style: labelStyle }, '全局偏好'),
+            React.createElement('button', {
+              type: 'button', style: skipStyle, onClick: doMakeAgents,
+            }, agentsInfo && agentsInfo.exists ? '查看模板说明' : '生成模板'),
+            React.createElement('span', { style: hintStyle },
+              agentsInfo
+                ? (agentsInfo.exists
+                  ? `AGENTS.md 已有（${agentsInfo.chars} 字）· ${agentsInfo.path}`
+                  : '还没有 AGENTS.md —— 生成后填「回复语言」，再勾聊天/思考/分析')
+                : '读取中…'),
+            agentsMsg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, agentsMsg) : null,
+          ),
+          React.createElement(
+            'div',
             { key: 'tabs', style: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' } },
-            ...QQ_GROUPS.map(([key, label]) => React.createElement('button', {
+            ...groups.map(([key, label]) => React.createElement('button', {
               key,
               type: 'button',
               onClick: () => setActiveTab(key),
@@ -1171,6 +1453,17 @@ window.__ModuleLoader__.load({
           )
         }
 
+        for (const [field, label, hint] of QQ_LIST_FIELDS) {
+          if (qqGroupOf(field) !== activeTab) continue
+          children.push(
+            React.createElement(ListRow, {
+              key: field, form, field, label, hint,
+              value: v[field] ?? '',
+              disabled: !snap.writable,
+            }),
+          )
+        }
+
         for (const [field, label, hint] of QQ_TEXT_FIELDS) {
           if (qqGroupOf(field) !== activeTab) continue
           children.push(
@@ -1207,13 +1500,27 @@ window.__ModuleLoader__.load({
           ),
         )
 
+        if (activeTab === 'balance') {
+          const balLeft = Number(cooldowns.balance || 0)
+          children.push(React.createElement(
+            'div',
+            { key: 'bal-sync', style: rowStyle },
+            React.createElement('span', { style: labelStyle }, '余额同步'),
+            React.createElement('button', { type: 'button', style: skipStyle, onClick: doBalanceCheck }, '立即同步'),
+            React.createElement('span', { style: hintStyle },
+              `上次：${cooldowns.lastBalance != null ? `${Number(cooldowns.lastBalance).toFixed(2)}` : '—'} · `
+              + (balLeft > 0 ? `${fmtLeft(balLeft)} 后自动同步` : '现在可以同步')),
+            balMsg ? React.createElement('span', { style: hintStyle }, balMsg) : null,
+          ))
+        }
+
         if (activeTab === 'memory') {
           children.push(React.createElement(
             'div',
             { key: 'mem-intro', style: { ...rowStyle, flexDirection: 'column', alignItems: 'flex-start', gap: '3px' } },
             React.createElement('strong', { style: { fontSize: '13px' } }, '记忆布局'),
             React.createElement('span', { style: hintStyle },
-              '底座＝共享：DS 侧和大肥鱼共用一份记忆（共享记忆.md 双向）。下面两个隔离开关都能叠在底座上：一个管前后端，一个管群与个人。'),
+              '底座＝共享：DS 侧和大肥鱼共用一份记忆（shared-memory.md 双向）。下面两个隔离开关都能叠在底座上：一个管前后端，一个管群与个人。'),
             React.createElement('span', { style: hintStyle },
               '两个都不开＝全共享；打开前后端隔离，两边各记各的；打开群与个人隔离，群里和私聊各记各的。'),
           ))
@@ -1597,13 +1904,19 @@ window.__ModuleLoader__.load({
     const MODULES = [
       ['bili', 'B站模块'],
       ['qq', 'QQ模块'],
+      ['common', '通用模块'],
     ]
 
     /** 多功能DS插件主面板：上面切模块，下面就是那个模块原来的设置页。 */
     function createPanel(baseForm, options) {
       const header = !options || options.header !== false
       const BiliPage = createBiliPage(scopeForm(baseForm, 'bili'))
-      const QqPage = createQqPage(scopeForm(baseForm, 'qq'))
+      const qqForm = scopeForm(baseForm, 'qq')
+      // 记忆和余额已经搬到「通用模块」，QQ 页不再重复显示这两组
+      const qqMainGroups = QQ_GROUPS.map(([key]) => key).filter((key) => key !== 'memory' && key !== 'balance')
+      const QqPage = createQqPage(qqForm, qqMainGroups)
+      // 通用模块 = 同一套页面，只显示「记忆 / 余额」两组
+      const CommonPage = createQqPage(qqForm, ['memory', 'balance'])
       return function VersatiledsPanel() {
         const [mod, setMod] = React.useState('bili')
         const children = []
@@ -1648,6 +1961,8 @@ window.__ModuleLoader__.load({
           React.createElement(BiliPage, null)))
         children.push(React.createElement('div', { key: 'qq', style: { display: mod === 'qq' ? 'block' : 'none' } },
           React.createElement(QqPage, null)))
+        children.push(React.createElement('div', { key: 'common', style: { display: mod === 'common' ? 'block' : 'none' } },
+          React.createElement(CommonPage, null)))
 
         return React.createElement(
           'div',

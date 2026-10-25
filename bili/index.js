@@ -1,7 +1,7 @@
 /**
  * dsh-versatileds-plugin — B站 小号代理插件。
  *
- * 注册一个模型可见的 `bili` 工具；开关与频率全部走 Config，
+ * 注册一个模型可见的 `versatileds_bili` 工具；开关与频率全部走 Config，
  * DSH 设置页会自动为这个条目生成表单。
  */
 
@@ -202,7 +202,7 @@ const liveFrameState = { lastAt: 0, everRan: false }
 
 /** 自动刷状态文件路径（模块级，状态接口自包含，不依赖 apply 里的函数）。 */
 function autoStateFile() {
-  return join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'bili', 'auto_browse.json')
+  return join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'versatileds', 'bilibili', 'auto_browse.json')
 }
 
 /** 读自动刷状态对象；文件不存在或坏了返回 null（用来区分「从没跑过」和「被跳过」）。 */
@@ -297,7 +297,7 @@ function cookiePath(config) {
   const custom = config.cookieFile.get()
   if (custom) return resolvePath(custom)
   const home = process.env.DSH_HOME || join(homedir(), '.dsh')
-  return join(home, 'bili', 'cookies.json')
+  return join(home, 'versatileds', 'bilibili', 'cookies.json')
 }
 
 function liveFramePath(config) {
@@ -305,7 +305,7 @@ function liveFramePath(config) {
   if (custom) return /\.(jpg|jpeg|png)$/i.test(custom) ? custom : join(custom, 'latest.jpg')
   const home = process.env.DSH_HOME || join(homedir(), '.dsh')
   // 抓图归 B站 插件自己，放在它的 image 子目录里
-  return join(home, 'bili', 'image', 'latest.jpg')
+  return join(home, 'versatileds', 'bilibili', 'image', 'latest.jpg')
 }
 
 /** 视频帧目录：每次抓帧按 bvid 命名，和直播帧分开存。 */
@@ -313,13 +313,13 @@ function videoFrameDir(config) {
   const custom = String(config.videoFrameDir.get() || '').trim()
   if (custom) return custom
   const home = process.env.DSH_HOME || join(homedir(), '.dsh')
-  return join(home, 'bili', 'frame')
+  return join(home, 'versatileds', 'bilibili', 'frame')
 }
 
 /** 「上次在评论里 @ 主人」的时间戳，用来卡 @ 的频率。 */
 function ownerAtStatePath() {
   const home = process.env.DSH_HOME || join(homedir(), '.dsh')
-  return join(home, 'bili', 'owner_at.json')
+  return join(home, 'versatileds', 'bilibili', 'owner_at.json')
 }
 
 function loadOwnerAt() {
@@ -386,7 +386,6 @@ export const name = 'bili-agent'
 export const inject = ['tools']
 
 export function apply(ctx, config) {
-  if (config.enabled.get() === false) return
   const client = new BiliClient({ cookies: loadCookies(config), dryRun: false })
   const guard = new Guard(config)
 
@@ -398,7 +397,7 @@ export function apply(ctx, config) {
   // 看过的视频统一记到共享的 bili_log.md，不管调用方是 QQ 还是别的会话
   const logSeen = (bvid, title, owner, note) => {
     try {
-      const dir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'qq')
+      const dir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'versatileds', 'qq')
       mkdirSync(dir, { recursive: true })
       const time = new Date().toLocaleString('zh-CN', { hour12: false })
       const extra = String(note || '').trim().replace(/\s+/g, ' ')
@@ -409,7 +408,7 @@ export function apply(ctx, config) {
 
   // ---------- 自动刷 B站 ----------
   /** 自动刷的状态：上次跑的时间、评论过的 bvid。 */
-  const autoStatePath = () => join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'bili', 'auto_browse.json')
+  const autoStatePath = () => join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'versatileds', 'bilibili', 'auto_browse.json')
 
   function loadAutoState() {
     try {
@@ -430,7 +429,7 @@ export function apply(ctx, config) {
   /** bili_log 里出现过的 bvid：自动刷不重复看。 */
   function seenBvids() {
     try {
-      const dir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'qq')
+      const dir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'versatileds', 'qq')
       const text = readFileSync(join(dir, 'bili_log.md'), 'utf8')
       return new Set([...text.matchAll(/BV[0-9A-Za-z]{10}/g)].map((m) => m[0]))
     } catch {
@@ -441,7 +440,7 @@ export function apply(ctx, config) {
   /** 自动刷的调试日志：写到 <DSH_HOME>/bili/auto_browse.log。 */
   const debugLog = (line) => {
     try {
-      const dir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'bili')
+      const dir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'versatileds', 'bilibili')
       mkdirSync(dir, { recursive: true })
       appendFileSync(join(dir, 'auto_browse.log'),
         `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${line}\n`, 'utf8')
@@ -686,8 +685,8 @@ export function apply(ctx, config) {
     }
   }
 
-  // 给别的插件（比如 QQ）一个直接查询的入口，不走工具调用
-  ctx.provide('biliAgent', {
+  // 给别的插件（比如 QQ）一个直接查询的入口，不走工具调用。总开关热关时要能撤，包成函数。
+  const provideBiliAgent = () => ctx.provide('biliAgent', {
     search: (keyword, page = 1) => client.search(keyword, page),
     video: (bvid) => client.video(bvid),
     feed: (ps = 10) => client.feed(ps),
@@ -749,13 +748,8 @@ export function apply(ctx, config) {
     return () => { stopped = true; clearTimeout(first); clearInterval(timer) }
   }
 
-  ctx.effect(() => {
-    const stop = startLiveFrames()
-    return () => { stop?.() }
-  }, 'dsh-versatileds-plugin: live frames')
-
   // ---------- 自动刷的定时器 ----------
-  ctx.effect(() => {
+  function startAutoBrowseTicker() {
     let stopped = false
     const tick = async () => {
       if (stopped) return
@@ -770,10 +764,60 @@ export function apply(ctx, config) {
     const first = setTimeout(() => { tick().catch(() => {}) }, 120_000)
     const timer = setInterval(() => { tick().catch(() => {}) }, 60_000)
     return () => { stopped = true; clearTimeout(first); clearInterval(timer) }
-  }, 'dsh-versatileds-plugin: auto browse')
+  }
 
-  ctx.tools.register(defineTool({
-    name: 'bili',
+  // ---------- 总开关：热启停（volatile 只换值、不重跑 apply） ----------
+  let biliStops = []
+  let biliRunning = false
+  let biliToolDisposer = null
+  let biliAgentDisposer = null
+  const isBiliOn = () => config.enabled.get() !== false
+  const disposeBiliHandle = (d) => {
+    try {
+      if (typeof d === 'function') d()
+      else if (typeof d?.dispose === 'function') d.dispose()
+    } catch { /* 卸载失败不影响开关 */ }
+  }
+
+  function startBiliBusiness() {
+    if (!isBiliOn() || biliRunning) return
+    biliRunning = true
+    if (!biliAgentDisposer) biliAgentDisposer = provideBiliAgent()
+    biliStops = [startLiveFrames(), startAutoBrowseTicker()].filter((stop) => typeof stop === 'function')
+    if (!biliToolDisposer) biliToolDisposer = registerBiliTool()
+  }
+
+  function stopBiliBusiness() {
+    if (!biliRunning) return
+    biliRunning = false
+    for (const stop of biliStops.splice(0).reverse()) { try { stop() } catch { /* ignore */ } }
+    if (biliToolDisposer) { disposeBiliHandle(biliToolDisposer); biliToolDisposer = null }
+    if (biliAgentDisposer) { disposeBiliHandle(biliAgentDisposer); biliAgentDisposer = null }
+  }
+
+  ctx.effect(() => {
+    startBiliBusiness()
+    // 面板上翻总开关：volatile 只换值、不重跑 apply，这里每 2 秒对一次状态
+    const timer = setInterval(() => {
+      if (isBiliOn() === biliRunning) return
+      if (isBiliOn()) startBiliBusiness()
+      else stopBiliBusiness()
+    }, 2000)
+    return () => { clearInterval(timer); stopBiliBusiness() }
+  }, 'dsh-versatileds-plugin: bili automation')
+
+  ctx.on('loader/volatile-update', (paths) => {
+    const hit = Array.isArray(paths) && paths.some((p) => Array.isArray(p) && p[0] === 'enabled')
+    if (!hit) return
+    if (isBiliOn()) startBiliBusiness()
+    else stopBiliBusiness()
+  })
+
+  // 用 function 声明（会提升）：startBiliBusiness 在上面就调它
+  function registerBiliTool() {
+    return ctx.tools.register(defineTool({
+      // 带插件前缀：别的 B站 插件也注册 `bili` 时，DSH 会让后注册的那个直接抛错
+      name: 'versatileds_bili',
     description: DESCRIPTION,
     parameters: {
       action: {
@@ -993,4 +1037,5 @@ export function apply(ctx, config) {
       }
     },
   }))
+  }
 }

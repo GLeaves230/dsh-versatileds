@@ -1,11 +1,11 @@
 /**
  * dsh-versatileds-plugin — 多功能DS插件。
  *
- * 把原来的 B站 插件与 QQ 插件合成一个插件，两套能力各自保持原来的工具名、
- * 配置项与行为，只是挂到同一个条目下：
+ * 把原来的 B站 插件与 QQ 插件合成一个插件，两套能力各自保持原来的行为，
+ * 配置项与行为不变，只是挂到同一个条目下。工具名带插件前缀，避免和别的同类插件撞名：
  *
- * - `bili` 工具 + `biliAgent` 服务（B站 模块）
- * - `qq` 工具 + 自动回复 / 主动搭话（QQ 模块）
+ * - `versatileds_bili` 工具 + `biliAgent` 服务（B站 模块）
+ * - `versatileds_qq` 工具 + 自动回复 / 主动搭话（QQ 模块）
  *
  * Config 分成 `bili` / `qq` 两块，各自的 schema 原样嵌套，所以字段名互不影响；
  * 设置页按「B站模块」「QQ模块」两个选项页展示，点进去就是原来各自的样子。
@@ -56,6 +56,7 @@ const VENDOR = join(PLUGIN_ROOT, 'vendor')
 /**
  * 外部依赖：插件自带的包 + 期望落地位置 + 判定就绪的探针文件。
  * 缺失就从 vendor 解压，做到「零外部依赖」。
+ * memorix 已于 2026-10-25 停用（记忆改成 md，主人定的），不再自检也不再解压。
  */
 function depSpecs(home) {
   return [
@@ -66,14 +67,6 @@ function depSpecs(home) {
       target: join(home, 'tmp', 'live', 'ffmpeg'),
       probe: join(home, 'tmp', 'live', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
       hint: 'B站 抓帧和表情包缩图要用',
-    },
-    {
-      name: 'memorix',
-      zip: join(VENDOR, 'memorix.zip'),
-      // 包里是 node_modules/memorix/...，解到 mcp/memorix 这一层
-      target: join(home, '..', 'mcp', 'memorix'),
-      probe: join(home, '..', 'mcp', 'memorix', 'node_modules', 'memorix', 'dist', 'cli', 'index.js'),
-      hint: 'MCP 记忆服务的 CLI',
     },
   ]
 }

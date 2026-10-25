@@ -26,7 +26,7 @@ Copyright (c) 2026 黑木钟 - GLeaves
   Copyright (c) 2024 Mlikiowa，Limited Redistribution License for NapCat。
   本插件随包附带它的官方发布版压缩包（vendor/napcat.zip），不含其源码；只在运行时启动它、读取它生成的登录二维码，不修改其代码。源码请到官方 GitHub 自行获取。
 - ffmpeg（https://ffmpeg.org/），按其构建所适用的 GPL/LGPL 条款分发。
-- memorix（MCP 记忆服务 CLI），按其原许可证分发。
+- ~~memorix（MCP 记忆服务 CLI）~~：已停用，**不再随包分发**（2026-10-25）。
 
 再分发本插件时，上述组件的许可证文本也必须一并保留。
 
