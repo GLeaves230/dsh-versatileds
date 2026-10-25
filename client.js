@@ -822,6 +822,8 @@ window.__ModuleLoader__.load({
       ['taskDefaultEffort', '派活默认强度', 'high / medium / low'],
       ['memoryMode', '记忆模式', 'shared 共用 / isolated 隔离'],
       ['sharedMemoryGroups', '读共享记忆的群号', '* 全部，none 都不读，或逗号分隔'],
+      ['sharedMemoryMaxChars', '共享记忆最多读多少字', '默认 6000；文件比这长的话，末尾新写的内容会读不到'],
+      ['sharedMemorySummary', '共享记忆超长时留头留尾', '开了就保留开头（身份/锚点）+ 结尾（最新），中间标省略；关掉只读前面那截'],
       ['napcatLauncher', 'launcher.bat 路径', '留空用 <napcatDir>/napcat/launcher.bat'],
       ['napcatQrPath', '登录二维码路径', '留空用 <napcatDir>/napcat/cache/qrcode.png'],
       ['napcatQuickLogin', '快速登录 QQ 号', '填了启动时带这个号免扫码；留空扫码登录'],

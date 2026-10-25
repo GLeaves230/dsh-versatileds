@@ -351,6 +351,10 @@ export const Config = Schema.object({
     .description('私聊是否读共享记忆'),
   sharedMemoryGroups: Schema.string().default('*').volatile()
     .description('读共享记忆的群号，逗号分隔；* 全部，none 都不读'),
+  sharedMemoryMaxChars: Schema.number().default(6000).volatile()
+    .description('共享记忆最多读多少字（默认 6000）；文件比这长的话，末尾新写的内容会读不到'),
+  sharedMemorySummary: Schema.boolean().default(false).volatile()
+    .description('共享记忆超长时用「留头留尾 + 中间省略」策略；关掉就只读前面那截'),
   contextRotateRounds: Schema.number().default(5).volatile()
     .description('私聊聊多少轮提醒归档/换会话，0 关闭'),
   chatLogEnabled: Schema.boolean().default(true).volatile()
@@ -743,15 +747,31 @@ function sharedMemoryPath() {
   return existsSync(inHome) ? inHome : join(dshHome(), '..', '记忆', '共享记忆.md')
 }
 
-/** 读共享记忆：文件会长大，别只截前 1600 字——新写的东西在末尾，截断就白写了。 */
-function loadSharedMemory(maxChars = 6000) {
+/**
+ * 读共享记忆。
+ * - 长度上限用配置（sharedMemoryMaxChars，默认 6000）：文件会长大，新写的内容在末尾，截断就白写了。
+ * - 超过上限时：开了「分段摘要」（sharedMemorySummary）就留头留尾（身份/锚点在头、最新在尾），
+ *   中间标成省略；没开就老实截前面那截。
+ */
+function loadSharedMemory(config) {
   const file = sharedMemoryPath()
   if (!existsSync(file)) return ''
+  let raw = ''
   try {
-    return readFileSync(file, 'utf8').trim().slice(0, maxChars)
+    raw = readFileSync(file, 'utf8').trim()
   } catch {
     return ''
   }
+  if (!raw) return ''
+  const max = Math.max(500, Number(config?.sharedMemoryMaxChars?.get?.() ?? 6000))
+  if (raw.length <= max) return raw
+  if (config?.sharedMemorySummary?.get?.() === true) {
+    const head = Math.floor(max * 0.45)
+    const tail = Math.floor(max * 0.45)
+    const skipped = raw.length - head - tail
+    return `${raw.slice(0, head)}\n\n…（中间省略 ${skipped} 字，需要细节就去翻原文件）…\n\n${raw.slice(-tail)}`
+  }
+  return raw.slice(0, max)
 }
 
 // ---------- 任务转交 / 余额 ----------
@@ -5636,7 +5656,7 @@ export function apply(ctx, config) {
           }
         }
       }
-      const sharedText = shouldUseShared(isGroup, data.group_id) ? loadSharedMemory() : ''
+      const sharedText = shouldUseShared(isGroup, data.group_id) ? loadSharedMemory(config) : ''
       let imageInfo = ''
       if (imageFiles.length) {
         // 认图分两层：字节 hash 精确命中，或感知哈希判为同一张（高清/普清、重压缩都算）
