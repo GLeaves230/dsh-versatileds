@@ -7519,6 +7519,11 @@ export function apply(ctx, config) {
 
       // 没话茬了：群里就发个表情包（优先常用），别硬憋文字
       if (!reply && isGroup && config.stickerEnabled.get() === true) {
+        // 刚发过表情包就别再甩一张（2026-10-25 群友「大肥鱼刷屏」：没话就发表情，连着发两条）
+        const stGapMs = Math.max(1, Number(config.stickerSendMinGapSec.get() ?? 600)) * 1000
+        const stState = loadJsonFile(stickerStatePath())
+        const stLastAt = Number(stState[data.group_id] || 0)
+        if (stLastAt && Date.now() - stLastAt <= stGapMs) return
         const file = pickSticker(`${text}\n${groupRecent}`, true)
         if (file) {
           try {
@@ -7533,6 +7538,8 @@ export function apply(ctx, config) {
               })
             }
             markStickerSent(file)
+            stState[data.group_id] = Date.now()
+            saveJsonFile(stickerStatePath(), stState)
               rememberSent({ kind: 'sticker-send', groupId: isGroup ? String(data.group_id) : '', peer: isGroup ? '' : String(sender), imageName: basename(file) })
             logChat({
               kind: 'sticker-send',
