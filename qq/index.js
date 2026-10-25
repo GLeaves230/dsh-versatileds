@@ -5306,7 +5306,9 @@ export function apply(ctx, config) {
         const foreignText = looksForeignOrGarbled(plainText(data.message))
         // 主人只发个「？」「！」这种就是在问你，别按概率丢
         const ownerPoke = Boolean(owner) && sender === owner && /^[？?！!。.…~～\s]+$/.test(plainText(data.message))
-        if (!forceForImage && !ownerShareAsk && !hasImageSeg && !foreignText && !ownerPoke) {
+        // 直接叫你名字（大肥鱼/肥鱼/鲸鱼娘）就是在点名提问，别按概率丢
+        const calledByName = /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
+        if (!forceForImage && !ownerShareAsk && !hasImageSeg && !foreignText && !ownerPoke && !calledByName) {
           // 没被 @ 时按概率接话，不是每条都回
           const chance = Number(config.groupReplyChance.get() ?? 30)
           if (chance <= 0 || Math.random() * 100 >= chance) return
