@@ -5683,7 +5683,7 @@ export function apply(ctx, config) {
           } else if (desc) {
             imageInfo = `对方发了 ${imageFiles.length} 张图，第一张的内容：${desc}`
             if (isStickerDesc(desc)) {
-              imageInfo += '（这张表情包是第一次见：认出梗就随口说一句，别像做评测、别客套；梗不懂就只描述画面，别硬编。）'
+              imageInfo += '（表情包别锐评、别描述画面：认出梗就顺着玩一句，没梗就普通接句话；不评价、不解说、不硬编。）'
             }
           } else {
             imageInfo = `对方发了 ${imageFiles.length} 张图，你看不到内容，别猜图里是什么，也别假装看过。`
