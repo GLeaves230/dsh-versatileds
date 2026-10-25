@@ -4267,16 +4267,6 @@ export function apply(ctx, config) {
    */
   let ownerNameCache = { at: 0, owner: '', qqName: '', card: '' }
   async function ownerNames() {
-    // 没配主人号时，第一条私聊的人先当主人（只认一次，写本地文件；设置页填了 ownerQQ 就以后者为准）
-    if (data.message_type === 'private' && sender !== self) {
-      try {
-        if (!String(config.ownerQQ.get() || '').trim()) {
-          if (adoptOwner(sender, data.sender?.nickname || data.sender?.card || '')) {
-            console.warn('[dsh-versatileds-plugin] ownerQQ 没配，先把第一条私聊的人当主人：' + sender)
-          }
-        }
-      } catch { /* ignore */ }
-    }
     const owner = ownerQQOf(config)
     if (!owner) return { qqName: '', card: '' }
     if (ownerNameCache.owner === owner && Date.now() - ownerNameCache.at < 3600_000) return ownerNameCache
@@ -6825,6 +6815,15 @@ export function apply(ctx, config) {
 
     const owner = ownerQQOf(config)
 
+    // 没配主人号时，第一条私聊的人先当主人（只认一次，写本地文件；设置页填了 ownerQQ 就以后者为准）
+    if (!owner && data.message_type === 'private' && sender !== self) {
+      try {
+        if (adoptOwner(sender, data.sender?.nickname || data.sender?.card || '')) {
+          console.warn('[dsh-versatileds-plugin] ownerQQ 没配，先把第一条私聊的人当主人：' + sender)
+        }
+      } catch { /* ignore */ }
+    }
+
     // 自己账号发的：命中发送登记＝插件自己发的（发送时已记过），没命中＝主人接管，记 Admin，且绝不自己回自己
     if (sender === self) {
       const selfText = plainText(data.message) || String(data.raw_message || '')
@@ -7735,6 +7734,7 @@ export function apply(ctx, config) {
         })
       } catch (err) {
         console.warn('[dsh-versatileds-plugin] 自动回复失败:', err?.message ?? err)
+        if (err?.stack) console.warn(String(err.stack).split('\n').slice(0, 6).join('\n'))
       }
     } finally {
       busy.delete(lockKey)
