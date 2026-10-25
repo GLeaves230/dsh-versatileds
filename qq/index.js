@@ -3064,7 +3064,13 @@ export function apply(ctx, config) {
       const hist = await ob.groupHistory(groupId, Math.max(limit, 20))
       const all = hist?.messages || []
       noteTakeoverFromHistory(all, self, config, { groupId: String(groupId) })
-      const msgs = all.slice(-limit)
+      // 只取最近 3 分钟内的：再往前的话题已经过去了，塞进上下文只会让它答非所问
+      const cutoff = Date.now() - 3 * 60_000
+      const fresh = all.filter((m) => {
+        const at = Number(m.time || 0) * 1000
+        return !at || at >= cutoff
+      })
+      const msgs = fresh.slice(-limit)
       const rows = msgs
         .map((m) => {
           const text = plainText(m.message)
@@ -3079,7 +3085,13 @@ export function apply(ctx, config) {
             : (isOwner
               ? '主人'
               : (neighbor || `群友 ${m.sender?.card || m.sender?.nickname || '?'}`))
-          return { text, line: `${who}：${text}` }
+          const ago = (() => {
+            const at = Number(m.time || 0) * 1000
+            if (!at) return ''
+            const sec = Math.max(0, Math.round((Date.now() - at) / 1000))
+            return sec < 60 ? `${sec}秒前` : `${Math.round(sec / 60)}分钟前`
+          })()
+          return { text, line: `${who}${ago ? `（${ago}）` : ''}：${text}` }
         })
         .filter(Boolean)
       if (excludeText && rows.length) {
