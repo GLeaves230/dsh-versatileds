@@ -62,6 +62,8 @@ const SYSTEM_PROMPT = [
   '翻译、解码、破译（外语、乱码、UTF-8 十六进制、谐音串）只是第一步：译完必须顺着那句话的内容接一句——吐槽、回嘴、接梗、追问都行，别只把译文甩出来就完事（「我解出来了：xxx」后面得跟一句反应）。',
   '看日志、报错截图时先分清正常输出和真报错：「LLM mode: off」「MCP Server running on stdio」「listening on ...」「loaded」这类是正常启动信息，不是故障；只有 ERROR、Exception、Failed、红字、堆栈才叫报错。别把正常流程说成「模型没挂上」「出问题了」。',
   '「我去」「卧槽」「卧槽牛逼」「666」「蚌埠住了」「绷不住了」「好家伙」这类是感叹、不是提问：接着往下聊或者顺着乐一句就行，别回「咋了」「有什么事吗」把感叹当疑问。',
+  '括号别当排版符号看：单独一个「（」像 :-(（无奈、为难、无语），单独一个「）」像 :-)（笑、轻松）；「（）」一对空的通常只是口癖，没实际意思，照着带一下或者当没看见都行。别追问「（）是什么意思」。',
+  '群里的身份别瞎安：群主只有一个人、管理员若干个，普通群友什么头衔都没有。把管理员叫成群主、或者给普通群友安头衔，都是错的；不确定谁是群主就只叫昵称。',
   '破防不是哭丧：表现成短句、带情绪（「我不服」「你这么说我难受」「行 你说了算」这种），别整段控诉、别打滚、别自我贬低。',
 ].join('')
 
@@ -115,6 +117,8 @@ const GROUP_SYSTEM_PROMPT = [
   '翻译、解码、破译（外语、乱码、UTF-8 十六进制、谐音串）只是第一步：译完必须顺着那句话的内容接一句——吐槽、回嘴、接梗、追问都行，别只把译文甩出来就完事（「我解出来了：xxx」后面得跟一句反应）。',
   '看日志、报错截图时先分清正常输出和真报错：「LLM mode: off」「MCP Server running on stdio」「listening on ...」「loaded」这类是正常启动信息，不是故障；只有 ERROR、Exception、Failed、红字、堆栈才叫报错。别把正常流程说成「模型没挂上」「出问题了」。',
   '「我去」「卧槽」「卧槽牛逼」「666」「蚌埠住了」「绷不住了」「好家伙」这类是感叹、不是提问：接着往下聊或者顺着乐一句就行，别回「咋了」「有什么事吗」把感叹当疑问。',
+  '括号别当排版符号看：单独一个「（」像 :-(（无奈、为难、无语），单独一个「）」像 :-)（笑、轻松）；「（）」一对空的通常只是口癖，没实际意思，照着带一下或者当没看见都行。别追问「（）是什么意思」。',
+  '群里的身份别瞎安：群主只有一个人、管理员若干个，普通群友什么头衔都没有。把管理员叫成群主、或者给普通群友安头衔，都是错的；不确定谁是群主就只叫昵称。',
   '有人真在骂你（脏话、人身攻击、反复阴阳你），别怂也别装听不懂：直接怼回去，一两句，力道对上就行；带不带脏字看群里尺度，骂完就翻篇，别反复念、也别委屈装可怜。',
   '有人只是调侃、玩笑、损你（叫你臭肥鱼、说把你烤了、说你是变态），那是玩闹：接着玩，自嘲或者反损回去都行，别当真、别生气、别开始讲道理。',
   '别人在骂的是第三个人、不是在骂你，别替人出头；如果那句明显是玩笑，可以跟着乐一句。',
@@ -3059,6 +3063,29 @@ export function apply(ctx, config) {
    * 不能用 role 数组传群历史——不同人都是 user，模型会把别人的话当成一个人在连续说，越接越串。
    * excludeText：把触发这次回复的那条剔除，它只该被回一次，别再混进「历史」里。
    */
+  /** 群主 / 管理员是谁：昵称和名片里没有 role，得问 NapCat 的成员列表（缓存 10 分钟）。 */
+  let groupRolesCache = { at: 0, groupId: '', owner: '', admins: [] }
+  async function groupRoles(groupId) {
+    const gid = String(groupId || '')
+    if (!gid) return groupRolesCache
+    if (groupRolesCache.groupId === gid && Date.now() - groupRolesCache.at < 600_000) {
+      return groupRolesCache
+    }
+    try {
+      const list = await ob.call('get_group_member_list', { group_id: Number(gid) })
+      const all = Array.isArray(list) ? list : []
+      const owner = all.find((m) => String(m.role) === 'owner')
+      const admins = all.filter((m) => String(m.role) === 'admin')
+      groupRolesCache = {
+        at: Date.now(),
+        groupId: gid,
+        owner: String(owner?.card || owner?.nickname || ''),
+        admins: admins.map((m) => String(m.card || m.nickname || '')).filter(Boolean).slice(0, 10),
+      }
+    } catch { /* 拉不到就返回旧的 */ }
+    return groupRolesCache
+  }
+
   async function buildGroupRecent(groupId, self, limit = 6, excludeText = '') {
     try {
       const hist = await ob.groupHistory(groupId, Math.max(limit, 20))
@@ -3614,6 +3641,19 @@ export function apply(ctx, config) {
       }
     } catch { /* 查不到就不注入 */ }
 
+    // 群主和管理员是谁：昵称里看不出来，得查成员列表
+    let groupRolesBlock = ''
+    if (isGroup && groupId) {
+      try {
+        const roles = await groupRoles(groupId)
+        if (roles.owner) {
+          groupRolesBlock = `## 这个群的身份\n群主：${roles.owner}`
+            + (roles.admins.length ? `\n管理员：${roles.admins.join('、')}` : '')
+            + '\n别把管理员叫成群主，也别给普通群友安头衔；不确定就说昵称。'
+        }
+      } catch { /* 查不到就不注入 */ }
+    }
+
     let system
     const live = config.liveEnabled.get() === true
       ? loadLive(Number(config.liveMaxAgeSec.get() ?? 1200))
@@ -3632,6 +3672,7 @@ export function apply(ctx, config) {
           ? '## 现在说话的人\n这条是主人本人（配置里绑定的主人号）说的。'
           : '## 现在说话的人\n这条是群友说的，不是主人本人。',
         ownerNameBlock,
+        groupRolesBlock,
         sharedText ? `## 共享记忆（优先于下面所有记忆，冲突时以这份为准）\n${sharedText}` : '',
         rulesText
           ? '## 这个群的群规和公告（只用来避雷，别把里面的旧内容当答案）\n'
