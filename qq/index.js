@@ -3724,15 +3724,27 @@ function takeoverAlreadyLogged(scope, text) {
   }
 }
 
-function noteTakeoverFromHistory(msgs, self, config, scope = {}) {
+async function noteTakeoverFromHistory(msgs, self, config, scope = {}, ob = null) {
   if (config.takeoverEnabled.get() === false) return
   const me = String(self || '')
   if (!me) return
   const target = String(scope.groupId || scope.peer || '')
   for (const m of msgs || []) {
     if (String(m.sender?.user_id) !== me) continue
-    const text = plainText(m.message)
-    if (!text) continue
+    let text = plainText(m.message)
+    if (!text) {
+      // 接管的语音也要认（2026-10-25 主人：隔壁鱼夸的「浑厚声音」就是我接管发的语音）
+      const recSeg = (m.message || []).find((s) => s && s.type === 'record')
+      if (!recSeg) continue
+      if (recSeg.data?.file && ob && typeof ob.call === 'function') {
+        try {
+          const r = await ob.call('get_record', { file: recSeg.data.file, out_format: 'wav' })
+          const wav = r?.data?.file || r?.data?.url || ''
+          if (wav) text = await transcribeVoice(String(wav))
+        } catch { /* 转不出来就记 [语音] */ }
+      }
+      if (!text) text = '[语音]'
+    }
     const key = `${target}|${m.message_id || ''}|${text}`
     if (takeoverLogged.has(key)) continue
     if (takeoverAlreadyLogged(scope, text)) continue
@@ -4360,9 +4372,9 @@ export function apply(ctx, config) {
         : await ob.groupHistory(data.group_id, Math.max(limit, 20))
       const all = hist?.messages || []
       // NapCat 不推自己号发的消息，主人接管的那几句只能从历史里补记成 Admin（takeoverLabel）
-      noteTakeoverFromHistory(all, self, config, data.message_type === 'private'
+      await noteTakeoverFromHistory(all, self, config, data.message_type === 'private'
         ? { peer: String(data.user_id) }
-        : { groupId: String(data.group_id) })
+        : { groupId: String(data.group_id) }, ob)
       const msgs = all.slice(-limit)
       const mapped = msgs
         .map((m) => {
@@ -4461,7 +4473,7 @@ export function apply(ctx, config) {
     try {
       const hist = await ob.groupHistory(groupId, Math.max(limit, 20))
       const all = hist?.messages || []
-      noteTakeoverFromHistory(all, self, config, { groupId: String(groupId) })
+      await noteTakeoverFromHistory(all, self, config, { groupId: String(groupId) }, ob)
       // 只取最近 5 分钟内的：再往前的话题已经过去了；3 分钟太短，长一点的对话会被切断
       const cutoff = Date.now() - 5 * 60_000
       const fresh = all.filter((m) => {
@@ -6375,7 +6387,7 @@ export function apply(ctx, config) {
     try {
       const hist = await ob.groupHistory(gid, 20)
       rawMsgs = hist?.messages || []
-      noteTakeoverFromHistory(hist?.messages || [], me, config, { groupId: String(gid) })
+      await noteTakeoverFromHistory(hist?.messages || [], me, config, { groupId: String(gid) }, ob)
       // 插件自己发的不算「群友发言」；但主人接管的要留下，不然接话丢上下文
       msgs = (hist?.messages || []).filter((m) => {
         const isMe = String(m.sender?.user_id) === me
