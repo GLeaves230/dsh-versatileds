@@ -3000,6 +3000,8 @@ export function apply(ctx, config) {
   const imageReplyClock = new Map()
   /** 处理过的 message_id：WS 重推同一条时别回两遍 */
   const seenMessageAt = new Map()
+  /** 主人让「跟隔壁鱼多聊聊」时的放行截止时间 */
+  let neighborChatUntil = 0
   let selfId = ''
 
   async function ensureSelf() {
@@ -5307,8 +5309,13 @@ export function apply(ctx, config) {
       const atMe = (data.message || []).some(
         (seg) => seg.type === 'at' && String(seg.data?.qq) === self,
       )
+      // 主人让「跟隔壁那条鱼多聊聊」时，开 5 分钟窗口放行邻居消息（平时不接茬是怕两条鱼互相捧哏）
+      const fromOwnerNow = Boolean(owner) && sender === owner
+      if (fromOwnerNow && /(多聊|聊聊|互动|跟(他|她|隔壁|那条|这个)|陪(他|她|隔壁|那条))/.test(plainText(data.message))) {
+        neighborChatUntil = Date.now() + 5 * 60_000
+      }
       // 隔壁家的鱼跟别人说话时不接茬：两条鱼互相捧哏最容易把话题带跑（2026-10-24 主人点名要改）
-      if (!atMe && neighborLabelOf(data.sender, config)) return
+      if (!atMe && neighborLabelOf(data.sender, config) && Date.now() > neighborChatUntil) return
       if (!atMe) {
         // 这条在 @ 别人（或 @全体）：那是别人的对话，不插嘴，避免抢答和身份串位
         const atOthers = (data.message || []).some(
