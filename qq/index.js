@@ -8109,6 +8109,8 @@ export function apply(ctx, config) {
               return JSON.stringify({ 动作: 'voice', 群: gid, 音色: character, 文本: voiceText, 预览: true }, null, 2)
             }
             const vr = await ob.call('send_group_ai_record', { character, text: voiceText, group_id: Number(gid) })
+            // 工具发的语音也要进同一套日志（发送登记 + chat 流水，role=DS）
+            recordSelfSent(config, { kind: 'sent-voice', groupId: gid, text: `[语音] ${voiceText}` })
             return JSON.stringify({ 动作: 'voice', 已发送: vr, 音色: character }, null, 2)
           }
           default:
