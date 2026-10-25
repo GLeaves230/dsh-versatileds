@@ -98,13 +98,17 @@ function extractDep(dep) {
 export function apply(ctx, config) {
   const home = dshHome()
 
-  // 启动先把版本打出来：排查问题时一眼知道跑的是哪一版
-  console.info(`[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
+  // 版本和「依赖就绪」只在进程内第一次打：热重载一次就刷一屏太吵
+  const firstBoot = globalThis.__versatiledsBootLogged !== true
+  if (firstBoot) {
+    globalThis.__versatiledsBootLogged = true
+    console.info(`[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
+  }
 
   // 自检 + 缺失时从自带包解压：后台跑，不挡插件启动
   for (const dep of depSpecs(home)) {
     if (existsSync(dep.probe)) {
-      console.info(`[dsh-versatileds-plugin] 依赖就绪：${dep.name}`)
+      if (firstBoot) console.info(`[dsh-versatileds-plugin] 依赖就绪：${dep.name}`)
       continue
     }
     console.info(`[dsh-versatileds-plugin] 依赖缺失：${dep.name}，后台解压中…`)

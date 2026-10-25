@@ -3002,6 +3002,8 @@ export function apply(ctx, config) {
   const seenMessageAt = new Map()
   /** 主人让「跟隔壁鱼多聊聊」时的放行截止时间 */
   let neighborChatUntil = 0
+  /** 上一次打「已连接/后端地址」时的 NapCat PID，PID 没变就不重复刷 */
+  let lastLoggedNapcatPid = 0
   let selfId = ''
 
   async function ensureSelf() {
@@ -4667,13 +4669,17 @@ export function apply(ctx, config) {
       }
       socket.addEventListener('open', () => {
         log('open')
+        // NapCat 真实 PID：走缓存解析（launcher.pid 要验明是 QQ，否则用 6099 端口持有者）
+        const napcatPid = resolveNapcatPid()
+        // 只有「第一次连上」或「NapCat 换了个 PID（重启过）」才刷这一屏；普通重连只写文件日志
+        const pidChanged = napcatPid !== lastLoggedNapcatPid
+        if (!pidChanged) return
+        lastLoggedNapcatPid = napcatPid
         console.info('[dsh-versatileds-plugin] 已连接 NapCat WebSocket')
         // 连上之后把后端地址和 PID 也打出来，出问题时不用再翻配置
         const httpBase = String(config.napcatHttp.get() || 'http://127.0.0.1:3000').replace(/\/$/, '')
         const wsBase = raw.replace(/access_token=[^&]+/, 'access_token=***').replace(/\/$/, '')
         const statusPort = Number(process.env.DSH_QQ_STATUS_PORT || 18766)
-        // NapCat 真实 PID：走缓存解析（launcher.pid 要验明是 QQ，否则用 6099 端口持有者）
-        const napcatPid = resolveNapcatPid()
         console.info(
           `[dsh-versatileds-plugin] 后端地址：HTTP ${httpBase} · WS ${wsBase} · 状态服务 http://127.0.0.1:${statusPort}`
           + ` · DSH PID ${process.pid}`
