@@ -348,6 +348,8 @@ export const Config = Schema.object({
     .description('允许用 NapCat 的 AI 音色发语音（群里可用；私聊受 NapCat 限制，见 README）'),
   voiceCharacter: Schema.string().default('lucy-voice-female1').volatile()
     .description('发语音用的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
+  voiceChance: Schema.number().default(5).volatile()
+    .description('闲聊时主动用语音回复的概率（0-100），0 表示只在被要求时才发语音；长回复不转语音'),
   ruleSyncEnabled: Schema.boolean().default(true).volatile()
     .description('定时主动看群公告和群介绍，记成群规'),
   ruleSyncHours: Schema.number().default(6).volatile()
@@ -7663,7 +7665,13 @@ export function apply(ctx, config) {
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
           const wantVoice = config.voiceEnabled.get() === true && reply.includes('[语音]')
-          if (wantVoice && reply.trim()) {
+          // 偶尔主动用声音说：像人聊着聊着突然来一句语音；长回复还是文字（念长文很怪）
+          const plainVoiceText = reply.replace(/\[语音\]/g, '').trim()
+          const voiceChance = Math.max(0, Math.min(100, Number(config.voiceChance.get() ?? 0)))
+          const casualVoice = !wantVoice && config.voiceEnabled.get() === true && isGroup
+            && plainVoiceText && plainVoiceText.length <= 60
+            && voiceChance > 0 && Math.random() * 100 < voiceChance
+          if ((wantVoice || casualVoice) && reply.trim()) {
             // 「念这句：『阿尔泽布，我已登神』」——引号里的原话优先，别被模型改写
             const quoted = text.match(/[：:，,\s]\s*[“"「『‘]([^”"」』’]{1,80})[”"」』’]/)
             const voiceText = (quoted ? quoted[1] : reply.replace(/\[语音\]/g, '')).trim() || '嗯'

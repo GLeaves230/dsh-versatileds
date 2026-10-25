@@ -1024,6 +1024,7 @@ window.__ModuleLoader__.load({
       ['contextRotateRounds', '多少轮提醒归档/换会话', '0 关闭'],
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
       ['stickerChance', '群里发表情包概率（0-100）', '回完话后附一张的概率'],
+      ['voiceChance', '主动发语音概率（0-100）', '闲聊时把这条文字换成语音的概率；0＝只在被要求时发，长回复仍走文字'],
       ['stickerSendMinGapSec', '同群两次表情包最短间隔（秒）', ''],
       ['stickerMax', '表情包库最多保留张数', '超了删最旧的'],
       ['stickerResizeMaxPx', '发表情包缩到几像素', '默认 240，接近 QQ 表情尺寸；0 不缩'],
