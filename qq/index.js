@@ -5652,13 +5652,20 @@ export function apply(ctx, config) {
           const atSt = loadAtState()
           const rec = atSt[String(sender)]
           const threshold = Math.max(1, Number(config.groupAtBackThreshold.get() ?? 3))
-          if (rec && Number(rec.count || 0) >= threshold) {
+          // 同一个人的「@ 回去」一小时内最多一次：不然会跟对方 @ 来 @ 去，群里看着像吵架
+          const lastBackAt = Number(rec?.lastBackAt || 0)
+          if (rec && Number(rec.count || 0) >= threshold && Date.now() - lastBackAt > 3600_000) {
             // 只有正文真在跟这个人说话才 @ 回去，避免「@A 却在说 B」那种张冠李戴
             const talksToSender = reply.includes(senderName)
               || (rec.name && reply.includes(String(rec.name)))
             if (talksToSender) {
               atUid = sender
-              atSt[String(sender)] = { count: 0, at: Date.now(), name: rec.name || senderName }
+              atSt[String(sender)] = {
+                count: 0,
+                at: Date.now(),
+                lastBackAt: Date.now(),
+                name: rec.name || senderName,
+              }
               saveAtState(atSt)
             }
           }
