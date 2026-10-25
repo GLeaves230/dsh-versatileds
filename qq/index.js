@@ -2485,13 +2485,15 @@ function logChat(entry, config) {
 
 /** 只登记、不写日志：NapCat 有时报「网络连接异常」但消息其实已经发出去了，先把「这句是我发的」留住。 */
 function rememberSent(info) {
-  if (!info.messageId && !info.text) return
+  if (!info.messageId && !info.text && !info.imageName) return
   const messageId = String(info.messageId || '')
   sentIds.set(messageId || `t:${Date.now()}:${Math.random()}`, {
     at: Date.now(),
     kind: info.kind,
     target: String(info.groupId || info.peer || ''),
     text: String(info.text || ''),
+    // 表情包/图片消息正文是空的，靠文件名认「是我发的」
+    imageName: String(info.imageName || ''),
   })
   for (const [k, v] of sentIds) {
     if (Date.now() - Number(v.at || 0) > 30 * 60_000) sentIds.delete(k)
@@ -2525,16 +2527,19 @@ function normSentText(s) {
  * NapCat 的历史接口和发送返回值 message_id 对不上，所以再按「同目标 + 同文本 + 30 分钟内」兜底；
  * 重载/重启后内存登记表是空的，再翻一遍聊天日志里的 sent- 记录。
  */
-function isSelfSent(messageId, text = '', target = '') {
+function isSelfSent(messageId, text = '', target = '', imageNames = []) {
   const id = String(messageId || '')
   if (id && sentIds.has(id)) return true
   const now = Date.now()
   const scope = String(target || '')
   const body = normSentText(text)
+  const imgs = Array.isArray(imageNames) ? imageNames.filter(Boolean) : []
   for (const [, v] of sentIds) {
     if (now - Number(v.at || 0) > 30 * 60_000) continue
     if (scope && v.target && v.target !== scope) continue
     if (body && normSentText(v.text) === body) return true
+    // 图片/表情包：正文为空，比对文件名（同一个文件重发也能认出来）
+    if (imgs.length && v.imageName && imgs.includes(v.imageName)) return true
   }
   return hasSentRecordText(scope, body)
 }
@@ -5091,7 +5096,13 @@ export function apply(ctx, config) {
     if (sender === self) {
       const selfText = plainText(data.message) || String(data.raw_message || '')
       const selfScope = data.message_type === 'group' ? data.group_id : (data.target_id || data.user_id)
-      const isTakeoverMsg = config.takeoverEnabled.get() !== false && !isSelfSent(data.message_id, selfText, selfScope)
+      // 图片/表情包消息正文是空的：靠文件名认「这张是我自己从表情库发的」
+      const selfImages = (data.message || [])
+        .filter((s) => s && s.type === 'image')
+        .map((s) => String(s.data?.file || '').split(/[\\/]/).pop())
+        .filter(Boolean)
+      const isTakeoverMsg = config.takeoverEnabled.get() !== false
+        && !isSelfSent(data.message_id, selfText, selfScope, selfImages)
       if (isTakeoverMsg) {
         if (selfText) {
           const inGroup = data.message_type === 'group'
@@ -5307,6 +5318,7 @@ export function apply(ctx, config) {
               await ob.call('send_private_msg', params)
             }
             markStickerSent(file)
+              rememberSent({ kind: 'sticker-send', groupId: isGroup ? String(data.group_id) : '', peer: isGroup ? '' : String(sender), imageName: basename(file) })
             logChat({
               kind: 'sticker-send',
               role: String(config.selfLabel.get() || 'DS'),
@@ -5597,6 +5609,7 @@ export function apply(ctx, config) {
               })
             }
             markStickerSent(file)
+              rememberSent({ kind: 'sticker-send', groupId: isGroup ? String(data.group_id) : '', peer: isGroup ? '' : String(sender), imageName: basename(file) })
             logChat({
               kind: 'sticker-send',
               role: String(config.selfLabel.get() || 'DS'),
@@ -5692,6 +5705,7 @@ export function apply(ctx, config) {
                   st[data.group_id] = Date.now()
                   saveJsonFile(stickerStatePath(), st)
                   markStickerSent(file)
+              rememberSent({ kind: 'sticker-send', groupId: isGroup ? String(data.group_id) : '', peer: isGroup ? '' : String(sender), imageName: basename(file) })
                   logChat({
                     kind: 'sticker-send',
                     role: String(config.selfLabel.get() || 'DS'),
