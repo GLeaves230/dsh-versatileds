@@ -5705,7 +5705,8 @@ export function apply(ctx, config) {
         const repeated = Boolean(same) && isStickerDesc(same?.entry?.desc)
         if (repeated) {
           imageInfo = `对方又发了那张你早就见过的表情包（梗：${gagOf(same.entry.desc)}；这已经是你第 ${Number(same.entry.seen || 1) + 1} 次看到它）。`
-            + '别再描述画面、别再点评这张图已经点评过的地方；按熟人接梗——可以嫌他「又发这张」「来回就这几张」，或者顺着这个梗损一句，一两句就够。'
+            + '别再描述画面、别说「又发这张」「来回就这几张」；就回一句「彳亍」或者「可爱捏」。'
+            + '「可爱捏」只有图里确实可爱（萌系角色、小动物、软乎乎那种）才说，拿不准就只说「彳亍」，别乱夸成傻孩子。'
         } else {
           // 每张图单独查描述：以前按文件时间缓存，30 分钟内所有图共用一份，第二张会套第一张的描述
           const known = imageFiles.map((f) => loadImageNote(f)).filter(Boolean)
@@ -5715,7 +5716,7 @@ export function apply(ctx, config) {
           const dup = desc && isStickerDesc(desc) ? findStickerByDesc(desc) : null
           if (dup) {
             imageInfo = `对方又发了那张你早就见过的表情包（梗：${gagOf(dup.entry.desc)}；这已经是你第 ${Number(dup.entry.seen || 1) + 1} 次看到它，这次可能是裁切/加字/换比例的版本）。`
-              + '别再描述画面、别再点评这张图；按熟人接梗，一两句就够。'
+              + '别再描述、别点评「又发这张」；就回「彳亍」或者「可爱捏」——只有确实可爱才说可爱捏，否则说彳亍。'
           } else if (known.length) {
             imageInfo = `对方发了 ${imageFiles.length} 张图：${known.join('；')}`
           } else if (desc) {
