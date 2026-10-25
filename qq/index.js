@@ -4365,8 +4365,10 @@ export function apply(ctx, config) {
       const mapped = msgs
         .map((m) => {
           const isMe = String(m.sender?.user_id) === self
-          const text = plainText(m.message)
-          const mine = isMe && isSelfSent(m.message_id, text, data.user_id)
+          const hasVoice = (m.message || []).some((s) => s && s.type === 'record')
+          const hasImg = (m.message || []).some((s) => s && s.type === 'image')
+          const text = plainText(m.message) || (hasImg ? '[图片]' : '') || (hasVoice ? '[语音]' : '')
+          const mine = isMe && (hasVoice || isSelfSent(m.message_id, text, data.user_id))
           // 主人接管 DS 账号说的话算 user：否则模型会当成自己说过的，接着自己的话茬聊
           return {
             role: mine ? 'assistant' : 'user',
@@ -4469,8 +4471,10 @@ export function apply(ctx, config) {
       const msgs = fresh.slice(-Math.max(limit, 8))
       const rows = (await Promise.all(msgs.map(async (m) => {
           const hasImg = (m.message || []).some((s) => s && s.type === 'image')
+          const hasVoice = (m.message || []).some((s) => s && s.type === 'record')
           // 图片消息正文是空的：以前直接跳过，导致它发的表情包不进群上下文，自己也「没印象」
-          const text = plainText(m.message) || (hasImg ? '[图片]' : '')
+          // 语音同理：record 段 text 也是空的，不补 [语音] 的话它发过的语音在上下文里直接消失
+          const text = plainText(m.message) || (hasImg ? '[图片]' : '') || (hasVoice ? '[语音]' : '')
           // @ 段不能丢：不然「@小明 你好」在上下文里只剩「你好」，模型看不出是在点谁
           const atParts = []
           for (const seg of (m.message || [])) {
@@ -4493,7 +4497,9 @@ export function apply(ctx, config) {
           // 图消息也要带上文件名再判，不然自己发的表情包会被误标成「主人（接管）」
           const aiLv = (!isMe && !isOwner) ? aiLevelOf(m.sender?.user_id) : ''
           const who = isMe
-            ? (isSelfSent(m.message_id, text, groupId, imgs) ? '我' : TAKEOVER_VISIBLE)
+            // 自己发的语音在历史里 text 只有 [语音]，跟 chat 流水里的「[语音] 内容」对不上，
+            // isSelfSent 会失配 → 别判成「我（接管）」，直接算「我」（2026-10-26 它记不住自己发过语音）
+            ? ((hasVoice || isSelfSent(m.message_id, text, groupId, imgs)) ? '我' : TAKEOVER_VISIBLE)
             : (isOwner
               ? '主人'
               : (neighbor
