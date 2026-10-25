@@ -2426,6 +2426,42 @@ function renderGroupRulesText(rec) {
 }
 
 /**
+ * 语音转文字：调本地 whisper（<DSH_HOME>/versatileds/models/stt/stt.mjs）。
+ * 跟识图一个路子——先把语音变成内容，再当普通消息处理；没装 STT 就返回空串。
+ */
+function transcribeVoice(wavPath) {
+  return new Promise((resolve) => {
+    const script = join(versatiledsBase(), 'models', 'stt', 'stt.mjs')
+    if (!existsSync(script) || !wavPath || !existsSync(wavPath)) {
+      resolve('')
+      return
+    }
+    let out = ''
+    let done = false
+    const finish = (value) => {
+      if (done) return
+      done = true
+      resolve(value)
+    }
+    let child
+    try {
+      child = spawn(process.execPath, [script, String(wavPath)], { stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch {
+      finish('')
+      return
+    }
+    const timer = setTimeout(() => {
+      try { child.kill() } catch { /* ignore */ }
+      finish(String(out || '').trim())
+    }, 120000)
+    child.stdout.on('data', (d) => { out += d })
+    child.stderr.on('data', () => { /* 识别失败就算了 */ })
+    child.on('close', () => { clearTimeout(timer); finish(String(out || '').trim()) })
+    child.on('error', () => { clearTimeout(timer); finish('') })
+  })
+}
+
+/**
  * 记忆文件写入锁：和记忆目录里的 lock.mjs / lock.py 共用同一个 `.lock`。
  * QQ 侧写 notes/bili_log 时先拿锁，DSH 侧写记忆也拿同一把，两边不会同时改同一个文件。
  * 同步实现：抢不到就用 Atomics.wait 小睡重试，等满 timeoutMs 还抢不到就降级直接写（宁可写也别卡住）。
@@ -6948,11 +6984,22 @@ export function apply(ctx, config) {
     // 乱码先还原（UTF-8 被当 Latin-1 读的那种），还原不出来再按原文走
     const rawText = plainText(data.message)
     const fixedText = tryFixGarbled(rawText)
-    const text = (fixedText !== rawText ? fixedText : rawText)
+    let text = (fixedText !== rawText ? fixedText : rawText)
       || forwardText
       || (imageFiles.length ? '[图片]' : '')
       || faceText
       || ((data.message || []).some((s) => s && s.type === 'record') ? '[语音]' : '')
+    // 语音消息：先转文字再当普通消息处理（跟图片识图一个路子）。
+    // NapCat 的 get_record 能把语音转成 wav，本地 whisper 再出文字；转不了就保留 [语音]。
+    const recordSeg = (data.message || []).find((s) => s && s.type === 'record')
+    if (recordSeg && recordSeg.data?.file) {
+      try {
+        const rec = await ob.call('get_record', { file: recordSeg.data.file, out_format: 'wav' })
+        const wavPath = rec?.data?.file || rec?.data?.url || ''
+        const heard = wavPath ? await transcribeVoice(String(wavPath)) : ''
+        if (heard) text = heard
+      } catch { /* 保持 [语音]，别因为转写失败丢消息 */ }
+    }
     // 「分析一下这个图」这类请求常常先把图单独发出来、再跟一句话：本条没图就回历史里捞最近那张
     if (!imageFiles.length && wantsImageLook(text)) {
       const more = await latestHistoryImages(data, realSenderName)
@@ -6963,9 +7010,6 @@ export function apply(ctx, config) {
         `- ${new Date().toLocaleString('zh-CN', { hour12: false })} recv id=${data.message_id} files=${imageFiles.length} segs=${(data.message || []).map((s) => s.type).join(',')}\n`, 'utf8')
     } catch { /* ignore */ }
     if (!text) return
-    // 自己发的消息（包括刚发出去的语音被 NapCat 推回来）不处理，免得自说自话；
-    // 客户端接管发的也不回——那是主人在用这个号说话
-    if (String(sender) === String(self)) return
 
     // 分享卡片（B站 小程序/链接）：卡片本身只有标题，先顺着短链点进去把内容拿出来，再回话
     let cardInfo = ''
