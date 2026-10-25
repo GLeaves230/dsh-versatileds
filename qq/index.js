@@ -7113,11 +7113,25 @@ export function apply(ctx, config) {
       requestLiveFrame(`${data.sender?.nickname || data.sender?.card || '群友'}：${text}`)
     }
 
-    // 同一会话串行处理：正在回的时候，后来的消息排队等，但只留最新一条——
-    // 群消息刷得快，旧消息排到了上下文早换了，回了也对不上号
+    // 同一会话串行处理：正在回的时候，后来的消息排队等。
+    // 平时只留最新一条（旧消息排到了上下文早换了几轮），但**@ 我的**不能丢——
+    // 2026-10-25 主人 @ 它「发一段语音」，前面一条在排，它直接被后面的闲聊顶掉了，语音要求就没了。
     const lockKey = data.message_type === 'private' ? `p:${sender}` : `g:${data.group_id}`
     if (busy.has(lockKey)) {
-      pendingQueue.set(lockKey, [{ data, at: Date.now() }])
+      const queued = pendingQueue.get(lockKey) || []
+      const mentionMe = (data.message || []).some(
+        (seg) => seg && seg.type === 'at' && String(seg.data?.qq) === String(self),
+      )
+      if (mentionMe) {
+        // 被 @ 的排队保留（最多 3 条），按顺序回
+        queued.push({ data, at: Date.now() })
+        while (queued.length > 3) queued.shift()
+      } else {
+        // 普通消息还是只留最新一条，别回对不上号的旧话
+        queued.length = 0
+        queued.push({ data, at: Date.now() })
+      }
+      pendingQueue.set(lockKey, queued)
       return
     }
     busy.add(lockKey)
@@ -7649,7 +7663,9 @@ export function apply(ctx, config) {
           const wantVoice = config.voiceEnabled.get() === true
             && (looksLikeVoiceRequest(text) || reply.includes('[语音]'))
           if (wantVoice && reply.trim()) {
-            const voiceText = reply.replace(/\[语音\]/g, '').trim() || '嗯'
+            // 「发一段语音：『阿尔泽布，我已登神』」——引号里的就是要念的原话，优先用它
+            const quoted = text.match(/[：:，,\s]\s*[“"「『‘]([^”"」』’]{1,80})[”"」』’]/)
+            const voiceText = (quoted ? quoted[1] : reply.replace(/\[语音\]/g, '')).trim() || '嗯'
             try {
               await ob.call('send_group_ai_record', {
                 character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
