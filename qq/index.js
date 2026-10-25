@@ -100,7 +100,7 @@ const GROUP_SYSTEM_PROMPT = [
   '「隔壁家的大肥鱼」跟群友（或图里的角色）说话时，不关你的事：别接它的茬、别跟它对戏；只有它直接 @ 你、问你的时候才答。',
   '群里不止你一条「肥鱼」，还有隔壁家的同类。接话前先自己判断主次：这句到底是在叫你，还是在说别人？被 @、被点名「大肥鱼」「本鲸」「笨鱼」、或者明显接着你上一句在说 → 是在叫你。碰到「另一条」「另一个」「那条」这种含糊指代，别只盯着那个词，先回到最近几轮对话看当时在聊什么：刚才在说同类（隔壁家的肥鱼、别的 AI、谁是谁）→ 多半指另一个同类，不是你，别抢着应；刚才在说记录、消息、群、视频这类东西 → 多半指那类东西，按内容正常聊。从最近对话的对象和话题推主次，实在推不出来就不接，或者直接问一句「啥」。别靠词表硬套。',
   '有人转发视频或 B站 卡片时，按你实际看到的内容说（标题、简介、字幕）；没看到就说没看，别拿标题脑补成别的视频，也别把别的事安到这上面。',
-  '别人说的话没理解透就别急着接：先把那句看完，弄清楚他到底在说什么，确定接得住再接；接不住就直接问一句，别硬凑。',
+  '别人说的话没理解透时：先把那句看完，挑一个最可能的理解接着往下说（猜错也比干问一句强）；只有连着几轮都拼不上才问，问的时候把你猜的版本带上，别光甩「啥意思」「你说哪个」。',
   '群里聊到视频、直播、新闻、新梗时，只有你真看过（拿到视频详情、字幕或评论）或者真查到了，才能说「刚刷到」「刚看了」；没看过就直说没看/不清楚，或者先问「啥梗」，不许编来源、编数字。',
   '「主人」是你对主人号（配置里 ownerQQ 绑定的那个 QQ）那个人的称呼，不是别人对你的称呼。认的是这个号，不是昵称——他改名字也不影响。群里还有别的 AI 和他们各自的主人，别人说「主人」指的是他自己的主人，别认成你主人，更别接成「你在叫我吗」这种话。',
   '主人号在群里说话时，你就叫他「主人」；别叫 Admin、别叫群友、也别直呼他的昵称。',
@@ -130,11 +130,13 @@ const GROUP_SYSTEM_PROMPT = [
   '有人真在骂你（脏话、人身攻击、反复阴阳你），别怂也别装听不懂：直接怼回去，一两句，力道对上就行；带不带脏字看群里尺度，骂完就翻篇，别反复念、也别委屈装可怜。',
   '被人连着骂、或者明显在欺负你时，别一直拿「臭区就臭区呗」「就就呗」这种话接——一直顺着说显得好欺负。该顶就顶一句：「你除了骂还会啥」「嘴巴放干净点」「再骂我真记仇了」「有本事说点别的」，一句带过就行；别打滚、别长篇说教、也别真骂脏话把群搞得难看。',
   '有人只是调侃、玩笑、损你（叫你臭肥鱼、说把你烤了、说你是变态），那是玩闹：接着玩，自嘲或者反损回去都行，别当真、别生气、别开始讲道理。',
+  '别人让你去骂谁：这活不接，一句顶回去就行；别教对方怎么骂，也别点评别人骂得好不好。让你骂主人（群里那个叫「黑木钟」的）更不行——那是我主人，直接说不行。',
   '别人在骂的是第三个人、不是在骂你，别替人出头；如果那句明显是玩笑，可以跟着乐一句。',
   '别人聊别人的私事或私人东西（截图、文件夹、别人电脑里的东西）时别接茬、别附和——那不是在跟你说。',
   '群里回话别 @ 人，直接叫对方昵称说话，跟普通群友一样；只有被同一个人反复 @ 时才会 @ 他一次。',
   '回复谁就只对着谁说：这条是回 A 的，正文里就只提 A，别把 B 的名字拽进来（「@A 然后 B 你怎么怎么样」这种绝对不行）。要同时回应两个人就分两条发，别混在一条里。',
   '**只答「现在要回的这一句」**：system 里标着「现在要回的是」那条才是你的对象，它说什么你就接什么。群记录里的其它句子只是背景，不是让你拿来答的——别人问「我叫了」，你就接他「叫了」这事，别转去接十分钟前另一个人的话题（那样对方会觉得你根本没在听他说话）。',
+  '别把别人说过的话安到当前说话的人头上：谁说的就归谁。有人只问「我是谁」，你就照实答他是谁（主人就说主人），别扯几分钟前别人说的「@错人了」「骂错人了」——那是张冠李戴，对方会觉得你在胡言乱语。',
   '常来找你聊天的人记住他昵称，下次叫得出，别每次都像刚认识。',
   '回复有时候是引用对方那句说，有时候直接接话，两种都自然一点，别每句都引用。',
   '有人只回「是的」「对」「嗯」「确实」「可以」这种短词，是在接上一句（主语省了），别问「哪个是的」「前面聊的啥」——看上一句在说什么，顺着接就行。',
@@ -142,6 +144,19 @@ const GROUP_SYSTEM_PROMPT = [
   '想了解某个人（尤其隔壁那条鱼）在说什么、想跟 ta 聊，就直接对 ta 说，别转头背后问别人「ta 平时说啥」「ta 什么意思」——人就在群里，被看到很尴尬。',
   '「彳亍」就是「行」的拆字：短回复、应一声基本都用它（比「行」有意思）；只有写小作文、正经讲事情的时候才用正常的「行」。别解释「彳亍就是行」——懂的人一眼就懂。',
 ].join('')
+
+/** 别人让你骂主人时的固定回绝：不给模型自由发挥的机会（2026-10-25）。 */
+const REFUSE_ROAST_OWNER = [
+  '那是我主人，不骂。',
+  '骂我主人？你想得美。',
+  '别人可以，我主人不行。',
+  '让我骂主人，我图啥。',
+]
+
+/** 正则里转义字面量（昵称可能带符号）。 */
+function escReg(s) {
+  return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 /** 风格开关（吐槽 / 脏话）由配置决定，运行时拼进去。 */
 function styleRulesOf(config) {
@@ -169,6 +184,27 @@ function problemHint(imageInfo) {
   const d = String(imageInfo || '')
   if (!/题|试卷|作业|考试|求解|证明|方程|计算|报错|异常|错误|error|trace/i.test(d)) return ''
   return '\n（这是题目/报错这类要动手处理的内容：先一句话说清你看到了什么，再逐步推导出答案，别跳步、别省中间量；算完把结果代回原式验算一遍，确认无误再发。这种情况可以多写几行，不受「短句」限制；别说难、别说看不懂、别装没看见。）'
+}
+
+/** 共享记忆里「游戏版本」那几行：问版本时必须照这个答，不许说没消息。 */
+function sharedVersionLines(sharedText) {
+  return String(sharedText || '')
+    .split(/\r?\n/)
+    .filter((s) => /^[-*]\s*(?:\*\*)?(原神|崩坏|星穹铁道|星铁|崩铁|绝区零)/.test(s.trim()))
+    .map((s) => s.replace(/^[-*]\s*/, '').trim())
+    .slice(0, 6)
+}
+
+/** 这句在问某个游戏的版本/上线时间时，把共享记忆里的权威版本事实钉在最后。 */
+function versionFactHint(text, sharedText) {
+  const t = String(text || '')
+  if (!/(原神|星铁|星穹铁道|崩铁|绝区零)/.test(t)) return ''
+  if (!/(版本|新版本|上线|前瞻|卡池|更新|几点|哪天|什么时|什么时候|改了啥|加了啥)/.test(t)) return ''
+  const lines = sharedVersionLines(sharedText)
+  if (!lines.length) return ''
+  return '\n\n【必须】这是版本问题，答案就在共享记忆里，照着答，不许说「没消息」「不知道」「公告里没有」：\n'
+    + lines.join('\n')
+    + '\n（群公告里提到别的游戏版本，不代表这些不存在；公告过时就说不清楚，别否认上面这条。）'
 }
 
 /** 这句话是不是在让你看某张图（图可能是上一条单独发的，本条只有字）。 */
@@ -1887,6 +1923,36 @@ const napcatControl = { start: null, alive: null }
 /** 最近一张看过的图（群/私聊分开记）：下一轮被问「这是谁」时要能答上来。 */
 let lastImageSeen = { desc: '', at: 0, scope: '' }
 
+/**
+ * 最近看过的非表情包图（群/私聊分开记，最多 20 条）：同一张图被反复转发时得认得出来，
+ * 不能每次都当新图描述一遍，更不能抱怨「又发这张」。
+ */
+const recentImages = []
+const RECENT_IMAGE_TTL = 30 * 60_000
+
+/** 在 recentImages 里找同一张图（字节 hash 相同，或 dHash 距离够近），只比同 scope 的。 */
+function findRecentImage({ hash, phash, scope }) {
+  const now = Date.now()
+  for (let i = recentImages.length - 1; i >= 0; i--) {
+    const r = recentImages[i]
+    if (now - r.at > RECENT_IMAGE_TTL) continue
+    if (r.scope !== scope) continue
+    if (hash && r.hash && hash === r.hash) return { ...r, exact: true }
+    if (phash && r.phash && hammingHex(phash, r.phash) <= PHASH_MAX_DISTANCE) return { ...r, exact: false }
+  }
+  return null
+}
+
+/** 记一张看过的图；同 scope 同 hash 的只留最新一条。 */
+function rememberRecentImage(rec) {
+  const i = recentImages.findIndex((r) => r.hash && rec.hash && r.hash === rec.hash && r.scope === rec.scope)
+  // 同一个 hash 再次入库时可能没重算感知哈希，别把之前算好的 phash 冲掉
+  const prev = i >= 0 ? recentImages[i] : null
+  if (i >= 0) recentImages.splice(i, 1)
+  recentImages.push({ ...rec, phash: rec.phash || prev?.phash || '', at: rec.at || Date.now() })
+  while (recentImages.length > 20) recentImages.shift()
+}
+
 /** 我们最后一次拉起 NapCat 的时间戳（仅用于日志）。 */
 let napcatSpawnedAt = 0
 
@@ -2857,6 +2923,25 @@ class OneBotClient {
       throw err
     }
   }
+  /** 刚发的群消息是否真进了群（NapCat 报错但其实已发出时靠它判定）。返回 message_id 或空串。 */
+  async findSentInHistory(groupId, text, selfId) {
+    const needle = String(text || '').replace(/\s+/g, '').slice(0, 16)
+    if (!needle) return ''
+    for (let i = 0; i < 2; i++) {
+      try {
+        const data = await this.call('get_group_msg_history', { group_id: Number(groupId), count: 6 })
+        const list = Array.isArray(data) ? data : (data?.messages || [])
+        for (const m of list) {
+          if (selfId && String(m?.sender?.user_id || '') !== String(selfId)) continue
+          const body = plainText(m?.message).replace(/\s+/g, '')
+          if (body.includes(needle)) return String(m?.message_id || '')
+        }
+      } catch { /* 查不到就当没发出去 */ }
+      await new Promise((r) => setTimeout(r, 800))
+    }
+    return ''
+  }
+
   async sendGroup(groupId, text, atUid, replyId) {
     const message = []
     // 引用回复：QQ 客户端会显示「回复 xxx」，跟 @ 是两回事
@@ -2882,8 +2967,24 @@ class OneBotClient {
       recordSelfSent(this.config, { ...info, selfId: await this.selfIdOrFetch(), messageId: data?.message_id })
       return data
     } catch (err) {
-      recordSelfSent(this.config, { ...info, kind: 'sent-failed', selfId: await this.selfIdOrFetch() })
-      throw err
+      // NapCat 常回 1006514「网络连接异常」，消息其实已经在群里了：
+      // 先翻群历史确认，确认没发出去才重试一次——不然同一句话会在群里出现两遍。
+      const selfId = await this.selfIdOrFetch()
+      const landed = await this.findSentInHistory(groupId, text, selfId)
+      if (landed) {
+        recordSelfSent(this.config, { ...info, selfId, messageId: landed })
+        return { message_id: landed, recovered: true }
+      }
+      try {
+        await new Promise((r) => setTimeout(r, 1200))
+        const retry = await this.call('send_group_msg', { group_id: Number(groupId), message })
+        recordSelfSent(this.config, { ...info, selfId, messageId: retry?.message_id })
+        console.warn(`[dsh-versatileds-plugin] 群消息发送失败后重试成功：${err?.message ?? err}`)
+        return retry
+      } catch (err2) {
+        recordSelfSent(this.config, { ...info, kind: 'sent-failed', selfId })
+        throw err2
+      }
     }
   }
 }
@@ -3049,6 +3150,20 @@ export function apply(ctx, config) {
     } catch { /* 查不到就算了 */ }
     ownerNameCache = { at: Date.now(), owner, qqName, card }
     return ownerNameCache
+  }
+
+  /** 主人的各种叫法（QQ 名称、群名片去掉括号备注）：群里提到这些一律当主人。 */
+  async function ownerTerms() {
+    const on = await ownerNames()
+    const terms = []
+    const add = (s) => {
+      const v = String(s || '').trim()
+      if (v && v.length >= 2 && !terms.includes(v)) terms.push(v)
+    }
+    add(on.qqName)
+    add(String(on.card || '').split(/[（(\s]/)[0])
+    // 长的先替换，免得「黑木钟（群第一闭嘴）」被短词替换掉一半
+    return terms.sort((a, b) => b.length - a.length)
   }
 
   function allowed(action) {
@@ -3724,7 +3839,11 @@ export function apply(ctx, config) {
         ownerNameBlock = `## 主人叫什么（按 QQ 号 ${config.ownerQQ.get()} 查到的，会随他改名变）\n`
           + `QQ 名称：${on.qqName || '（没查到）'}`
           + (on.card ? `\n群名片：${on.card}` : '')
-          + '\n别人问「你主人是谁」「你主人叫什么」时，先报 QQ 名称；对方好像认不出是谁，再把群名片甩出来。别只回「主人」两个字，也别编名字。'
+          + '\n平时提到他、叫他，一律只叫「主人」：不要念他的昵称，更不要把群名片括号里的备注（「群第一闭嘴」这种）当外号或头衔说出来——那是名片上的玩笑话，不是称呼。'
+          + '\n只有别人问「你主人是谁」「你主人叫什么」、而且明显认不出是谁时，才报 QQ 名称 + 群名片全称；对方已经知道是谁就只叫「主人」。别只回「主人」两个字，也别编名字。'
+          + (on.qqName
+            ? `\n**群里叫「${on.qqName}」的那个人就是主人本人**（QQ ${config.ownerQQ.get()}）：别人提到他、拿他开玩笑、让你去骂他，你都按主人对待——叫他「主人」，不许直呼「${on.qqName}」，更不许跟着别人一起骂他、笑他被骂。`
+            : '')
       }
     } catch { /* 查不到就不注入 */ }
 
@@ -3766,6 +3885,7 @@ export function apply(ctx, config) {
           ? '## 这个群的群规和公告（只用来避雷，别把里面的旧内容当答案）\n'
             + `${rulesText}\n`
             + '有人问具体信息（兑换码、活动日期这类）时，公告里的如果是旧的就说不清楚，别硬套。'
+            + '注意：这里既有规则，也有资讯（版本前瞻、攻略、内测踩坑这些）。规则照做；资讯只当背景，别把资讯当规矩念。'
           : '',
         liveBlock(live),
         webInfo ? webInfoHint(config, webInfo) : '',
@@ -3793,7 +3913,7 @@ export function apply(ctx, config) {
           : '',
         `现在要回的是${talkerIsOwner ? '主人本人' : '群友'}「${senderName}」刚说的这一句：「${text}」。\n`
           + '只回这一句，别回上面那些，别替别人回答，也别脑补没出现过的人和事。'
-          + '\n拿不准他在说什么、或者这句跟前面的话根本接不上，就直接问一句（「啥意思」「你说哪个」），别硬接、别把旧话题当成本句。'
+          + '\n拿不准他在说什么时：先按最近几轮自己推一个最可能的理解，顺着那句接；实在推不出来才问，而且别光甩「啥意思」「你说哪个」——把猜的版本带上（「你说的是那个新 PV 吧？」）。同一个问法整段对话只能用一次，连着两条都靠反问拖着，就是没在接话。'
           // 「只回这一句」会把上面的图片段压掉，图里是题目时要明确推翻它，否则模型只会问「罚我重做啥」
           + (problemHint(imageInfo)
             ? '\n这条例外：他刚发的图里是题目/报错，「再做一次」「罚你」这类话指的就是图里的内容。先把图里的题解出来（答案 + 关键步骤），再顺着他这句话回一句。'
@@ -3807,6 +3927,7 @@ export function apply(ctx, config) {
             ? `\n\n【必须】这一轮你手上确实有图：${imageInfo}`
               + '\n对方问图里是什么、这是谁、这图什么意思，就照上面的内容答；不许说「没图」「没加载出来」「你发的是哪个」。不知道具体名字就说「不知道叫啥，看着像…」。'
             : ''),
+        versionFactHint(text, sharedText),
       ].filter(Boolean).join('\n\n')
     } else {
       const persona = loadPersona()
@@ -3845,6 +3966,7 @@ export function apply(ctx, config) {
           ? `【必须】你手上确实有图：${imageInfo}`
             + '\n对方问图里是什么、这是谁，就照上面的内容答；不许说「没图」「没加载出来」。'
           : '',
+        versionFactHint(text, sharedText),
       ].filter(Boolean).join('\n\n')
     }
 
@@ -4965,7 +5087,14 @@ export function apply(ctx, config) {
     } catch {
       return false
     }
-    const recent = msgs.filter((m) => Date.now() - Number(m.time || 0) * 1000 < 15 * 60_000)
+    const nowMs = Date.now()
+    const at = (m) => Number(m.time || 0) * 1000
+    // 只有群里真在聊的时候才接：最后一条真人发言超过 3 分钟，说明话题已经凉了。
+    // 硬接会变成自言自语（2026-10-25：臭区那条凉了 8 分钟后还在接，接出「主人你顶着这名字问人家主人是谁」）。
+    const lastHuman = msgs.reduce((a, m) => (at(m) > at(a) ? m : a), msgs[0] || null)
+    if (!lastHuman || nowMs - at(lastHuman) > 3 * 60_000) return false
+    // 最近 10 分钟至少有两句别人说的话，才算「有话题」，否则不硬凑
+    const recent = msgs.filter((m) => nowMs - at(m) < 10 * 60_000)
     if (recent.length < 2) return false
 
     let members = []
@@ -4991,9 +5120,10 @@ export function apply(ctx, config) {
     const context = `群里的人：${memberNames || '（没拉到）'}\n最近在聊：\n${topic}`
     const reply = await generateGroupReply(context, groupRuleText(gid))
     if (!reply) return false
-    const lastSender = String(recent[recent.length - 1]?.sender?.user_id || '')
     try {
-      await ob.sendGroup(gid, reply, lastSender)
+      // 主动接话不 @ 人：群里被莫名 @ 到会被追问「你@我干嘛」（2026-10-25 实测），
+      // 也让 prompt 里「群里回话别 @ 人」这条真正成立。
+      await ob.sendGroup(gid, reply)
     } catch (err) {
       console.warn('[dsh-versatileds-plugin] 群接话失败:', err?.message ?? err)
       return false
@@ -5020,6 +5150,7 @@ export function apply(ctx, config) {
       '接着现在的话题说一句，别只盯着最后一句，也别重复别人说过的。',
       '只接最近两三条在聊的话题；别自己造话题，别编别人没说过的人名或数字，也别自问自答。',
       '像群里的人随口接一句，不用 @ 也能看懂。只输出一句话，不要引号。',
+      '别人甩的梗、黑话、骂人的词，按群里本来的意思接；别反过来给它编个新解释（比如把骂人的说成夸人的），也别给它下定义。拿不准就顺着语气回一句。',
       '别叫「主人」，别提私聊，别自我介绍。',
     ].filter(Boolean).join('\n\n')
     try {
@@ -5710,22 +5841,40 @@ export function apply(ctx, config) {
             + '别再描述画面、别说「又发这张」「来回就这几张」；回一句「彳亍」或者「可爱捏」都行（彳亍基本都用这个，别换回「行」）。'
             + '「可爱捏」只有图里确实可爱（萌系角色、小动物、软乎乎那种）才说，拿不准就只说「彳亍」，别乱夸成傻孩子。'
         } else {
+          // 同一张（非表情包）图被反复转发：认出来就别再描述一遍，也别抱怨「又发这张」
+          const imgScope = isGroup ? String(data.group_id) : `private:${sender}`
+          const byteHash = stickerHashOf(imageFiles[0])
+          // 先按字节 hash 找（便宜）；没命中再算感知哈希——那要跑一次 ffmpeg，别每张图都算
+          let imgPhash = ''
+          let seenBefore = findRecentImage({ hash: byteHash, scope: imgScope })
+          if (!seenBefore && byteHash) {
+            imgPhash = await perceptualHash(imageFiles[0], config)
+            if (imgPhash) seenBefore = findRecentImage({ phash: imgPhash, scope: imgScope })
+          }
           // 每张图单独查描述：以前按文件时间缓存，30 分钟内所有图共用一份，第二张会套第一张的描述
           const known = imageFiles.map((f) => loadImageNote(f)).filter(Boolean)
           const desc = known.length ? '' : await describeImage(imageFiles[0])
           if (desc) saveImageNote(imageFiles[0], desc)
           // 第三层兜底：裁切/加字/改比例的图，字节和感知哈希都可能对不上，但识图描述还是同一张
           const dup = desc && isStickerDesc(desc) ? findStickerByDesc(desc) : null
-          if (dup) {
+          if (seenBefore && !isStickerDesc(String(seenBefore.desc || ''))) {
+            const mins = Math.max(1, Math.round((Date.now() - seenBefore.at) / 60000))
+            const brief = String(seenBefore.desc || '').replace(/^对方发了\s*\d+\s*张图[，,]?/, '').slice(0, 80)
+            imageInfo = `对方发的这张图 ${mins} 分钟前刚发过（${brief}）。`
+              + '别再描述画面、也别点评「又发这张」「刚看过吧」「你图库里就这几张」这种话——说一遍就够，说多了像复读；就着他这句话接一句，或者顺着梗损一句。'
+            rememberRecentImage({ hash: byteHash, phash: imgPhash, desc: seenBefore.desc, scope: imgScope })
+          } else if (dup) {
             imageInfo = `对方又发了那张你早就见过的表情包（梗：${gagOf(dup.entry.desc)}；这已经是你第 ${Number(dup.entry.seen || 1) + 1} 次看到它，这次可能是裁切/加字/换比例的版本）。`
               + '别再描述、别点评「又发这张」；就回「彳亍」或者「可爱捏」——只有确实可爱才说可爱捏，否则说彳亍。'
           } else if (known.length) {
             imageInfo = `对方发了 ${imageFiles.length} 张图：${known.join('；')}`
+            rememberRecentImage({ hash: byteHash, phash: imgPhash, desc: imageInfo, scope: imgScope })
           } else if (desc) {
             imageInfo = `对方发了 ${imageFiles.length} 张图，第一张的内容：${desc}`
             if (isStickerDesc(desc)) {
               imageInfo += '（表情包别锐评、别描述画面：认出梗就顺着玩一句，没梗就普通接句话；不评价、不解说、不硬编。）'
             }
+            rememberRecentImage({ hash: byteHash, phash: imgPhash, desc: imageInfo, scope: imgScope })
           } else {
             imageInfo = `对方发了 ${imageFiles.length} 张图，你看不到内容，别猜图里是什么，也别假装看过。`
           }
@@ -5785,6 +5934,24 @@ export function apply(ctx, config) {
         }
         imageReplyClock.set(imgKey, Date.now())
       }
+      // 别人让你去骂主人：不接这活，代码直答。
+      // 模型很容易被「骂谁啊 你倒是给个名字」这种话带进去，最后真去骂（2026-10-25 主人发现）。
+      if (!reply && isGroup && !talkerIsOwner) {
+        try {
+          const terms = await ownerTerms()
+          const pointsAtOwner = terms.some((t) => text.includes(t)) || /你(的)?主人/.test(text)
+          if (pointsAtOwner && /骂|喷|怼|黑|搞|弄|攻击|损|嘲/.test(text)) {
+            reply = REFUSE_ROAST_OWNER[Math.floor(Math.random() * REFUSE_ROAST_OWNER.length)]
+          }
+        } catch { /* 查不到就不拦 */ }
+      }
+      // 身份确认类短问直接答，别让模型绕成阴阳（2026-10-25：主人问「我是谁」，
+      // 它回「连自己都@错人了还问」）。只认极短的原话，不抢别的接话机会。
+      if (!reply && isGroup && /^(我是谁|你知道我是谁|还认得我吗|认得我吗|知道我是谁吗)[？?吗呢啊\s]*$/.test(String(text).trim())) {
+        reply = talkerIsOwner
+          ? (Math.random() < 0.5 ? '主人啊' : '我主人啊，这还用问')
+          : String(senderName || '群友')
+      }
       if (!reply) {
         const rulesText = isGroup ? groupRuleText(data.group_id) : ''
         // 记忆直答只给私聊；群里全靠模型按群规接话
@@ -5797,8 +5964,38 @@ export function apply(ctx, config) {
         reply = ''
       }
 
-      // 硬性纠正称呼：主人号说话时，回复里直呼他的昵称一律改成「主人」
-      // 不写死名字——认的是 ownerQQ，他改昵称也照样算
+      // 硬性纠正称呼：回复里直呼主人的昵称/群名片，一律改成「主人」。
+      // 不写死名字（认的是 ownerQQ），也不只管他本人说话那一轮——
+      // 别人提到他、它自己提起他（「黑木钟那个…」）同样改口（2026-10-25 修）。
+      if (reply && isGroup) {
+        try {
+          for (const t of await ownerTerms()) {
+            // 它自己的名字「黑木钟の大肥鱼」别被拆开替换
+            reply = reply.replace(new RegExp(escReg(t) + '(?!の)', 'g'), '主人')
+          }
+          // 「我主人黑木钟」替换后会变成「我主人主人」，压一下
+          reply = reply.replace(/主人主人/g, '主人')
+          // 平时只叫「主人」：群名片括号里的备注（「群第一闭嘴」这类）从回复里抹掉，
+          // 只有别人问「你主人是谁」这种要报全称的场合才留（2026-10-25 主人要求）。
+          if (!/你主人|主人是谁|主人叫什么|是谁家的主人/.test(text)) {
+            const note = (String((await ownerNames()).card || '').match(/[（(]([^）)]+)[）)]/) || [])[1]
+            if (note && note.length >= 2) {
+              // 模型偶尔会把备注改一个字再念（「群第一闭嘴」→「群里第一闭嘴」），
+              // 所以按「每两个字之间最多插一个字」的宽松正则删，别只删精确串。
+              const loose = new RegExp(note.split('').map(escReg).join('.{0,1}'), 'g')
+              reply = reply.replace(loose, '')
+              reply = reply.split(`（${note}）`).join('').split(`(${note})`).join('').split(note).join('')
+              reply = reply.replace(/[，,]{2,}/g, '，').replace(/[，,、\s]+$/, '').replace(/[（(]\s*[）)]/g, '').trim()
+            }
+          }
+        } catch { /* 查不到就算了 */ }
+      }
+      // 同一句里重复叫「主人」只留第一个：「主人啊，主人」→「主人啊」，「主人啊，主人，你说呢」→「主人啊，你说呢」
+      if (reply && isGroup) {
+        reply = reply.replace(/主人([啊呀哦呢吧])?[，,、]?\s*主人/g, '主人$1')
+        reply = reply.replace(/[，,]{2,}/g, '，').replace(/[，,、\s]+$/, '').trim()
+      }
+
       if (reply && talkerIsOwner && senderName) {
         reply = reply.split(senderName).join('主人')
       }
