@@ -2967,6 +2967,8 @@ export function apply(ctx, config) {
   const pendingQueue = new Map()
   /** 图消息回复冷却：同一个人 15 秒内连发多图只回第一张 */
   const imageReplyClock = new Map()
+  /** 处理过的 message_id：WS 重推同一条时别回两遍 */
+  const seenMessageAt = new Map()
   let selfId = ''
 
   async function ensureSelf() {
@@ -5187,6 +5189,17 @@ export function apply(ctx, config) {
     // 消息太旧就别回了：排到队、重载后补处理时，上下文早换了好几轮，回了只会答非所问
     const msgAt = Number(data.time || 0) * 1000
     if (msgAt && Date.now() - msgAt > 120_000) return
+
+    // 同一条消息只处理一次：WS 重连/重推时会把同一条再送一遍，不去重就会同一句话回两遍
+    const mid = String(data.message_id || '')
+    if (mid) {
+      const last = seenMessageAt.get(mid) || 0
+      if (Date.now() - last < 120_000) return
+      seenMessageAt.set(mid, Date.now())
+      for (const [k, v] of seenMessageAt) {
+        if (Date.now() - v > 600_000) seenMessageAt.delete(k)
+      }
+    }
 
     const self = await ensureSelf()
     const sender = String(data.user_id ?? data.sender?.user_id ?? '')
