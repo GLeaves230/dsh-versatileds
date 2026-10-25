@@ -2836,7 +2836,14 @@ class OneBotClient {
       message.push({ type: 'text', data: { text: ' ' } })
     }
     message.push(...buildTextSegments(text))
-    const info = { kind: 'sent-group', groupId: String(groupId), text }
+    // at / reply 也记进 info：排查「凭空 @ 人」时能直接看到当时带了什么
+    const info = {
+      kind: 'sent-group',
+      groupId: String(groupId),
+      text,
+      at: String(atUid || ''),
+      replyTo: String(replyId || ''),
+    }
     // NapCat 会回 1006514「网络连接异常」，但消息其实已经发出去了：先登记，失败也留痕
     rememberSent(info)
     try {
