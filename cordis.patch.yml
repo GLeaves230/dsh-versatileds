@@ -1,0 +1,11 @@
+# 安装后向引擎插入「多功能DS插件」条目。
+# 这里只是 bundle 的默认值；实际配置请在 DSH 设置页的插件配置里改，
+# 或在本 profile 的 cordis.patch.yml 里按同一个 id 覆盖（config 会被深合并/整体替换）。
+#
+# config.bili = B站 模块，config.qq = QQ 模块，各自字段跟原来两个插件一样。
+- insert:
+    - id: versatileds
+      name: dsh-versatileds-plugin
+      config:
+        bili: {}
+        qq: {}
