@@ -3707,6 +3707,23 @@ function recentSelfGroup(groupId, limit = 6, selfLabel = 'DS') {
 /** 历史里 self 号发、但没被发送登记认领的消息＝主人接管：补记一条日志。 */
 const takeoverLogged = new Set()
 
+/**
+ * 热重载会清空 takeoverLogged，重启后历史轮询会把旧接管再记一遍；
+ * 所以补记前先翻一下日志尾巴，同文本的 takeover 已经有了就别重复写。
+ */
+function takeoverAlreadyLogged(scope, text) {
+  try {
+    const key = scope.groupId ? `group-${scope.groupId}` : (scope.peer ? `private-${scope.peer}` : '')
+    if (!key) return false
+    const raw = readFileSync(chatFilePath(key), 'utf8')
+    const lines = raw.split(/\r?\n/).slice(-400).filter(Boolean)
+    const needle = JSON.stringify(String(text)).slice(1, -1)
+    return lines.some((l) => l.includes('"kind":"takeover"') && l.includes(needle))
+  } catch {
+    return false
+  }
+}
+
 function noteTakeoverFromHistory(msgs, self, config, scope = {}) {
   if (config.takeoverEnabled.get() === false) return
   const me = String(self || '')
@@ -3718,6 +3735,7 @@ function noteTakeoverFromHistory(msgs, self, config, scope = {}) {
     if (!text) continue
     const key = `${target}|${m.message_id || ''}|${text}`
     if (takeoverLogged.has(key)) continue
+    if (takeoverAlreadyLogged(scope, text)) continue
     if (isSelfSent(m.message_id, text, target)) continue
     // 重启后 sentIds 是空的，但 chat 日志里还留着「我发过这条」——别把自己的话记成接管
     if (hasSentRecord(scope, text)) continue
