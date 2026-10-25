@@ -3144,15 +3144,22 @@ export function apply(ctx, config) {
       const msgs = fresh.slice(-Math.max(limit, 8))
       const rows = msgs
         .map((m) => {
-          const text = plainText(m.message)
+          const hasImg = (m.message || []).some((s) => s && s.type === 'image')
+          // 图片消息正文是空的：以前直接跳过，导致它发的表情包不进群上下文，自己也「没印象」
+          const text = plainText(m.message) || (hasImg ? '[图片]' : '')
           if (!text) return null
+          const imgs = (m.message || [])
+            .filter((s) => s && s.type === 'image')
+            .map((s) => String(s.data?.file || '').split(/[\\/]/).pop())
+            .filter(Boolean)
           const isMe = String(m.sender?.user_id) === self
           const isOwner = Boolean(owner) && String(m.sender?.user_id) === owner
           const neighbor = neighborLabelOf(m.sender, config)
           // 自己显示「我」而不是 DS；主人直接显示「主人」——显示成 Admin 模型会学着叫
           // 别人家的同类 AI 统一叫「隔壁家的<名字>」，不让它跟我抢这个人设
+          // 图消息也要带上文件名再判，不然自己发的表情包会被误标成「主人（接管）」
           const who = isMe
-            ? (isSelfSent(m.message_id, text, groupId) ? '我' : '主人（接管）')
+            ? (isSelfSent(m.message_id, text, groupId, imgs) ? '我' : '主人（接管）')
             : (isOwner
               ? '主人'
               : (neighbor || `群友 ${m.sender?.card || m.sender?.nickname || '?'}`))
