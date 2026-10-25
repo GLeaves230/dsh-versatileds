@@ -260,6 +260,54 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 语音音色：QQ 的 AI 音色列表（和 NapCat get_ai_characters 返回的一致）。 */
+    const VOICE_OPTIONS = [
+      ['lucy-voice-laibixiaoxin', '小新（推荐）'],
+      ['lucy-voice-houge', '猴哥（推荐）'],
+      ['lucy-voice-silang', '四郎（推荐）'],
+      ['lucy-voice-guangdong-f1', '东北老妹儿（推荐）'],
+      ['lucy-voice-guangxi-m1', '广西大表哥（推荐）'],
+      ['lucy-voice-daji', '妲己（推荐/古风）'],
+      ['lucy-voice-lizeyan', '霸道总裁（推荐/现代）'],
+      ['lucy-voice-suxinjiejie', '酥心御姐（推荐/现代）'],
+      ['lucy-voice-m8', '说书先生（搞怪）'],
+      ['lucy-voice-male1', '憨憨小弟（搞怪）'],
+      ['lucy-voice-male3', '憨厚老哥（搞怪）'],
+      ['lucy-voice-lvbu', '吕布（古风）'],
+      ['lucy-voice-xueling', '元气少女（现代）'],
+      ['lucy-voice-f37', '文艺少女（现代）'],
+      ['lucy-voice-male2', '磁性大叔（现代）'],
+      ['lucy-voice-female1', '邻家小妹（现代）'],
+      ['lucy-voice-m14', '低沉男声（现代）'],
+      ['lucy-voice-f38', '傲娇少女（现代）'],
+      ['lucy-voice-m101', '爹系男友（现代）'],
+      ['lucy-voice-female2', '暖心姐姐（现代）'],
+      ['lucy-voice-f36', '温柔妹妹（现代）'],
+      ['lucy-voice-f34', '书香少女（现代）'],
+    ]
+
+    /** 语音音色下拉：选中哪个，发语音就用哪个。 */
+    function VoiceRow(props) {
+      const { form, value, disabled } = props
+      const [pending, setPending] = React.useState(false)
+      const current = String(value || 'lucy-voice-female1')
+      return React.createElement(
+        'label',
+        { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, '语音音色'),
+        React.createElement('select', {
+          value: current,
+          disabled: disabled || pending,
+          onChange: async (e) => {
+            setPending(true)
+            try { await form.set('voiceCharacter', e.target.value) } finally { setPending(false) }
+          },
+          style: { ...inputStyle, cursor: 'pointer' },
+        }, VOICE_OPTIONS.map(([id, name]) => React.createElement('option', { key: id, value: id }, name))),
+        React.createElement('span', { style: hintStyle }, '发语音用的音色（NapCat 的 AI 音色）；目前只在群语音发送时生效'),
+      )
+    }
+
     /** 多行文本：给「评论风格」这种长提示词用。 */
     function TextAreaRow(props) {
       const { form, field, label, hint, value, disabled } = props
@@ -590,6 +638,7 @@ window.__ModuleLoader__.load({
       ['poke', '搓一搓'],
       ['group', '群聊'],
       ['media', '媒体'],
+      ['voice', '语音'],
       ['share', '分享视频'],
       ['proactive', '主动'],
       ['task', '任务/搜索'],
@@ -896,6 +945,7 @@ window.__ModuleLoader__.load({
       if (/^poke/.test(field)) return 'poke'
       if (/^(rule|neighbor|quiet)/.test(field)) return 'group'
       if (/^videoShare/.test(field)) return 'share'
+      if (/^voice/.test(field)) return 'voice'
       if (/^(image|sticker|live|shareCard)/.test(field)) return 'media'
       if (/^proactive/.test(field)) return 'proactive'
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
@@ -1480,6 +1530,17 @@ window.__ModuleLoader__.load({
           children.push(
             React.createElement(SecretRow, {
               key: field, form, field, label, hint,
+              disabled: !snap.writable,
+            }),
+          )
+        }
+
+        if (activeTab === 'voice') {
+          children.push(
+            React.createElement(VoiceRow, {
+              key: 'voice-character',
+              form,
+              value: v.voiceCharacter,
               disabled: !snap.writable,
             }),
           )

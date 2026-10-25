@@ -21,7 +21,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { cardTextOf, findShareCard, parseShareCard, resolveBvidFromCard } from '../lib/share-card.js'
 
 const ACTIONS = [
-  'status', 'friends', 'groups', 'history', 'send_private', 'send_group', 'share_video',
+  'status', 'friends', 'groups', 'history', 'send_private', 'send_group', 'share_video', 'voice',
   'proactive_status', 'group_rules', 'live_status', 'balance',
 ]
 
@@ -340,6 +340,10 @@ export const Config = Schema.object({
     .description('分享目标：留空＝发主人私聊；*＝发当前聚焦的 QQ 会话（主动搭话的 current）；也可以填群号或 QQ 号'),
   videoShareCardStyle: Schema.string().default('text').volatile()
     .description('分享样式：text＝封面图+标题+b23 短链（手机端样式）；link＝纯文本+标题+完整 bilibili.com 链接（电脑端样式）'),
+  voiceEnabled: Schema.boolean().default(true).volatile()
+    .description('允许用 NapCat 的 AI 音色发语音（群里可用；私聊受 NapCat 限制，见 README）'),
+  voiceCharacter: Schema.string().default('lucy-voice-female1').volatile()
+    .description('发语音用的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
   ruleSyncEnabled: Schema.boolean().default(true).volatile()
     .description('定时主动看群公告和群介绍，记成群规'),
   ruleSyncHours: Schema.number().default(6).volatile()
@@ -7743,6 +7747,7 @@ export function apply(ctx, config) {
       count: { type: 'integer', description: 'history 拉取条数，默认 20。' },
       bvid: { type: 'string', description: 'share_video 用：要分享的视频 BV 号，留空就用最近看过的。' },
       delay_sec: { type: 'integer', description: 'share_video 用：发之前倒计时多少秒，像人看完缓一会儿再推荐。' },
+      character: { type: 'string', description: 'voice 用：音色 id；留空用配置里的（默认 lucy-voice-female1＝邻家小妹）。' },
       live: { type: 'boolean', description: '发送动作必须传 true 才真正执行。' },
       refresh: { type: 'boolean', description: 'group_rules 时现场重抓群规。' },
     },
@@ -7950,6 +7955,21 @@ export function apply(ctx, config) {
               发给: groupId ? `群 ${groupId}` : `好友 ${userId}`,
               倒计时秒: delaySec,
             }, null, 2)
+          }
+          case 'voice': {
+            if (config.voiceEnabled.get() !== true) {
+              return '语音没开：设置页 → QQ模块 → 语音，先打开「允许发语音」'
+            }
+            const voiceText = String(args.text || '').trim()
+            if (!voiceText) return '要发语音得给 text（说什么）'
+            const character = String(args.character || config.voiceCharacter.get() || 'lucy-voice-female1').trim()
+            const gid = String(args.group_id || '').trim()
+            if (!gid) return '语音目前只能发群（私聊受 NapCat 限制）；给个 group_id'
+            if (!args.live) {
+              return JSON.stringify({ 动作: 'voice', 群: gid, 音色: character, 文本: voiceText, 预览: true }, null, 2)
+            }
+            const vr = await ob.call('send_group_ai_record', { character, text: voiceText, group_id: Number(gid) })
+            return JSON.stringify({ 动作: 'voice', 已发送: vr, 音色: character }, null, 2)
           }
           default:
             return `未知动作: ${args.action}`
