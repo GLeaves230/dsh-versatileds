@@ -1295,6 +1295,21 @@ function sharedMemoryPath() {
 }
 
 /**
+ * 单独摘出共享记忆里的「黑话、谐音与玩梗」一节。
+ * 共享记忆十几 KB，塞进 prompt 中间模型容易忽略；群聊把这一节单独拎出来放前面，
+ * 「妈妈」「瓦学弟」这类梗才接得住（2026-10-26 主人：它还在一本正经问「你喊谁妈」）。
+ */
+function loadGagSection() {
+  try {
+    const raw = readFileSync(sharedMemoryPath(), 'utf8')
+    const m = raw.match(/## 黑话、谐音与玩梗[\s\S]*?(?=\n## |$)/)
+    return m ? m[0].trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
  * 读共享记忆。
  * - 长度上限用配置（sharedMemoryMaxChars，默认 0＝不限）：文件会长大，新写的内容在末尾，截断就白写了。
  * - 超过上限时：开了「分段摘要」（sharedMemorySummary）就留头留尾（身份/锚点在头、最新在尾），
@@ -5095,6 +5110,10 @@ export function apply(ctx, config) {
         talkerIsOwner
           ? '## 现在说话的人\n这条是主人本人（配置里绑定的主人号）说的。'
           : '## 现在说话的人\n这条是群友说的，不是主人本人。',
+        // 梗表单独靠前放：共享记忆整体太长，十几 KB 塞中间模型容易漏
+        loadGagSection()
+          ? `## 群里的黑话、谐音和梗（碰到就按这里的接法回，别按字面理解、别一本正经否认或反问「你喊谁」）\n${loadGagSection()}`
+          : '',
         ownerNameBlock,
         groupRolesBlock,
         persona ? `## 人设（你是谁、怎么说话，以这段为准）\n${persona}` : '',
