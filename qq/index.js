@@ -3101,7 +3101,10 @@ export function apply(ctx, config) {
       const list = await ob.call('get_group_member_list', { group_id: Number(gid) })
       const all = Array.isArray(list) ? list : []
       const owner = all.find((m) => String(m.role) === 'owner')
-      const admins = all.filter((m) => String(m.role) === 'admin')
+      // 主人可能也是管理员：从管理员列表里剔掉，别让它把「主人」和「管理员」两个身份串起来
+      const ownerQq = String(config.ownerQQ.get() || '').trim()
+      const admins = all.filter((m) => String(m.role) === 'admin'
+        && (!ownerQq || String(m.user_id) !== ownerQq))
       groupRolesCache = {
         at: Date.now(),
         groupId: gid,
@@ -3676,6 +3679,7 @@ export function apply(ctx, config) {
           groupRolesBlock = `## 这个群的身份\n群主：${roles.owner}`
             + (roles.admins.length ? `\n管理员：${roles.admins.join('、')}` : '')
             + '\n别把管理员叫成群主，也别给普通群友安头衔；不确定就说昵称。'
+            + '\n注意：主人也可能是管理员（甚至群主），但对你来说他永远是「主人」，别改口叫管理员；下面管理员列表里没有他。'
         }
       } catch { /* 查不到就不注入 */ }
     }
