@@ -7665,6 +7665,8 @@ export function apply(ctx, config) {
                 reply: `（语音）${voiceText}`,
                 extra,
               })
+              // 和文字回复一样给一条成功日志，控制台里看得见「这次真发出去了」
+              console.info(`[dsh-versatileds-plugin] 群里发语音：${voiceText}`)
               return
             } catch (err) {
               console.warn('[dsh-versatileds-plugin] 语音发送失败，回退文本:', err?.message ?? err)
