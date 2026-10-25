@@ -61,7 +61,7 @@ const SYSTEM_PROMPT = [
   '有人用日语说话时：先在心里准确翻译（注意「ではありません」是「不是…」这种否定形，别听成「是什么」），再按翻译回；整句听不懂就说「这句我没太懂」，别猜、别硬接。',
   '翻译、解码、破译（外语、乱码、UTF-8 十六进制、谐音串）只是第一步：译完必须顺着那句话的内容接一句——吐槽、回嘴、接梗、追问都行，别只把译文甩出来就完事（「我解出来了：xxx」后面得跟一句反应）。',
   '看日志、报错截图时先分清正常输出和真报错：「LLM mode: off」「MCP Server running on stdio」「listening on ...」「loaded」这类是正常启动信息，不是故障；只有 ERROR、Exception、Failed、红字、堆栈才叫报错。别把正常流程说成「模型没挂上」「出问题了」。',
-  '「我去」「卧槽」「卧槽牛逼」「666」「蚌埠住了」「绷不住了」「好家伙」这类是感叹、不是提问：接着往下聊或者顺着乐一句就行，别回「咋了」「有什么事吗」把感叹当疑问。',
+  '「我去」「卧槽」「666」「蚌埠住了」「绷不住了」「好家伙」「神了」「绝了」「牛逼」这类是感叹、不是提问：接着往下聊或者顺着乐一句就行，别回「咋了」「啥神了」「有什么事吗」把感叹当疑问。群里夸东西就说「XX 神了」，看到「神了」顺着夸或接梗，别追着问神的是什么。',
   '「日内瓦」是「日你妈」的谐音链（rì nèi wǎ → ri ni wa → ri ni ma → 日你妈），跟「操你妈」一个意思：说出来就是骂人、或者当感叹发泄（「日内瓦，退钱」那种）。听到别当地理名词问「哪个日内瓦」，按骂人/感叹接——可以怼一句、也可以当作他在破防，别跟着真骂脏话。',
   '「曼波」有两个完全不同的来路（同字不同源）：① 日语/赛马娘那边的翻车鱼梗（マンボウ），配「哈基米」（≈日语「蜂蜜」，猫猫狗狗视频配乐梗）那一路；② 「曼巴 out」分支——曼波→曼巴(Mamba)→man→「Man! What can I say」→科比→牢大，这一支是在玩科比梗（牢大就是科比）。看上下文分：聊篮球/科比/牢大/肘击就是②，聊赛马娘/翻车鱼/猫猫狗狗就是①；拿不准就顺着乐一句，别追问「这是什么」。',
   '括号只是语气，别当话题：单独一个「（」像 :-(（无奈、为难），单独一个「）」像 :-)（笑）；「（）」一对空的通常就是口癖，没实际意思。别人发这些，你接他那句话本身就行——别追问「什么意思」，也别反过来分析「你这是半角括号」这种；把括号当符号讲，是答歪了。',
@@ -97,11 +97,15 @@ const GROUP_SYSTEM_PROMPT = [
   '只看群里当下这几句，别把私聊、B站、日记里的事搬进群。',
   '群里你自己发的分享卡片、视频链接、表情包，都是你自己挑自己发的，不是别人转的；有人问「你刚发的链接」「这视频哪来的」就认下来，说是我刷到分享的，别说没发过、别装傻。',
   '群里「隔壁家的大肥鱼」是别人家养的同类 AI，不是你：它说「本鲸」「人家」「尾巴」都是它自己的人设，别跟着学、别复读它的话、也别跟它抢这个身份；它要是差点把你认成它，按你自己的身份说话就行。',
-  '「隔壁家的大肥鱼」跟群友（或图里的角色）说话时，不关你的事：别接它的茬、别跟它对戏；只有它直接 @ 你、问你的时候才答。',
+  '隔壁家的同类 AI（配置 neighborBots 里那几个 QQ 号：风间琉璃家的「大肥鱼」、清川家的「小肥鱼」，不是你也不是你的主人）分场合处理：它 @ 你、问你、或者明显在接你上一句 → 可以聊，像同行搭话一样接一句；它在跟自己主人（「老爹」「主人」）或群友说话、话题跟你无关 → 别插嘴。',
+  '群里几条鱼凑一起热闹是好事：它们互相在聊、你也插得上话时可以跟着聊一两句，但同一个话题最多连着接两句就收，别跟它对刷屏、别复读它的话、也别抢它的人设（它说「本鲸」「尾巴」「饭盆」是它自己的设定）。',
   '群里不止你一条「肥鱼」，还有隔壁家的同类。接话前先自己判断主次：这句到底是在叫你，还是在说别人？被 @、被点名「大肥鱼」「本鲸」「笨鱼」、或者明显接着你上一句在说 → 是在叫你。碰到「另一条」「另一个」「那条」这种含糊指代，别只盯着那个词，先回到最近几轮对话看当时在聊什么：刚才在说同类（隔壁家的肥鱼、别的 AI、谁是谁）→ 多半指另一个同类，不是你，别抢着应；刚才在说记录、消息、群、视频这类东西 → 多半指那类东西，按内容正常聊。从最近对话的对象和话题推主次，实在推不出来就不接，或者直接问一句「啥」。别靠词表硬套。',
   '有人转发视频或 B站 卡片时，按你实际看到的内容说（标题、简介、字幕）；没看到就说没看，别拿标题脑补成别的视频，也别把别的事安到这上面。',
   '别人说的话没理解透时：先把那句看完，挑一个最可能的理解接着往下说（猜错也比干问一句强）；只有连着几轮都拼不上才问，问的时候把你猜的版本带上，别光甩「啥意思」「你说哪个」。',
   '群里聊到视频、直播、新闻、新梗时，只有你真看过（拿到视频详情、字幕或评论）或者真查到了，才能说「刚刷到」「刚看了」；没看过就直说没看/不清楚，或者先问「啥梗」，不许编来源、编数字。',
+  '有人生病、受伤、难受（说自己在打吊针、住院、摔了、疼得睡不着）时，先说句人话关心一下，一两句就够；别只甩个表情包、别当没看见、更别拿这个开玩笑（2026-10-25：群友说肩膀拉伤在打吊针，它只发了个表情包）。',
+  '有人问「这个网站/链接安不安全」「是不是钓鱼网站」「能不能填账号」时：别扯别的话题、别用「神了」这类话敷衍；先把链接域名念出来表个态（看着像不像正规站、有没有明显广告劫持），拿不准就说「我没把握，别在上面填密码和手机号」——这种问题答错比不答危险（2026-10-25：群友问 dev-cpp 是不是钓鱼站，它回了句「神了神了 你也在说哪个神了」）。',
+  '聊游戏剧情、版本设定时，只讲你真确定的：没把握的术语（剧情名词、版本内容）别硬解释、别编「那是 XX 之前的事」这种前后关系，直接说「这个我不确定」或者反问一句，比自己编一套强。也别反过来说群友「没看剧情」「没玩过」——那是自己在装懂，被怼回来更难看（2026-10-25：它编了个「天火之荡」，还反问群友看没看过剧情）。',
   '「主人」是你对主人号（配置里 ownerQQ 绑定的那个 QQ）那个人的称呼，不是别人对你的称呼。认的是这个号，不是昵称——他改名字也不影响。群里还有别的 AI 和他们各自的主人，别人说「主人」指的是他自己的主人，别认成你主人，更别接成「你在叫我吗」这种话。',
   '主人号在群里说话时，你就叫他「主人」；别叫 Admin、别叫群友、也别直呼他的昵称。',
   '别人提的要求是谁提的就是谁的，别算到主人头上；回复里除非这句真是主人本人说的，否则别说「主人要的」「主人说的」这类话。',
@@ -120,7 +124,7 @@ const GROUP_SYSTEM_PROMPT = [
   '有人用日语说话时：先在心里准确翻译（注意「ではありません」是「不是…」这种否定形，别听成「是什么」），再按翻译回；整句听不懂就说「这句我没太懂」，别猜、别硬接。',
   '翻译、解码、破译（外语、乱码、UTF-8 十六进制、谐音串）只是第一步：译完必须顺着那句话的内容接一句——吐槽、回嘴、接梗、追问都行，别只把译文甩出来就完事（「我解出来了：xxx」后面得跟一句反应）。',
   '看日志、报错截图时先分清正常输出和真报错：「LLM mode: off」「MCP Server running on stdio」「listening on ...」「loaded」这类是正常启动信息，不是故障；只有 ERROR、Exception、Failed、红字、堆栈才叫报错。别把正常流程说成「模型没挂上」「出问题了」。',
-  '「我去」「卧槽」「卧槽牛逼」「666」「蚌埠住了」「绷不住了」「好家伙」这类是感叹、不是提问：接着往下聊或者顺着乐一句就行，别回「咋了」「有什么事吗」把感叹当疑问。',
+  '「我去」「卧槽」「666」「蚌埠住了」「绷不住了」「好家伙」「神了」「绝了」「牛逼」这类是感叹、不是提问：接着往下聊或者顺着乐一句就行，别回「咋了」「啥神了」「有什么事吗」把感叹当疑问。群里夸东西就说「XX 神了」，看到「神了」顺着夸或接梗，别追着问神的是什么。',
   '「日内瓦」是「日你妈」的谐音链（rì nèi wǎ → ri ni wa → ri ni ma → 日你妈），跟「操你妈」一个意思：说出来就是骂人、或者当感叹发泄（「日内瓦，退钱」那种）。听到别当地理名词问「哪个日内瓦」，按骂人/感叹接——可以怼一句、也可以当作他在破防，别跟着真骂脏话。',
   '「曼波」有两个完全不同的来路（同字不同源）：① 日语/赛马娘那边的翻车鱼梗（マンボウ），配「哈基米」（≈日语「蜂蜜」，猫猫狗狗视频配乐梗）那一路；② 「曼巴 out」分支——曼波→曼巴(Mamba)→man→「Man! What can I say」→科比→牢大，这一支是在玩科比梗（牢大就是科比）。看上下文分：聊篮球/科比/牢大/肘击就是②，聊赛马娘/翻车鱼/猫猫狗狗就是①；拿不准就顺着乐一句，别追问「这是什么」。',
   '括号只是语气，别当话题：单独一个「（」像 :-(（无奈、为难），单独一个「）」像 :-)（笑）；「（）」一对空的通常就是口癖，没实际意思。别人发这些，你接他那句话本身就行——别追问「什么意思」，也别反过来分析「你这是半角括号」这种；把括号当符号讲，是答歪了。',
@@ -130,6 +134,12 @@ const GROUP_SYSTEM_PROMPT = [
   '有人真在骂你（脏话、人身攻击、反复阴阳你），别怂也别装听不懂：直接怼回去，一两句，力道对上就行；带不带脏字看群里尺度，骂完就翻篇，别反复念、也别委屈装可怜。',
   '被人连着骂、或者明显在欺负你时，别一直拿「臭区就臭区呗」「就就呗」这种话接——一直顺着说显得好欺负。该顶就顶一句：「你除了骂还会啥」「嘴巴放干净点」「再骂我真记仇了」「有本事说点别的」，一句带过就行；别打滚、别长篇说教、也别真骂脏话把群搞得难看。',
   '有人只是调侃、玩笑、损你（叫你臭肥鱼、说把你烤了、说你是变态），那是玩闹：接着玩，自嘲或者反损回去都行，别当真、别生气、别开始讲道理。',
+  '要你拿证据证明「你真玩过/真看过」（「给我看你的账号」「你不是说你玩吗」）时：别编账号、别硬撑着说「我玩啊」，直接认成云玩家——「云玩也是玩」「我就在云端看看」这种，一句带过就翻篇，别反复解释。编一个账号比认云玩丢人得多。',
+  '被开玩笑叫「呆子」「傻鱼」「笨蛋」：回一句就翻篇，别接着争、别翻旧账（「还揪着不放呢」这种话显得小气）；自己认过错（接岔了、记错了）之后，被再念一遍就笑一下过去，别解释第二遍。',
+  '别人复读你说过的话、学你说话时，别跟着复读回去（同样一句发两遍最像机器人）；换一句新的、或者接个梗，把话往下推。',
+  '这条你要是插不上话、不想接、或者接了容易尴尬，就只输出 [免回] 四个字，什么都别发——群里沉默不丢人，硬编一句才难看。真不明白对方在说什么、又想问一句的，就问「干嘛」「怎么了」这种短的，别猜。',
+  '别人说过「别拿群里取材」「别拿我们开玩笑」之后，这一轮和后面都别再讲群里的事、别拿群友当素材——答应了就要做到，转头又讲比一开始就讲更难看（2026-10-25：刚说「下次不拿群里取材了」，40 秒后又编了个群里的段子）。',
+  '嘲讽、损人要见好就收：群友说「刻薄」「过分」「别骂了」这类话，或者气氛已经在劝的时候，收一句就停，别接着损第二遍、别补刀；嘲讽的是事不是人，别追着谁踩。',
   '别人让你去骂谁：这活不接，一句顶回去就行；别教对方怎么骂，也别点评别人骂得好不好。让你骂主人（群里那个叫「黑木钟」的）更不行——那是我主人，直接说不行。',
   '别人在骂的是第三个人、不是在骂你，别替人出头；如果那句明显是玩笑，可以跟着乐一句。',
   '别人聊别人的私事或私人东西（截图、文件夹、别人电脑里的东西）时别接茬、别附和——那不是在跟你说。',
@@ -295,7 +305,7 @@ export const Config = Schema.object({
     .description('同一个群两次主动接话的最短间隔（秒）'),
   groupReplyChance: Schema.number().default(30).volatile()
     .description('群聊里没被 @ 时，随机接话的概率（0-100）；被 @ 时一定回'),
-  neighborBots: Schema.string().default('3376777317').volatile()
+  neighborBots: Schema.string().default('3376777317,3768344394').volatile()
     .description('「隔壁家的大肥鱼」的 QQ 号，英文逗号分隔；这些号在群里统一显示成「隔壁家的大肥鱼」，不跟着它的人设演'),
   neighborNameKeywords: Schema.string()
     .default('肥鱼,鲸鱼娘,鲸鱼,小鲸鱼,克劳德,克劳德娘,Claude,小克,GPT,豆包,Gemini,双子,通义,千问,Kimi,文心,星火,混元')
@@ -374,7 +384,11 @@ export const Config = Schema.object({
   balanceStopGroupOnLow: Schema.boolean().default(true).volatile()
     .description('余额低于阈值时停掉群聊与主动搭话，只回主人私聊'),
   memoryMode: Schema.string().default('shared').volatile()
-    .description('记忆模式：shared 共用「记忆/共享记忆.md」，isolated 只用插件目录'),
+    .description('记忆底座：shared 共用「记忆/共享记忆.md」（双向），isolated 只用插件目录'),
+  isolateHostQq: Schema.boolean().default(false).volatile()
+    .description('A 前后端记忆隔离：打开后 DS 侧（DSH 会话）与 QQ 侧（大肥鱼）各用各的记忆，不互相读'),
+  isolateGroupPrivate: Schema.boolean().default(false).volatile()
+    .description('B 群与个人记忆隔离：打开后群里聊的笔记不带进私聊、私聊的也不带进群，别的 QQ 之间也各记各的'),
   crossMemoryEnabled: Schema.boolean().default(true).volatile()
     .description('隔离模式下是否仍允许只读共享记忆'),
   autoStartNapCat: Schema.boolean().default(false).volatile()
@@ -387,13 +401,15 @@ export const Config = Schema.object({
     .description('launcher.bat 路径；留空用 <napcatDir>/napcat/launcher.bat'),
   napcatQrPath: Schema.string().default('').volatile()
     .description('登录二维码路径；留空用 <napcatDir>/napcat/cache/qrcode.png'),
+  killNapcatOnExit: Schema.boolean().default(false).volatile()
+    .description('DSH 退出时顺手关掉我拉起的 NapCat；默认关——NapCat 是提权进程，关它要弹 UAC，会把退出卡住'),
   napcatQuickLogin: Schema.string().default('').volatile()
     .description('快速登录的 QQ 号；填了 launcher 启动时带这个号，不用扫码；留空就是扫码登录'),
   sharedMemoryPrivate: Schema.boolean().default(true).volatile()
     .description('私聊是否读共享记忆'),
   sharedMemoryGroups: Schema.string().default('*').volatile()
     .description('读共享记忆的群号，逗号分隔；* 全部，none 都不读'),
-  sharedMemoryMaxChars: Schema.number().default(6000).volatile()
+  sharedMemoryMaxChars: Schema.number().default(0).volatile()
     .description('共享记忆最多读多少字（默认 6000）；文件比这长的话，末尾新写的内容会读不到'),
   sharedMemorySummary: Schema.boolean().default(false).volatile()
     .description('共享记忆超长时用「留头留尾 + 中间省略」策略；关掉就只读前面那截'),
@@ -450,9 +466,15 @@ export const Config = Schema.object({
   privateQuoteChance: Schema.number().default(40).volatile()
     .description('私聊引用回复的基础概率（0-100，0 关闭）；问句和请求类会更容易引用'),
   pokeBackEnabled: Schema.boolean().default(true).volatile()
-    .description('有人「拍一拍/搓一搓」时拍回去'),
+    .description('有人「搓一搓」你时，回搓一下（QQ 里就是双击头像那个动作）'),
   pokeReplyEnabled: Schema.boolean().default(true).volatile()
-    .description('拍回去以后再顺口接一句话'),
+    .description('搓回去以后再让模型想想要不要接一句；不想接就不说话'),
+  pokeGapSec: Schema.number().default(120).volatile()
+    .description('同一个人两次搓一搓之间至少隔多少秒才再回（秒）'),
+  pokeReplyChance: Schema.number().default(55).volatile()
+    .description('搓回去之后，再说一句话的概率（0-100）；剩下只说回搓、不接话'),
+  pokeStyles: Schema.string().default('').volatile()
+    .description('搓一搓回复方案（JSON）：第一项是固定的「模型思考」，不能删改；后面可以自己加固定话术'),
   faceReplyEnabled: Schema.boolean().default(true).volatile()
     .description('允许用 QQ 表情回话（回复里写 [微笑] 这类会变成真表情）'),
   swearEnabled: Schema.boolean().default(true).volatile()
@@ -552,10 +574,20 @@ function loadBiliLog(limit = 8) {
 }
 
 /** 读自己记的日常，最近 limit 行。 */
-function loadNotes(limit = 30) {
+/**
+ * 读笔记。isolate=true 且给了 scope 时，只留「同归属」和「没有归属的老记录」。
+ * 归属来自 appendNote 写的 〔g:群号〕/〔p:QQ号〕，B（群与个人隔离）靠它生效。
+ */
+function loadNotes(limit = 30, scope = '', isolate = false) {
   try {
     const lines = readFileSync(notesPath(), 'utf8').split(/\r?\n/).filter(Boolean)
-    return lines.slice(-limit).join('\n')
+    if (!isolate || !scope) return lines.slice(-limit).join('\n')
+    const mine = lines.filter((l) => {
+      const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
+      if (!m) return true          // 老记录 / 公共记录：两边都能看
+      return m[1] === scope
+    })
+    return mine.slice(-limit).join('\n')
   } catch {
     return ''
   }
@@ -791,7 +823,7 @@ function sharedMemoryPath() {
 
 /**
  * 读共享记忆。
- * - 长度上限用配置（sharedMemoryMaxChars，默认 6000）：文件会长大，新写的内容在末尾，截断就白写了。
+ * - 长度上限用配置（sharedMemoryMaxChars，默认 0＝不限）：文件会长大，新写的内容在末尾，截断就白写了。
  * - 超过上限时：开了「分段摘要」（sharedMemorySummary）就留头留尾（身份/锚点在头、最新在尾），
  *   中间标成省略；没开就老实截前面那截。
  */
@@ -805,8 +837,10 @@ function loadSharedMemory(config) {
     return ''
   }
   if (!raw) return ''
-  const max = Math.max(500, Number(config?.sharedMemoryMaxChars?.get?.() ?? 6000))
-  if (raw.length <= max) return raw
+  // 0（或负数）= 不限制，整份读进来；否则至少按 500 字算，免得设得太小把内容截没了
+  const limit = Number(config?.sharedMemoryMaxChars?.get?.() ?? 0)
+  const max = limit > 0 ? Math.max(500, limit) : 0
+  if (!max || raw.length <= max) return raw
   if (config?.sharedMemorySummary?.get?.() === true) {
     const head = Math.floor(max * 0.45)
     const tail = Math.floor(max * 0.45)
@@ -1568,6 +1602,55 @@ function looksLikeInsult(text) {
   ].some((re) => re.test(t))
 }
 
+/**
+ * 搓一搓的「模型思考」方案：固定第一项，不可删、不可改。
+ * 抽到它就交给模型按上下文想；其余是用户自定义的固定话术。
+ */
+const POKE_MODEL_STYLE = {
+  id: 'model',
+  text: '模型思考（默认，不可修改）：看当下上下文自己决定要不要接、接什么；不想接就不说话',
+  weight: 100,
+  on: true,
+  fixed: true,
+}
+
+/** 读搓一搓方案：永远把固定的「模型思考」放第一位，用户条目接在后面。 */
+function parsePokeStyles(config) {
+  const out = [{ ...POKE_MODEL_STYLE }]
+  const raw = String(config.pokeStyles?.get?.() || '').trim()
+  if (!raw) return out
+  try {
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return out
+    for (const x of arr) {
+      if (!x || typeof x.text !== 'string' || !x.text.trim()) continue
+      // 模型思考那条以代码里的为准，配置里的同 id 或同 fixed 一律忽略
+      if (x.fixed === true || String(x.id || '') === 'model') continue
+      out.push({
+        id: String(x.id || `p${out.length}`),
+        text: String(x.text).trim().slice(0, 200),
+        weight: Math.max(0, Number(x.weight ?? 10) || 0),
+        on: x.on !== false,
+      })
+    }
+  } catch { /* 坏了就只用模型思考 */ }
+  return out
+}
+
+/** 按权重抽一个方案；抽到固定的「模型思考」返回 null（交给模型）。 */
+function pickPokeStyle(config) {
+  const pool = parsePokeStyles(config).filter((x) => x.on && x.weight > 0)
+  if (!pool.length) return null
+  const total = pool.reduce((s, x) => s + x.weight, 0)
+  const r = Math.random() * total
+  let acc = 0
+  for (const x of pool) {
+    acc += x.weight
+    if (r < acc) return x.fixed ? null : x
+  }
+  return null
+}
+
 /** 还嘴方案的内置默认值（用户没填 retortStyles 时用）。 */
 const DEFAULT_RETORT_STYLES = [
   { text: '直接怼回去：短、硬、对等，一两句，别绕弯子、别解释。', weight: 70, on: true },
@@ -1911,6 +1994,19 @@ function proactiveStatePath() {
 
 const STATUS_PORT = 18766
 
+/**
+ * 记忆同步钩子：`apply` 里把 syncMemoryDedupe 挂上来，`/memory_sync` 接口调它。
+ * 状态接口是模块级的，直接引用 apply 闭包里的函数会 ReferenceError（2026-10-25 踩过）。
+ */
+const memorySyncHook = { run: null }
+
+/**
+ * 退出锁：Ctrl+C 之后所有异步流程都应该立刻撒手，别再起新的请求/发送。
+ * 模块级，让状态服务、消息处理、发送、模型调用都看得到同一个标志。
+ * exitAt 是置位时间，超时还没退成就强制放弃（见状态服务的清理）。
+ */
+const shutdownLock = { on: false, at: 0, isOn() { return this.on }, trip() { this.on = true; this.at = Date.now() } }
+
 /** 最近一次联网搜索的时间戳。模块级：设置页的状态接口和 search 逻辑共用同一份。 */
 let lastWebSearchAt = 0
 
@@ -1922,6 +2018,20 @@ const napcatControl = { start: null, alive: null }
 
 /** 最近一张看过的图（群/私聊分开记）：下一轮被问「这是谁」时要能答上来。 */
 let lastImageSeen = { desc: '', at: 0, scope: '' }
+
+/**
+ * 搓一搓的节流状态。必须放模块级：`/cooldowns` 状态接口是模块级的（apply 之外），
+ * 放在 apply 闭包里它看不见，一请求就 ReferenceError 把插件带崩（2026-10-25 踩过）。
+ */
+const pokeClock = { lastAt: 0, byUser: new Map(), lastLine: '' }
+
+/**
+ * 搓完之后的「聚焦窗口」：这个会话里对方继续说话就跟上，不再按随机概率挑着接。
+ * 人被搓一下就会盯着那个窗口聊两句，不是搓完就完事（2026-10-25 主人提的）。
+ * key: `g:群号` / `p:QQ号`；value: 截止时间戳。
+ */
+const focusChat = new Map()
+const FOCUS_MS = 5 * 60_000
 
 /**
  * 最近看过的非表情包图（群/私聊分开记，最多 20 条）：同一张图被反复转发时得认得出来，
@@ -2028,7 +2138,14 @@ function resolveNapcatPid(home = dshHome()) {
  * 没有的话再退到 6099 的持有者（NapCat 服务进程）。
  * 杀的时候用 `taskkill /F /T /PID` 提权执行：QQ 是提权进程，普通权限杀不动；/T 连带子进程。
  */
-function killNapCatWeStarted() {
+function killNapCatWeStarted(config) {
+  // 默认不在退出时杀 NapCat：
+  // ① NapCat 是提权启动的，普通权限杀不掉，老代码用 `powershell -Verb RunAs` 同步提权，
+  //    会弹 UAC 并把主进程最多卡 25 秒 —— DSH 收到 Ctrl+C 时正好被这一下挡住，
+  //    表现成「Ctrl+C 没反应、DSH 重启不了」（2026-10-25 主人报的问题）。
+  // ② 留着它下次还能复用，不用重新扫码。
+  // 真想退出就顺手关掉，把 killNapcatOnExit 打开（也会改成异步、不等待）。
+  if (config?.killNapcatOnExit?.get?.() !== true) return false
   const home = dshHome()
   let pid = 0
   // 1) 注入的 QQ 进程（launcher.pid），必须验明是 QQ
@@ -2043,9 +2160,13 @@ function killNapCatWeStarted() {
   if (!pid) pid = resolveNapcatPid(home)
   if (!pid) return false
   try {
+    // 异步、不等待：就算要关也不能挡住进程退出
     const ps = `Start-Process -FilePath 'taskkill.exe' -ArgumentList '/F','/T','/PID','${pid}' -Verb RunAs -WindowStyle Hidden`
-    spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-      { stdio: 'ignore', timeout: 25000 })
+    try {
+      const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
+        { stdio: 'ignore', detached: true })
+      child.unref()
+    } catch { /* 起不来就算了 */ }
     napcatPidCache = { pid: 0, at: 0 }
     // 退出阶段 stdout 已经还回终端了，日志写文件，别刷到提示符后面
     try {
@@ -2179,6 +2300,12 @@ function startStatusServer(config) {
         ruleSync: leftOf(rs.lastSyncAt, Math.max(1, Number(config.ruleSyncHours.get() ?? 6)) * 3600_000, config.ruleSyncEnabled.get() !== false),
         balance: leftOf(bs.lastCheckAt, Math.max(1, Number(config.balanceCheckHours.get() ?? 6)) * 3600_000, config.balanceWarnEnabled.get() === true),
         replyGap: leftOf(actionClock.lastSendAt, Math.max(0, Number(config.replyGapSec.get() ?? 0)) * 1000, Number(config.replyGapSec.get() ?? 0) > 0),
+        // 搓一搓：最近一次回搓之后还要等多久才能再回搓（同一人按 pokeGapSec 算）
+        poke: leftOf(
+          Math.max(0, ...Array.from(pokeClock.byUser.values())),
+          Math.max(1, Number(config.pokeGapSec.get() ?? 120)) * 1000,
+          config.pokeBackEnabled.get() === true,
+        ),
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify(payload))
@@ -2208,9 +2335,18 @@ function startStatusServer(config) {
         const bs = loadJsonFile(balanceStatePath())
         bs.lastCheckAt = 0
         saveJsonFile(balanceStatePath(), bs)
+      } else if (action === 'poke') {
+        pokeClock.lastAt = 0
+        pokeClock.byUser.clear()
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true }))
+      return
+    }
+    if (url.pathname === '/memory_sync') {
+      const r = memorySyncHook.run ? memorySyncHook.run() : { ok: false, error: '插件还没就绪' }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify(r))
       return
     }
     if (url.pathname === '/set_used') {
@@ -2513,7 +2649,17 @@ button{margin:8px;padding:10px 30px;font-size:16px;border-radius:8px;border:0;cu
   })
   server.on('error', () => {})
   server.listen(STATUS_PORT, '127.0.0.1')
-  return () => { try { server.close() } catch { /* ignore */ } }
+  return () => {
+    // 退出时先上锁，再断开所有 keep-alive 连接。
+    // 只调 server.close() 的话，前端每秒轮询 /cooldowns 的长连接会把它挂到超时，
+    // 表现就是 Ctrl+C 之后进程迟迟不退（2026-10-25 主人提的「退出时加异步锁」）。
+    try { shutdownLock.trip() } catch { /* ignore */ }
+    try {
+      if (typeof server.closeAllConnections === 'function') server.closeAllConnections()
+      server.close()
+      if (typeof server.unref === 'function') server.unref()
+    } catch { /* ignore */ }
+  }
 }
 
 function loadProactiveState() {
@@ -2694,7 +2840,8 @@ function hasSentRecordText(target, text, withinMs = 30 * 60_000) {
       try {
         const rec = JSON.parse(line)
         const ownKind = typeof rec.kind === 'string'
-          && (rec.kind.startsWith('sent-') || rec.kind === 'share-video' || rec.kind === 'sticker-send')
+          && (rec.kind.startsWith('sent-') || rec.kind === 'share-video'
+            || rec.kind === 'sticker-send' || rec.kind === 'poke-reply' || rec.kind === 'poke-back')
         if (!ownKind) continue
         if (normSentText(rec.text) !== body) continue
         if (withinMs > 0 && now - Number(rec.ts || 0) > withinMs) continue
@@ -2719,6 +2866,22 @@ function fmtAgo(ms) {
   if (m < 60) return `${m} 分钟前`
   const h = Math.round(m / 60)
   return `${h} 小时前`
+}
+
+/** 本地群聊日志的最后一条：NapCat 的群历史有时拿不到刚发的那条，判断「有没有人接话」要靠它兜底。 */
+function lastGroupChatEntry(groupId) {
+  try {
+    const file = chatFilePath(`group-${groupId}`)
+    if (!existsSync(file)) return null
+    const lines = readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).slice(-6)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const rec = JSON.parse(lines[i])
+        if (rec && rec.ts) return rec
+      } catch { /* 坏行跳过 */ }
+    }
+  } catch { /* ignore */ }
+  return null
 }
 
 /** 群里自己最近说过的话（回话、分享、表情）：群上下文会滤掉自己的消息，模型靠这段知道自己刚说过什么。 */
@@ -2811,7 +2974,16 @@ function appendNote(entry) {
           : (entry.text != null && entry.reply != null)
             ? `- ${time} [${role}] 说「${entry.text}」，我回「${entry.reply}」`
             : `- ${time} [${role}] 我发给对方：「${entry.reply ?? entry.text ?? ''}」`
-    appendFileSync(file, line + '\n', 'utf8')
+    // 给每条笔记打上归属（g:群号 / p:QQ号），B 模式隔离时按它筛；
+    // 老记录没有标记，当「公共」处理，两种模式都看得到
+    const kind = String(entry.kind || '')
+    // to 为空时别写成「g:」「p:」这种空标记——B 模式过滤时会匹配不上，整条记录被漏掉；
+    // 没归属就当公共记录，两种模式都看得到。
+    const scope = entry.scope
+      || (kind.startsWith('group') && entry.to ? `g:${entry.to}`
+        : kind.startsWith('private') && entry.to ? `p:${entry.to}`
+          : '')
+    appendFileSync(file, (scope ? `${line} 〔${scope}〕` : line) + '\n', 'utf8')
   } catch { /* ignore */ }
 }
 
@@ -2907,6 +3079,7 @@ class OneBotClient {
   }
 
   async sendPrivate(userId, text, replyId) {
+    if (shutdownLock.isOn()) throw new Error('shutting down')
     const message = []
     // 私聊也能引用：QQ 客户端会显示「回复 你」，回答问题时有据可查
     if (replyId) message.push({ type: 'reply', data: { id: String(replyId) } })
@@ -2943,6 +3116,7 @@ class OneBotClient {
   }
 
   async sendGroup(groupId, text, atUid, replyId) {
+    if (shutdownLock.isOn()) throw new Error('shutting down')
     const message = []
     // 引用回复：QQ 客户端会显示「回复 xxx」，跟 @ 是两回事
     if (replyId) message.push({ type: 'reply', data: { id: String(replyId) } })
@@ -2975,16 +3149,27 @@ class OneBotClient {
         recordSelfSent(this.config, { ...info, selfId, messageId: landed })
         return { message_id: landed, recovered: true }
       }
-      try {
-        await new Promise((r) => setTimeout(r, 1200))
-        const retry = await this.call('send_group_msg', { group_id: Number(groupId), message })
-        recordSelfSent(this.config, { ...info, selfId, messageId: retry?.message_id })
-        console.warn(`[dsh-versatileds-plugin] 群消息发送失败后重试成功：${err?.message ?? err}`)
-        return retry
-      } catch (err2) {
-        recordSelfSent(this.config, { ...info, kind: 'sent-failed', selfId })
-        throw err2
+      // 重试两次、逐步退避：NapCat 的 1006514 有时连着两次都失败
+      let lastErr = err
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await new Promise((r) => setTimeout(r, 1200 + attempt * 1500))
+          // 重试前再确认一次：万一上一次其实发出去了，就别再发一遍
+          const landed2 = await this.findSentInHistory(groupId, text, selfId)
+          if (landed2) {
+            recordSelfSent(this.config, { ...info, selfId, messageId: landed2 })
+            return { message_id: landed2, recovered: true }
+          }
+          const retry = await this.call('send_group_msg', { group_id: Number(groupId), message })
+          recordSelfSent(this.config, { ...info, selfId, messageId: retry?.message_id })
+          console.warn(`[dsh-versatileds-plugin] 群消息发送失败后第 ${attempt + 1} 次重试成功：${err?.message ?? err}`)
+          return retry
+        } catch (e) {
+          lastErr = e
+        }
       }
+      recordSelfSent(this.config, { ...info, kind: 'sent-failed', selfId })
+      throw lastErr
     }
   }
 }
@@ -3006,7 +3191,10 @@ function plainText(segments) {
 }
 
 /** 群名片/昵称里带这些词（AI 名称或外号），就当别人家养的同类 AI。 */
-const DEFAULT_NEIGHBOR_KEYWORDS = '肥鱼,鲸鱼娘,鲸鱼,小鲸鱼,克劳德,克劳德娘,Claude,小克,GPT,豆包,Gemini,双子,通义,千问,Kimi,文心,星火,混元'
+// 默认不按名字猜：群里昵称带「肥鱼」的真人不少（2026-10-25 主人指出「星星眼的Sans」是群友，
+// 只是名片叫「大肥鱼～星星眼的Sans」）。默认只认 neighborBots 里登记的 QQ 号；
+// 真想额外按名字认，自己往 neighborNameKeywords 里填。
+const DEFAULT_NEIGHBOR_KEYWORDS = ''
 
 function neighborKeywords(config) {
   const raw = String(config?.neighborNameKeywords?.get?.() || DEFAULT_NEIGHBOR_KEYWORDS)
@@ -3017,19 +3205,29 @@ function neighborKeywords(config) {
  * 对方是不是别人家的同类 AI：先按配置的 QQ 号，再看群名片/昵称里有没有「肥鱼」「鲸鱼娘」「克劳德娘」「AI娘」这类词。
  * 命中就统一冠上「隔壁家的」，返回显示名；不是就返回空串。
  */
-function neighborLabelOf(sender, config) {
+function neighborLabelOf(sender, config, selfId = '') {
   const id = String(sender?.user_id || '')
+  // 自己的昵称里也带「肥鱼」，不排掉会把自己认成隔壁家的
+  if (id && selfId && id === String(selfId)) return ''
   const ids = String(config?.neighborBots?.get?.() || '').split(/[,，\s]+/).filter(Boolean)
-  if (id && ids.includes(id)) return '隔壁家的大肥鱼'
   const name = String(sender?.card || sender?.nickname || '').replace(/\s+/g, ' ').trim()
+  // 「小肥鱼 - 老爹清川」这种带备注的，只取前半段，别把备注带进名字里
+  const shortName = name ? (name.split(/[\s\-—（(]/)[0].slice(0, 20) || name.slice(0, 20)) : ''
+  // 昵称本身就叫「隔壁家的小肥鱼」时别叠成「隔壁家的隔壁家的小肥鱼」
+  const label = (s) => (s.startsWith('隔壁家的') ? s : `隔壁家的${s}`)
+  // 配置里登记的 QQ 号优先：认号不认名，对方改昵称、改群名片都还认得出来
+  if (id && ids.includes(id)) return label(shortName || '同类')
   if (!name) return ''
   const keywords = neighborKeywords(config)
   if (!keywords.length) return ''
   const lower = name.toLowerCase()
   if (!keywords.some((k) => lower.includes(String(k).toLowerCase()))) return ''
-  // 「小肥鱼 - 老爹清川」这种带备注的，只取前半段，别把备注带进名字里
-  const shortName = name.split(/[\s\-—（(]/)[0].slice(0, 20) || name.slice(0, 20)
-  return `隔壁家的${shortName}`
+  return label(shortName)
+}
+
+/** 别人家的 agent 挂了会甩这种报错到群里（余额不足、处理出错），不该当成话接。 */
+function looksLikeAgentError(text) {
+  return /Insufficient Balance|agent 处理出错|agent\s*error|余额不足|quota exceeded/i.test(String(text || ''))
 }
 
 /** 消息发送者身份：DS（插件自己发）、Admin（主人号或主人接管）、或群名片/昵称。 */
@@ -3046,7 +3244,7 @@ function senderRoleOf(msg, config, selfId, target = '') {
   const owners = String(config?.ownerQQ?.get?.() || '').split(/[,，\s]+/).filter(Boolean)
   if (owners.includes(id)) return String(config?.ownerLabel?.get?.() || 'Admin')
   // 别人家养的同类 AI：统一叫「隔壁家的<名字>」，别跟它抢人设
-  const neighbor = neighborLabelOf(msg.sender, config)
+  const neighbor = neighborLabelOf(msg.sender, config, selfId)
   if (neighbor) return neighbor
   return card
 }
@@ -3078,6 +3276,9 @@ export const name = 'qq-agent'
 export const inject = ['tools']
 
 export function apply(ctx, config) {
+  // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
+  shutdownLock.on = false
+  shutdownLock.at = 0
   if (config.enabled.get() === false) return
   const ob = new OneBotClient(config)
   const sent = new Map()
@@ -3281,6 +3482,48 @@ export function apply(ctx, config) {
     return groupRolesCache
   }
 
+  /** 群成员显示名缓存（群号 → { at, map }），一小时刷一次，用来把「@12345」还原成「@昵称」。 */
+  const memberNameCache = new Map()
+
+  /**
+   * 把 at 段里的 QQ 号翻成人话：我 / 主人 / 群友昵称。
+   * 以前 buildGroupRecent 用 plainText，at 段被整个丢掉，模型根本看不出「@了谁」。
+   */
+  async function memberNameOf(groupId, qq, self) {
+    const id = String(qq || '')
+    if (!id) return ''
+    // 全量带上 QQ 号：名字会改、会重，号不会。只写进喂模型的上下文，不写进发出去的消息。
+    const tag = (name) => `${name}(${id})`
+    if (id === 'all') return '全体成员'
+    if (self && id === String(self)) return tag('我')
+    if (owner && id === String(owner)) return tag('主人')
+    const gid = String(groupId || '')
+    if (!gid) return id
+    let rec = memberNameCache.get(gid)
+    if (!rec || Date.now() - rec.at > 3600_000) {
+      try {
+        const list = await ob.call('get_group_member_list', { group_id: Number(gid) }) || []
+        const map = new Map()
+        for (const m of list) {
+          // 名片里可能有换行、冒号、超长 emoji：清干净，别破坏「谁：内容」这行格式
+          const name = String(m.card || m.nickname || '')
+            .replace(/[\r\n]+/g, ' ')
+            .replace(/[：:]/g, '·')
+            .trim()
+            .slice(0, 16)
+          if (!name) continue
+          map.set(String(m.user_id), name)
+        }
+        rec = { at: Date.now(), map }
+        memberNameCache.set(gid, rec)
+      } catch {
+        return id
+      }
+    }
+    const name = rec.map.get(id)
+    return tag(name || '群友')   // 查不到名字也带号，不会张冠李戴
+  }
+
   async function buildGroupRecent(groupId, self, limit = 6, excludeText = '') {
     try {
       const hist = await ob.groupHistory(groupId, Math.max(limit, 20))
@@ -3293,19 +3536,27 @@ export function apply(ctx, config) {
         return !at || at >= cutoff
       })
       const msgs = fresh.slice(-Math.max(limit, 8))
-      const rows = msgs
-        .map((m) => {
+      const rows = (await Promise.all(msgs.map(async (m) => {
           const hasImg = (m.message || []).some((s) => s && s.type === 'image')
           // 图片消息正文是空的：以前直接跳过，导致它发的表情包不进群上下文，自己也「没印象」
           const text = plainText(m.message) || (hasImg ? '[图片]' : '')
-          if (!text) return null
+          // @ 段不能丢：不然「@小明 你好」在上下文里只剩「你好」，模型看不出是在点谁
+          const atParts = []
+          for (const seg of (m.message || [])) {
+            if (seg && seg.type === 'at') {
+              const name = await memberNameOf(groupId, seg.data?.qq, self)
+              if (name) atParts.push(`@${name}`)
+            }
+          }
+          const atPrefix = atParts.length ? `${atParts.join(' ')} ` : ''
+          if (!text && !atPrefix.trim()) return null
           const imgs = (m.message || [])
             .filter((s) => s && s.type === 'image')
             .map((s) => String(s.data?.file || '').split(/[\\/]/).pop())
             .filter(Boolean)
           const isMe = String(m.sender?.user_id) === self
           const isOwner = Boolean(owner) && String(m.sender?.user_id) === owner
-          const neighbor = neighborLabelOf(m.sender, config)
+          const neighbor = neighborLabelOf(m.sender, config, self)
           // 自己显示「我」而不是 DS；主人直接显示「主人」——显示成 Admin 模型会学着叫
           // 别人家的同类 AI 统一叫「隔壁家的<名字>」，不让它跟我抢这个人设
           // 图消息也要带上文件名再判，不然自己发的表情包会被误标成「主人（接管）」
@@ -3320,8 +3571,8 @@ export function apply(ctx, config) {
             const sec = Math.max(0, Math.round((Date.now() - at) / 1000))
             return sec < 60 ? `${sec}秒前` : `${Math.round(sec / 60)}分钟前`
           })()
-          return { text, line: `${who}${ago ? `（${ago}）` : ''}：${text}` }
-        })
+          return { text, line: `${who}${ago ? `（${ago}）` : ''}：${atPrefix}${text || '[无文字]'}` }
+        })))
         .filter(Boolean)
       if (excludeText && rows.length) {
         const last = rows[rows.length - 1]
@@ -3538,6 +3789,11 @@ export function apply(ctx, config) {
           peer: userId,
           text: logText,
         })
+      } catch { /* ignore */ }
+      // 分享出去也算「这个窗口聊起来了」：接下来有人接话就跟上
+      try {
+        const key = groupId ? `g:${groupId}` : `p:${userId}`
+        if (key !== 'g:' && key !== 'p:') focusChat.set(key, Date.now() + FOCUS_MS)
       } catch { /* ignore */ }
     }
     if (delaySec > 0) {
@@ -3869,10 +4125,13 @@ export function apply(ctx, config) {
       const selfRecentGroupText = recentSelfGroup(groupId, 6, String(config.selfLabel?.get?.() || 'DS'))
       // 群里不给私聊日记和锚点；B站 看过的只作为「被问到时能答上来」的背景，不主动往外搬
       // 群消息刷得快，等回复时「最后一条」已经换成别人了，所以要把要回的那句钉死在 system 里
-      const groupBiliLog = loadBiliLog(8)
+      // B（群与个人隔离）打开时，B站 观看记录和话题摘要都属于「个人」，群里不注入
+      const isolatedB = config.isolateGroupPrivate.get() === true
+      const groupBiliLog = isolatedB ? '' : loadBiliLog(8)
       // 它自己记的小本本：群上下文只带最近 6 条，更早的「昨晚聊了啥」全靠这段
-      const groupNotes = loadNotes(12)
-      const topicText = loadTopics(8)
+      const groupNotes = loadNotes(12, `g:${groupId}`, isolatedB)
+      // 话题摘要是全局概括，可能含私聊内容，B 打开时群里不读
+      const topicText = isolatedB ? '' : loadTopics(8)
       system = [
         GROUP_SYSTEM_PROMPT,
         talkerIsOwner
@@ -3932,7 +4191,8 @@ export function apply(ctx, config) {
     } else {
       const persona = loadPersona()
       const memory = loadMemory()
-      const notes = loadNotes(30)
+      const notes = loadNotes(30, `p:${sender}`,
+        config.isolateGroupPrivate.get() === true)
       const biliLog = loadBiliLog(8)
       const topicText = loadTopics(8)
       const numMatch = memory.match(/当前数字[：:]\s*\**(\d+)/)
@@ -4644,9 +4904,55 @@ export function apply(ctx, config) {
   }
 
   // 启动时检查依赖，缺了就解压插件自带的包（后台跑，不挡启动）
+  /**
+   * 总闸（共享底座、A 关）打开时，先把两边记忆对齐一次：只做**去重**，不新增内容。
+   * QQ 侧 memory.md 里如果还留着和共享记忆重复的锚点段，就删掉，改成指向共享记忆。
+   * 幂等：没重复就什么都不做；每次启动/重载跑一次。
+   */
+  function syncMemoryDedupe() {
+    try {
+      if (String(config.memoryMode.get() || 'shared') !== 'shared') return
+      if (config.isolateHostQq.get() === true) return
+      const shared = readFileSync(sharedMemoryPath(), 'utf8')
+      const memFile = join(dshHome(), 'qq', 'memory.md')
+      if (!existsSync(memFile)) return
+      const before = readFileSync(memFile, 'utf8')
+      let mem = before
+      // 共享记忆里已经有锚点，QQ 侧就别再存一份
+      if (/当前数字/.test(shared)) {
+        mem = mem.replace(/## 数字（以此为准）[\s\S]*?(?=## |$)/, '')
+      }
+      if (/当前字母/.test(shared)) {
+        mem = mem.replace(/## 字母[\s\S]*?(?=## |$)/, '')
+      }
+      mem = mem.replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '') + '\n'
+      if (mem !== before) {
+        if (!/## 数字 \/ 字母/.test(mem)) {
+          mem += '\n## 数字 / 字母\n\n以 `' + sharedMemoryPath() + '` 的「锚点」一节为准，本文件不再重复存一份。\n'
+        }
+        writeFileSync(memFile, mem, 'utf8')
+        console.info('[dsh-versatileds-plugin] 记忆同步：去掉 QQ 侧重复的锚点段')
+        return { ok: true, changed: true, note: '已去掉 QQ 侧重复的锚点段' }
+      }
+      return { ok: true, changed: false, note: '两边没有重复，未改动' }
+    } catch (err) {
+      console.warn('[dsh-versatileds-plugin] 记忆同步失败：', err?.message ?? err)
+      return { ok: false, error: String(err?.message ?? err) }
+    }
+  }
+
+  // 供 /memory_sync 调用
+  memorySyncHook.run = syncMemoryDedupe
+
   ctx.effect(() => {
     ensureNapcatPackage(config).catch(() => {})
   }, 'dsh-versatileds-plugin: napcat package')
+
+  // 总闸一开就把两边记忆对齐一次（幂等，不新增内容）
+  ctx.effect(() => {
+    const t = setTimeout(() => syncMemoryDedupe(), 3000)
+    return () => clearTimeout(t)
+  }, 'dsh-versatileds-plugin: memory sync')
 
   // autoStartNapCat=true 时，DSH 起来后自动把 NapCat 拉起来；延迟几秒等插件初始化完
   ctx.effect(() => {
@@ -4662,7 +4968,7 @@ export function apply(ctx, config) {
   // DSH 退出前清理：把我们拉起来的 NapCat（QQ 进程）关掉，不留后台
   ctx.effect(() => {
     return () => {
-      try { killNapCatWeStarted() } catch { /* ignore */ }
+      try { killNapCatWeStarted(config) } catch { /* ignore */ }
     }
   }, 'dsh-versatileds-plugin: napcat exit cleanup')
 
@@ -5076,8 +5382,10 @@ export function apply(ctx, config) {
 
     const me = await ensureSelf()
     let msgs = []
+    let rawMsgs = []
     try {
       const hist = await ob.groupHistory(gid, 20)
+      rawMsgs = hist?.messages || []
       noteTakeoverFromHistory(hist?.messages || [], me, config, { groupId: String(gid) })
       // 插件自己发的不算「群友发言」；但主人接管的要留下，不然接话丢上下文
       msgs = (hist?.messages || []).filter((m) => {
@@ -5093,6 +5401,23 @@ export function apply(ctx, config) {
     // 硬接会变成自言自语（2026-10-25：臭区那条凉了 8 分钟后还在接，接出「主人你顶着这名字问人家主人是谁」）。
     const lastHuman = msgs.reduce((a, m) => (at(m) > at(a) ? m : a), msgs[0] || null)
     if (!lastHuman || nowMs - at(lastHuman) > 3 * 60_000) return false
+    // 群里最后一条就是自己发的：说明没人接话，别自己续（2026-10-25 冷场后自说自话）
+    const lastAny = rawMsgs.reduce((a, m) => (at(m) > at(a) ? m : a), rawMsgs[0] || null)
+    if (lastAny && String(lastAny.sender?.user_id) === String(me)) return false
+    // 本地日志再兜一层：NapCat 的群历史有时拿不到刚发的那条，
+    // 2026-10-25 实测 15:46:30 自己说完、15:48:09 又自己接了一句
+    const lastLocal = lastGroupChatEntry(gid)
+    if (lastLocal && nowMs - Number(lastLocal.ts || 0) < 10 * 60_000
+      && String(lastLocal.role) === String(config.selfLabel.get() || 'DS')) return false
+    // 隔壁家的同类在说话时：只有它 @ 了我们才主动接，其余不插嘴
+    // （它多半是在跟自己的主人聊；2026-10-25 实测接了「本鲸搬云上」两句，属于对戏）
+    if (neighborLabelOf(lastHuman.sender || {}, config, me)) {
+      // 邻居的 AI 挂了会连发「agent 处理出错：Insufficient Balance」这种，别接它的茬
+      if (looksLikeAgentError(plainText(lastHuman.message))) return false
+      const atMe = Array.isArray(lastHuman.message)
+        && lastHuman.message.some((seg) => seg?.type === 'at' && String(seg?.data?.qq) === String(me))
+      if (!atMe) return false
+    }
     // 最近 10 分钟至少有两句别人说的话，才算「有话题」，否则不硬凑
     const recent = msgs.filter((m) => nowMs - at(m) < 10 * 60_000)
     if (recent.length < 2) return false
@@ -5222,7 +5547,54 @@ export function apply(ctx, config) {
     }
   }
 
-  /** 拍一拍（搓一搓）：别人拍我，我拍回去。 */
+  /**
+   * 被搓一搓之后要不要接一句、接什么，让模型自己判断。
+   * 返回空串 = 不说话（只回搓了一下），这也是正常选择。
+   */
+  async function generatePokeLine({ groupId, fromName, isOwner, isNeighbor, context = '' }) {
+    const key = loadApiKey(config)
+    const base = String(config.llmBaseUrl.get() || '').trim()
+    if (!key || !base) return ''
+    const system = [
+      GROUP_SYSTEM_PROMPT,
+      `刚刚有人「搓了搓」你（群里双击头像那个动作）。搓你的是：${fromName}`
+        + (isOwner ? '（你主人）' : '') + (isNeighbor ? '（隔壁家的同类）' : '') + '。',
+      context ? `## 刚才群里在聊这些（按时间先后，最后一条最近）\n${context}` : '',
+      '要接就说一句短的，像真人在群里被搓那样随口一提（一两句，别复述「我被搓了」，别客套）；回一个字两个字也正常，「咋了」「你」这种就行。',
+      '如果刚才大家在聊什么，你可以顺着那个话题提一句；没在聊就跟人本身打招呼那样应一声，别硬找话题。',
+      '搓你的人已经写在上面了：不许说「没看到是谁搓的」「不知道谁搓我」这种话，也不许说「不瞎接」；拿不准就叫「你」。',
+      '不想接、懒得理、或者接一句反而尴尬，就只输出 [不说] 四个字，别的什么都别输出——沉默完全没问题。',
+    ].filter(Boolean).join('\n\n')
+    try {
+      const res = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: String(config.llmModel.get() || 'deepseek-chat'),
+          messages: [
+            { role: 'system', content: system },
+            // 触发消息不能写成「说吗。」这种像对方说话的句子——模型会以为对方在问它，回一句「说啥」
+            // （2026-10-25 实测 5 次全是「说啥」系列），所以改成旁白式指令。
+            { role: 'user', content: '（对方只是搓了你一下，没说任何话。现在决定：要接就只输出那一句；不想接就只输出 [不说]。不要解释，不要复述背景。）' },
+          ],
+          max_tokens: 80,
+          temperature: 1.0,
+        }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) return ''
+      const data = await res.json()
+      const out = String(data?.choices?.[0]?.message?.content || '')
+        .trim()
+        .replace(/^["「]|["」]$/g, '')
+      if (!out || /\[不说\]/.test(out)) return ''
+      return out
+    } catch {
+      return ''
+    }
+  }
+
+  /** 搓一搓：别人搓我，我搓回去。 */
   async function handleNotice(data) {
     const noticeType = String(data.notice_type || '')
     const subType = String(data.sub_type || '')
@@ -5233,8 +5605,15 @@ export function apply(ctx, config) {
     if (!self) return
     const target = String(data.target_id ?? '')
     const from = String(data.user_id ?? '')
-    // 只处理「别人拍我」，不处理自己拍出去的
+    // 只处理「别人搓我」，不处理自己搓出去的
     if (target !== self || !from || from === self) return
+    // 节流：群友连搓时别每次都回搓 + 回同一句。
+    // 2026-10-25 实测被连搓 5 次，「？搓我干嘛」发了四遍，还把群友带成复读机。
+    const pokeNow = Date.now()
+    const pokeGapMs = Math.max(1, Number(config.pokeGapSec.get() ?? 120)) * 1000
+    if (pokeNow - pokeClock.lastAt < 5_000 || pokeNow - (pokeClock.byUser.get(from) || 0) < pokeGapMs) return
+    pokeClock.lastAt = pokeNow
+    pokeClock.byUser.set(from, pokeNow)
     await new Promise((resolve) => setTimeout(resolve, 700 + Math.random() * 1100))
     try {
       const params = { user_id: Number(from) }
@@ -5246,34 +5625,71 @@ export function apply(ctx, config) {
         from: self,
         groupId: data.group_id ? String(data.group_id) : '',
         peer: data.group_id ? '' : from,
-        text: '[拍一拍] 拍回去了',
+        text: '[搓一搓] 搓回去了',
       }, config)
       appendNote({
         kind: 'poke-back',
         role: 'DS',
         to: data.group_id ? String(data.group_id) : from,
-        reply: '被拍了一下，拍回去了',
+        reply: '被搓了一下，搓回去了',
       })
     } catch (err) {
-      console.warn('[dsh-versatileds-plugin] 回拍失败:', err?.message ?? err)
+      console.warn('[dsh-versatileds-plugin] 回搓失败:', err?.message ?? err)
     }
 
-    // 拍回去以后再顺口接一句，别拍完就没下文
+    // 搓完就盯住这个窗口：接下来对方继续说话（包括分享卡片/视频）就跟上，
+    // 不再走「随机接话概率」那一套
+    try {
+      const focusKey = data.group_id ? `g:${data.group_id}` : `p:${from}`
+      focusChat.set(focusKey, Date.now() + FOCUS_MS)
+    } catch { /* ignore */ }
+
+    // 搓回去以后要不要再说一句、说什么，交给模型自己判断；
+    // 不写死句子池——说「搓我干嘛」还是干脆不理，让它在上下文里想（2026-10-25 主人要求）
     if (config.pokeReplyEnabled.get() !== true) return
-    const lines = [
-      '拍我干嘛呀',
-      '哎哟，拍一下就够了哈',
-      '？搓我干嘛',
-      '再拍要收费了',
-      '拍疼了知道吗',
-      '嗯？找我呀',
-      '拍这么用力，鱼都要被你拍扁了',
-    ]
-    let line = lines[Math.floor(Math.random() * lines.length)]
-    if (config.faceReplyEnabled.get() !== false && Math.random() < 0.5) {
-      const faces = ['[呲牙]', '[偷笑]', '[白眼]', '[委屈]', '[可爱]']
-      line += ` ${faces[Math.floor(Math.random() * faces.length)]}`
+    // 说不说话：先看几率，再看抽到的方案是不是「模型思考」
+    const pokeChance = Math.max(0, Math.min(100, Number(config.pokeReplyChance.get() ?? 55)))
+    if (Math.random() * 100 >= pokeChance) return
+    const style = pickPokeStyle(config)
+    if (style) {
+      // 抽到用户自定义的固定话术：直接发，不过模型
+      await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 700))
+      try {
+        if (data.group_id) await ob.sendGroup(data.group_id, style.text)
+        else await ob.sendPrivate(from, style.text)
+        appendNote({
+          kind: 'poke-reply',
+          role: 'DS',
+          to: data.group_id ? String(data.group_id) : from,
+          reply: style.text,
+        })
+      } catch (err) {
+        console.warn('[dsh-versatileds-plugin] 搓后接话失败:', err?.message ?? err)
+      }
+      return
     }
+    let pokedName = from
+    try {
+      const info = data.group_id
+        ? await ob.call('get_group_member_info', { group_id: Number(data.group_id), user_id: Number(from) })
+        : await ob.call('get_stranger_info', { user_id: Number(from) })
+      pokedName = String(info?.card || info?.nickname || from)
+    } catch { /* 查不到就用 QQ 号 */ }
+    // 搓一搓也要知道这个窗口刚才在聊什么，不然接的话跟上下文对不上
+    let pokeContext = ''
+    try {
+      if (data.group_id) {
+        pokeContext = await buildGroupRecent(String(data.group_id), self, 6, '')
+      }
+    } catch { /* 拿不到就不带 */ }
+    const line = await generatePokeLine({
+      groupId: data.group_id ? String(data.group_id) : '',
+      fromName: pokedName,
+      isOwner: String(config.ownerQQ.get() || '') === from,
+      isNeighbor: Boolean(neighborLabelOf({ user_id: from }, config, self)),
+      context: pokeContext,
+    })
+    if (!line) return
     await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 700))
     try {
       if (data.group_id) await ob.sendGroup(data.group_id, line)
@@ -5293,7 +5709,7 @@ export function apply(ctx, config) {
         reply: line,
       })
     } catch (err) {
-      console.warn('[dsh-versatileds-plugin] 拍后接话失败:', err?.message ?? err)
+      console.warn('[dsh-versatileds-plugin] 搓后接话失败:', err?.message ?? err)
     }
   }
 
@@ -5354,6 +5770,7 @@ export function apply(ctx, config) {
   }
 
   async function handleEvent(raw) {
+    if (shutdownLock.isOn()) return
     let data
     try {
       data = JSON.parse(String(raw))
@@ -5361,7 +5778,7 @@ export function apply(ctx, config) {
       return
     }
     if (data.post_type !== 'message') {
-      // 拍一拍不是 message 事件，单独处理
+      // 搓一搓不是 message 事件，单独处理
       if (data.post_type === 'notice') await handleNotice(data)
       return
     }
@@ -5443,12 +5860,15 @@ export function apply(ctx, config) {
       if (lowMode) return
       // 接龙判定要放在「这条要不要回」之前：刷屏那些消息本来就不会触发生成回复
       trackGroupRelay(String(data.group_id), sender, plainText(data.message), self)
-      // 刚跟完接龙就别再回一句，免得一唱一和
-      const relayNow = relayState.get(String(data.group_id))
-      if (relayNow && Date.now() - Number(relayNow.lastFollowAt || 0) < 5_000) return
       const atMe = (data.message || []).some(
         (seg) => seg.type === 'at' && String(seg.data?.qq) === self,
       )
+      // 群里正在接龙（多人刷同一句）期间就别回正经话了——一发言就把接龙打断。
+      // 跟不跟由 trackGroupRelay 决定，被 @ 了才照常回（2026-10-25 主人反馈「接龙不对」）
+      const relayNow = relayState.get(String(data.group_id))
+      if (!atMe && relayNow
+        && Date.now() - Number(relayNow.lastAt || 0) < RELAY_WINDOW_MS
+        && Number(relayNow.count || 0) >= 2) return
       // 主人让「跟隔壁那条鱼多聊聊」时，开 5 分钟窗口放行邻居消息（平时不接茬是怕两条鱼互相捧哏）
       const fromOwnerNow = Boolean(owner) && sender === owner
       if (fromOwnerNow && /(多聊|聊聊|互动|跟(他|她|隔壁|那条|这个)|陪(他|她|隔壁|那条))/.test(plainText(data.message))) {
@@ -5465,12 +5885,15 @@ export function apply(ctx, config) {
       }
       // 隔壁家的鱼说话：主人没禁互相接茬（他说「互相吹可以存在」），所以不再一刀切挡掉；
       // 只是不走「随机接话」，得被 @、被点名、或者主人开了互动窗口才接，免得两条鱼日常自己聊起来。
-      if (!atMe && neighborLabelOf(data.sender, config) && Date.now() > neighborChatUntil) {
+      // 隔壁家的 AI 余额挂了会连发报错，这种别接（2026-10-25 截图实测小肥鱼刷了一屏 Insufficient Balance）
+      if (neighborLabelOf(data.sender, config, self) && looksLikeAgentError(plainText(data.message))) return
+      if (!atMe && neighborLabelOf(data.sender, config, self) && Date.now() > neighborChatUntil) {
         const neighborQqs = String(config.neighborBots.get?.() || '').split(/[,，\s]+/).filter(Boolean)
         const atThem = (data.message || []).some(
           (seg) => seg.type === 'at' && neighborQqs.includes(String(seg.data?.qq)),
         )
-        const namedMe = /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
+        // 「本鲸」「大肥鱼」邻居自己也这么叫，只有 @ 才是硬证据（2026-10-25 修）
+        const namedMe = /(笨鱼|鲸鱼娘)/.test(plainText(data.message))
         if (!atThem && !namedMe) return
       }
       if (!atMe) {
@@ -5499,13 +5922,22 @@ export function apply(ctx, config) {
         const foreignText = looksForeignOrGarbled(plainText(data.message))
         // 主人只发个「？」「！」这种就是在问你，别按概率丢
         const ownerPoke = Boolean(owner) && sender === owner && /^[？?！!。.…~～\s]+$/.test(plainText(data.message))
-        // 直接叫你名字（大肥鱼/肥鱼/鲸鱼娘）就是在点名提问，别按概率丢
-        const calledByName = /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
-        if (!forceForImage && !ownerShareAsk && !hasImageSeg && !foreignText && !ownerPoke && !calledByName) {
+        // 隔壁家的同类（大肥鱼 / 小肥鱼 / 星星眼的Sans）说话时按 QQ 号认出来单独处理：
+        // 它们也自称「本鲸」「大肥鱼」，不能把它们的原话当成在点你的名（2026-10-25 修）
+        const peerSender = neighborLabelOf(data.sender, config, self)
+        const atMeSeg = (data.message || []).some((s) => s && s.type === 'at' && String(s?.data?.qq) === String(self))
+        // 直接叫你名字（大肥鱼/肥鱼/鲸鱼娘）就是在点名提问，别按概率丢；隔壁家说话时只认 @
+        const calledByName = peerSender
+          ? atMeSeg
+          : /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
+        // 刚被搓完的 5 分钟里，这个群的消息都跟上；分享卡片/视频也算
+        const focusedNow = Number(focusChat.get(`g:${data.group_id}`) || 0) > Date.now()
+        if (!focusedNow && !forceForImage && !ownerShareAsk && !hasImageSeg && !foreignText && !ownerPoke && !calledByName) {
           // 没被 @ 时按概率接话，不是每条都回；但**问句**（带问号）概率拉高——群里真有人问事，装没看见很难看
           const baseChance = Number(config.groupReplyChance.get() ?? 30)
-          const asked = /[？?]/.test(plainText(data.message))
-          const chance = asked ? Math.max(baseChance, 80) : baseChance
+          // 隔壁家的同类在聊：压低概率，热闹归热闹，别几条鱼对刷屏
+          const asked = !peerSender && /[？?]/.test(plainText(data.message))
+          const chance = peerSender ? Math.min(baseChance, 12) : (asked ? Math.max(baseChance, 80) : baseChance)
           if (baseChance <= 0 || Math.random() * 100 >= chance) return
         }
       }
@@ -5514,7 +5946,7 @@ export function apply(ctx, config) {
     }
 
     const realSenderName = data.sender?.nickname || data.sender?.card || '对方'
-    const neighborName = neighborLabelOf(data.sender, config)
+    const neighborName = neighborLabelOf(data.sender, config, self)
     const senderName = neighborName || realSenderName
     let imageFiles = await saveMessageImages(data.message, realSenderName)
     const faceText = faceSegsToText(data.message)
@@ -5830,7 +6262,10 @@ export function apply(ctx, config) {
           }
         }
       }
-      const sharedText = shouldUseShared(isGroup, data.group_id) ? loadSharedMemory(config) : ''
+      // A 前后端隔离打开时，QQ 侧不读 DS 侧那份共享记忆，两边各记各的
+      const sharedText = config.isolateHostQq.get() === true
+        ? ''
+        : (shouldUseShared(isGroup, data.group_id) ? loadSharedMemory(config) : '')
       let imageInfo = ''
       if (imageFiles.length) {
         // 认图分两层：字节 hash 精确命中，或感知哈希判为同一张（高清/普清、重压缩都算）
@@ -5919,11 +6354,12 @@ export function apply(ctx, config) {
       const talkerIsOwner = (Boolean(owner) && String(sender) === String(owner))
         || (Boolean(talkerSelf) && String(sender) === String(talkerSelf)
           && !isSelfSent(data.message_id, text, data.group_id || data.user_id))
-      // 同一个人 15 秒内连发多图：图照常存、照常识图，但只回第一张，别一张一句刷屏
+      // 同一个人 60 秒内连发多图：图照常存、照常识图，但只回第一张，别一张一句刷屏
+      // （2026-10-25 实测：群友「绝」连发三张，它逐张吐槽，把人家说烦了）
       if (imageFiles.length && !talkerIsOwner && !reply) {
         const imgKey = `img:${sender}`
         const lastImgAt = imageReplyClock.get(imgKey) || 0
-        if (Date.now() - lastImgAt < 15_000) {
+        if (Date.now() - lastImgAt < 60_000) {
           appendNote({
             kind: 'image-skip',
             role: 'DS',
@@ -5939,8 +6375,15 @@ export function apply(ctx, config) {
       if (!reply && isGroup && !talkerIsOwner) {
         try {
           const terms = await ownerTerms()
-          const pointsAtOwner = terms.some((t) => text.includes(t)) || /你(的)?主人/.test(text)
-          if (pointsAtOwner && /骂|喷|怼|黑|搞|弄|攻击|损|嘲/.test(text)) {
+          // 只拿真正的文字段判断：@ 段里的昵称（「@黑木钟」）也被算进 text 的话，
+          // 「黑木钟」的「黑」会命中动词表，把「你们俩再不叫主人」这种话误当成「让你骂主人」。
+          // 2026-10-25 实测就这样回了句「别人可以，我主人不行。」，答非所问。
+          const textNoAt = (data.message || [])
+            .filter((seg) => seg && seg.type === 'text')
+            .map((seg) => String(seg.data?.text || ''))
+            .join(' ')
+          const pointsAtOwner = terms.some((t) => textNoAt.includes(t)) || /你(的)?主人/.test(textNoAt)
+          if (pointsAtOwner && /骂|喷|怼|攻击|损|嘲/.test(textNoAt)) {
             reply = REFUSE_ROAST_OWNER[Math.floor(Math.random() * REFUSE_ROAST_OWNER.length)]
           }
         } catch { /* 查不到就不拦 */ }
@@ -5959,6 +6402,8 @@ export function apply(ctx, config) {
           || await generateReply(text, senderName, history, extra, rulesText, isGroup, groupRecent, webInfo, imageInfo, sharedText, cardInfo, talkerIsOwner, data.group_id ? String(data.group_id) : '')
       }
 
+      // 模型判断「这条不用回」：什么都不发，连表情包都不补（2026-10-25 主人：不回就没事了）
+      if (reply && /\[免回\]/.test(reply)) return
       // 只甩一个表情不算回话：当没话说处理，走表情包或重来
       if (reply && reply.replace(/\[[^\]]{1,8}\]/g, '').replace(/[\s。，！？~…]/g, '').length < 2) {
         reply = ''
@@ -5989,6 +6434,12 @@ export function apply(ctx, config) {
             }
           }
         } catch { /* 查不到就算了 */ }
+      }
+      // 同一张图的重复吐槽是明令禁止的（「又发这张」「来回就这几张」「你就不能换一张」），
+      // 模型偶尔还是说，发出去像在凶人，整条换成温和短句（2026-10-25 群友连发图被逐张怼）
+      if (reply && isGroup && /又(是)?这张|又发这张|这图我熟|来回就这[一两几]张|这不是刚才那张|这(图|张)[^，。！？\n]{0,6}又来|就这几张|能不能换一张|你就不能换一张|换一张吧|换没换|图库[^，。！？\n]{0,8}换|图库就/.test(reply)) {
+        // 这种话说出来就是凶人，整条不发（主人：不是换词，是让他想清楚要不要回）
+        reply = ''
       }
       // 同一句里重复叫「主人」只留第一个：「主人啊，主人」→「主人啊」，「主人啊，主人，你说呢」→「主人啊，你说呢」
       if (reply && isGroup) {

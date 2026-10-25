@@ -465,12 +465,14 @@ window.__ModuleLoader__.load({
       ['conn', '连接'],
       ['login', '登录'],
       ['reply', '回复'],
+      ['poke', '搓一搓'],
       ['group', '群聊'],
       ['media', '媒体'],
       ['share', '分享视频'],
       ['proactive', '主动'],
       ['task', '任务/搜索'],
-      ['system', '记忆/系统'],
+      ['memory', '记忆'],
+      ['system', '系统'],
       ['logs', '日志'],
     ]
 
@@ -712,17 +714,20 @@ window.__ModuleLoader__.load({
       ruleSync: '群规同步',
       balance: '余额检查',
       replyGap: '回复间隔',
+      poke: '搓一搓',
     }
 
     /** QQ 字段归到哪个分类页，按名字前缀判断。 */
     function qqGroupOf(field) {
       if (/^(enabled|napcatHttp|napcatWs|onebotToken|autoStartNapCat|napcatHiddenLaunch|napcatDir|napcatLauncher|napcatQrPath|napcatQuickLogin|ownerLabel|takeoverLabel|selfLabel)$/.test(field)) return 'conn'
       if (/^(autoReply|onlyReplyOwner|replyDelay|replyGapSec|groupReplyChance|groupHistoryLimit|groupQuoteChance|groupSplitReply|privateQuoteChance|faceReply|rant|swear|retort|relay)/.test(field)) return 'reply'
+      if (/^poke/.test(field)) return 'poke'
       if (/^(rule|neighbor)/.test(field)) return 'group'
       if (/^videoShare/.test(field)) return 'share'
       if (/^(image|sticker|live|shareCard)/.test(field)) return 'media'
       if (/^proactive/.test(field)) return 'proactive'
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
+      if (/^(memoryMode|isolateHostQq|isolateGroupPrivate|crossMemoryEnabled|sharedMemory)/.test(field)) return 'memory'
       return 'system'
     }
 
@@ -747,6 +752,9 @@ window.__ModuleLoader__.load({
       ['balanceStopGroupOnLow', '低余额停群聊', '低于阈值就只回主人私聊，不主动搭话'],
       ['autoStartNapCat', '自动拉起 NapCat', '启动/用到 QQ 时没开就拉起并弹二维码'],
       ['napcatHiddenLaunch', '隐藏窗口启动', '用 VBS 静默启动 NapCat；关掉会弹 cmd 窗口，方便看日志'],
+      ['isolateHostQq', '前后端记忆隔离', '打开后 DS 侧（DSH）和大肥鱼各用各的记忆，互不读取；关着就是两边共用一份'],
+      ['sharedMemorySummary', '共享记忆超长时留头留尾', '保留开头（身份/锚点）+ 结尾（最新），中间省略；关掉只读前面那截'],
+      ['isolateGroupPrivate', '群与个人记忆隔离', '打开后群里聊的不带进私聊、私聊的不带进群，不同 QQ 之间也各记各的'],
       ['crossMemoryEnabled', '隔离时仍读共享记忆', 'isolated 模式下是否还允许只读共享'],
       ['sharedMemoryPrivate', '私聊读共享记忆', '关掉就只用插件自己的记忆'],
       ['chatLogEnabled', '聊天日志', '按会话分文件记在 qq/chat，关掉就完全不记'],
@@ -761,8 +769,8 @@ window.__ModuleLoader__.load({
       ['swearEnabled', '脏话与谐音', '群规没禁时可以偶尔带脏话、用谐音梗接'],
       ['rantEnabled', '主动吐槽', '看到离谱或好笑的事主动吐槽一句'],
       ['retortEnabled', '被骂时还嘴', '关掉就不还嘴（当没看见或轻描淡写带过）；方案在下面「还嘴方案设置」里编'],
-      ['pokeBackEnabled', '被拍一拍就拍回去', '别人戳一戳/拍一拍时回拍一下'],
-      ['pokeReplyEnabled', '拍完再顺口接一句', '拍回去以后再说一句话'],
+      ['pokeBackEnabled', '被搓一搓就搓回去', '别人戳一戳/搓一搓你时，回搓一下'],
+      ['pokeReplyEnabled', '搓完再想想要不要接一句', '搓回去以后交给模型判断：想接就接一句，不想接就只回搓一下'],
       ['faceReplyEnabled', '允许用 QQ 表情回话', '回复里写 [微笑] 这类会变成真表情'],
       ['groupSplitReply', '群回复分段发', '一句话拆成两三条短消息，像人一段一段打'],
       ['shortReplySplitChance', '短回复拆条概率（0-100）', '80 字以内的短回复拆成两条发的概率，0 = 永远整条发；30 = 大约三成会拆'],
@@ -799,6 +807,9 @@ window.__ModuleLoader__.load({
       ['stickerResizeMaxPx', '发表情包缩到几像素', '默认 240，接近 QQ 表情尺寸；0 不缩'],
       ['swearBanSec', '被说别骂人后禁说多久（秒）', ''],
       ['groupAtBackThreshold', '群里被 @ 几次后 @ 回去', '被同一个人 @ 这么多次才回一次 @，然后清零'],
+      ['sharedMemoryMaxChars', '共享记忆最多读多少字（0＝无上限）', ''],
+      ['pokeGapSec', '同一个人两次搓一搓最少隔几秒', 'poke'],
+      ['pokeReplyChance', '搓回去后接一句的几率（0-100）', '剩下只回搓、不说话'],
       ['groupQuoteChance', '群里引用回复概率（0-100）', '被 @ 时一定引用，平时按这个概率混合'],
       ['privateQuoteChance', '私聊引用回复概率（0-100）', '问句和请求类更容易引用，闲聊偶尔引'],
     ]
@@ -812,7 +823,7 @@ window.__ModuleLoader__.load({
       ['proactiveGroups', '主动接话的群号列表', '逗号分隔多个群，留空不在群里说话'],
       ['ruleGroups', '要记群规的群号', '逗号分隔，留空表示所有群'],
       ['neighborBots', '隔壁家的 AI QQ 号', '逗号分隔；这些号在群里统一显示成「隔壁家的<名字>」，不跟着它的人设演'],
-      ['neighborNameKeywords', '按名字认隔壁家', '群名片/昵称里带这些词（逗号分隔，不分大小写）就统一标成「隔壁家的<名字>」'],
+      ['neighborNameKeywords', '按名字认隔壁家（可选）', '留空就别按名字猜——昵称带「肥鱼」的真人不少。填了才把群名片/昵称里带这些词的统一标成「隔壁家的<名字>」'],
       ['liveUrl', '直播间链接', ''],
       ['liveFramePath', '抓图路径覆盖', ''],
       ['videoShareTarget', '分享视频的目标', '留空＝发主人私聊；*＝当前聚焦的 QQ 会话；也可以填群号或 QQ 号'],
@@ -820,10 +831,9 @@ window.__ModuleLoader__.load({
       ['taskSessionName', 'DSH 会话名', '主人派活时新会话叫什么'],
       ['taskDefaultModel', '派活默认模型', 'flash 或 pro'],
       ['taskDefaultEffort', '派活默认强度', 'high / medium / low'],
-      ['memoryMode', '记忆模式', 'shared 共用 / isolated 隔离'],
+      ['memoryMode', '记忆底座（shared / isolated）', 'shared＝两边共用共享记忆；isolated＝只用插件目录自己的'],
       ['sharedMemoryGroups', '读共享记忆的群号', '* 全部，none 都不读，或逗号分隔'],
-      ['sharedMemoryMaxChars', '共享记忆最多读多少字', '默认 6000；文件比这长的话，末尾新写的内容会读不到'],
-      ['sharedMemorySummary', '共享记忆超长时留头留尾', '开了就保留开头（身份/锚点）+ 结尾（最新），中间标省略；关掉只读前面那截'],
+
       ['napcatLauncher', 'launcher.bat 路径', '留空用 <napcatDir>/napcat/launcher.bat'],
       ['napcatQrPath', '登录二维码路径', '留空用 <napcatDir>/napcat/cache/qrcode.png'],
       ['napcatQuickLogin', '快速登录 QQ 号', '填了启动时带这个号免扫码；留空扫码登录'],
@@ -937,6 +947,19 @@ window.__ModuleLoader__.load({
         const [stickerMsg, setStickerMsg] = React.useState('')
         const [stickerOpen, setStickerOpen] = React.useState(false)
         const [stickerSelected, setStickerSelected] = React.useState(new Set())
+        const [memMsg, setMemMsg] = React.useState('')
+        const doMemorySync = async () => {
+          try {
+            const r = await fetch(`${QQ_STATUS_URL}/memory_sync`, { cache: 'no-store' })
+            const d = await r.json()
+            setMemMsg(d && d.ok ? (d.note || '已同步') : `失败：${(d && d.error) || '未知'}`)
+          } catch (e) {
+            setMemMsg('接口没响应')
+          }
+          setTimeout(() => setMemMsg(''), 4000)
+        }
+        const [pokeList, setPokeList] = React.useState([])
+        const [pokeMsg, setPokeMsg] = React.useState('')
         const [retortOpen, setRetortOpen] = React.useState(false)
         const [retortList, setRetortList] = React.useState([])
         const [retortMsg, setRetortMsg] = React.useState('')
@@ -949,6 +972,32 @@ window.__ModuleLoader__.load({
           { text: '阴阳怪气：反讽、夸张附和，表面顺着实际在损', weight: 10, on: true },
         ]
         // 每行给一个稳定 id：删除中间那行时后面的输入框不会串内容
+        // 搓一搓方案：第一项「模型思考」固定不可改，其余是用户自己编的固定话术
+        const POKE_MODEL_TEXT = '模型思考（默认，不可修改）：看当下上下文自己决定要不要接、接什么；不想接就不说话'
+        const pokeId = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+        const parsePokeCfg = (raw) => {
+          try {
+            const arr = JSON.parse(String(raw || '') || '[]')
+            if (Array.isArray(arr)) {
+              return arr
+                .filter((x) => x && String(x.text || '').trim() && x.fixed !== true && String(x.id || '') !== 'model')
+                .map((x) => ({ id: pokeId(), text: String(x.text).trim(), weight: x.weight ?? 10, on: x.on !== false }))
+            }
+          } catch { /* 坏了就当没自定义 */ }
+          return []
+        }
+        React.useEffect(() => {
+          if (activeTab === 'poke') setPokeList(parsePokeCfg(v.pokeStyles ?? ''))
+        }, [activeTab])
+        const savePoke = () => {
+          const clean = pokeList
+            .map((x) => ({ text: String(x.text || '').trim(), weight: Math.max(0, Number(x.weight) || 0), on: x.on !== false }))
+            .filter((x) => x.text)
+          form.set('pokeStyles', JSON.stringify(clean))
+          setPokeMsg('已保存')
+          setTimeout(() => setPokeMsg(''), 1500)
+          setPokeList(parsePokeCfg(JSON.stringify(clean)))
+        }
         const retortId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
         const parseRetortCfg = (raw) => {
           try {
@@ -1157,6 +1206,104 @@ window.__ModuleLoader__.load({
             stickerMsg ? React.createElement('span', { style: hintStyle }, stickerMsg) : null,
           ),
         )
+
+        if (activeTab === 'memory') {
+          children.push(React.createElement(
+            'div',
+            { key: 'mem-intro', style: { ...rowStyle, flexDirection: 'column', alignItems: 'flex-start', gap: '3px' } },
+            React.createElement('strong', { style: { fontSize: '13px' } }, '记忆布局'),
+            React.createElement('span', { style: hintStyle },
+              '底座＝共享：DS 侧和大肥鱼共用一份记忆（共享记忆.md 双向）。下面两个隔离开关都能叠在底座上：一个管前后端，一个管群与个人。'),
+            React.createElement('span', { style: hintStyle },
+              '两个都不开＝全共享；打开前后端隔离，两边各记各的；打开群与个人隔离，群里和私聊各记各的。'),
+          ))
+          children.push(React.createElement(
+            'div',
+            { key: 'mem-sync', style: rowStyle },
+            React.createElement('span', { style: labelStyle }, '立即同步'),
+            React.createElement('button', { type: 'button', style: skipStyle, onClick: doMemorySync }, '对齐一次（只去重）'),
+            React.createElement('span', { style: hintStyle }, memMsg || '把两边重复的事实去掉，不新增内容；A 打开时会跳过'),
+          ))
+        }
+
+        if (activeTab === 'poke') {
+          const miniInput = {
+            flex: 1, padding: '5px 8px', borderRadius: '6px',
+            border: '1px solid rgba(128,128,128,0.35)',
+            background: 'transparent', color: 'inherit', fontSize: '13px',
+          }
+          const numInput = {
+            width: '72px', padding: '5px 6px', borderRadius: '6px',
+            border: '1px solid rgba(128,128,128,0.35)',
+            background: 'transparent', color: 'inherit', fontSize: '13px',
+          }
+          children.push(React.createElement(
+            'div',
+            { key: 'poke-styles-head', style: rowStyle },
+            React.createElement('span', { style: labelStyle }, '搓一搓回复方案'),
+            React.createElement('span', { style: hintStyle }, '按权重随机选一个；「模型思考」固定不可改，其余自己编'),
+          ))
+          children.push(React.createElement(
+            'div',
+            { key: 'poke-styles-body', style: { padding: '4px 0 8px' } },
+            React.createElement(
+              'div',
+              { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' } },
+              React.createElement('input', { type: 'checkbox', checked: true, disabled: true, title: '固定启用' }),
+              React.createElement('input', { type: 'text', value: POKE_MODEL_TEXT, disabled: true, style: miniInput }),
+              React.createElement('input', { type: 'number', value: 100, disabled: true, style: numInput }),
+              React.createElement('span', { style: { ...hintStyle, width: '32px' } }, '固定'),
+            ),
+            ...pokeList.map((item, i) => React.createElement(
+              'div',
+              { key: item.id, style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' } },
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: item.on !== false,
+                title: '启用这个方案',
+                onChange: (e) => setPokeList(pokeList.map((x, j) => (j === i ? { ...x, on: e.target.checked } : x))),
+              }),
+              React.createElement('input', {
+                type: 'text',
+                value: item.text,
+                placeholder: '固定话术，比如：再搓就把你炖了',
+                onChange: (e) => setPokeList(pokeList.map((x, j) => (j === i ? { ...x, text: e.target.value } : x))),
+                style: miniInput,
+              }),
+              React.createElement('input', {
+                type: 'number',
+                value: item.weight === '' ? '' : item.weight,
+                min: 0,
+                step: 1,
+                title: '权重',
+                onChange: (e) => setPokeList(pokeList.map((x, j) => (j === i ? { ...x, weight: e.target.value } : x))),
+                style: numInput,
+              }),
+              React.createElement('button', {
+                type: 'button',
+                style: skipStyle,
+                onClick: () => setPokeList(pokeList.filter((_, j) => j !== i)),
+              }, '删'),
+            )),
+            React.createElement(
+              'div',
+              { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' } },
+              React.createElement('button', {
+                type: 'button',
+                style: skipStyle,
+                onClick: () => setPokeList([...pokeList, { id: pokeId(), text: '', weight: 10, on: true }]),
+              }, '+ 添加方案'),
+              React.createElement('span', { style: { flex: 1 } }),
+              pokeMsg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, pokeMsg) : null,
+              React.createElement('button', {
+                type: 'button',
+                style: skipStyle,
+                disabled: !snap.writable,
+                onClick: savePoke,
+              }, '保存方案'),
+            ),
+          ))
+        }
 
         if (activeTab === 'reply') {
           const retortCount = parseRetortCfg(v.retortStyles ?? '').length

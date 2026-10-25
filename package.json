@@ -1,6 +1,6 @@
 {
   "name": "dsh-versatileds-plugin",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "多功能DS插件：B站 小号代理与 QQ 代理合体，左侧栏一个入口，B站 / QQ 两个模块分页配置",
   "type": "module",
   "main": "index.js",
