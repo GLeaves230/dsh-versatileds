@@ -5091,7 +5091,8 @@ export function apply(ctx, config) {
     if (sender === self) {
       const selfText = plainText(data.message) || String(data.raw_message || '')
       const selfScope = data.message_type === 'group' ? data.group_id : (data.target_id || data.user_id)
-      if (config.takeoverEnabled.get() !== false && !isSelfSent(data.message_id, selfText, selfScope)) {
+      const isTakeoverMsg = config.takeoverEnabled.get() !== false && !isSelfSent(data.message_id, selfText, selfScope)
+      if (isTakeoverMsg) {
         if (selfText) {
           const inGroup = data.message_type === 'group'
           logDialog({
@@ -5103,6 +5104,22 @@ export function apply(ctx, config) {
             text: selfText,
           }, config)
         }
+        // 主人接管发的图也要收：不然紧接着聊「刚才那张图」时，它手上根本没料，只能回「没收到图」
+        try {
+          const takeoverImgs = await saveMessageImages(data.message, data.sender?.nickname || '主人')
+          if (takeoverImgs.length) {
+            const descs = takeoverImgs.map((f) => loadImageNote(f)).filter(Boolean)
+            const desc = descs[0] || await describeImage(takeoverImgs[0])
+            if (desc && !descs.length) saveImageNote(takeoverImgs[0], desc)
+            if (desc) {
+              lastImageSeen = {
+                desc: `对方发了 ${takeoverImgs.length} 张图，第一张的内容：${desc}`,
+                at: Date.now(),
+                scope: data.message_type === 'group' ? String(data.group_id) : `private:${sender}`,
+              }
+            }
+          }
+        } catch { /* 图存不下来就算了，别挡接管记录 */ }
       }
       return
     }
