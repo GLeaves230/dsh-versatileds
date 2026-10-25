@@ -743,7 +743,8 @@ function sharedMemoryPath() {
   return existsSync(inHome) ? inHome : join(dshHome(), '..', '记忆', '共享记忆.md')
 }
 
-function loadSharedMemory(maxChars = 1600) {
+/** 读共享记忆：文件会长大，别只截前 1600 字——新写的东西在末尾，截断就白写了。 */
+function loadSharedMemory(maxChars = 6000) {
   const file = sharedMemoryPath()
   if (!existsSync(file)) return ''
   try {
