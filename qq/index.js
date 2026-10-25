@@ -7126,8 +7126,10 @@ export function apply(ctx, config) {
       const mentionMe = (data.message || []).some(
         (seg) => seg && seg.type === 'at' && String(seg.data?.qq) === String(self),
       )
-      if (mentionMe) {
-        // 被 @ 的排队保留（最多 3 条），按顺序回
+      // 主人说的也不能丢：他连发「图 + 妈妈」时，前面在处理图，「妈妈」被顶掉就等于没回
+      const fromOwner = Boolean(owner) && String(sender) === String(owner)
+      if (mentionMe || fromOwner) {
+        // 被 @ 的、主人说的排队保留（最多 3 条），按顺序回
         queued.push({ data, at: Date.now() })
         while (queued.length > 3) queued.shift()
       } else {
