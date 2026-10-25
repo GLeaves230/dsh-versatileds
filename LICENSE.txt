@@ -1,8 +1,8 @@
 dsh-versatileds-plugin 许可协议（受限再分发许可）
 Limited Redistribution License for dsh-versatileds-plugin
 
-版权所有 (c) 2026 黑木钟
-Copyright (c) 2026 黑木钟
+版权所有 (c) 2026 黑木钟 - GLeaves
+Copyright (c) 2026 黑木钟 - GLeaves
 
 本许可参照 NapCatQQ 的受限再分发许可模式制定。
 
