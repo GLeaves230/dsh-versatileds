@@ -6952,6 +6952,7 @@ export function apply(ctx, config) {
       || forwardText
       || (imageFiles.length ? '[图片]' : '')
       || faceText
+      || ((data.message || []).some((s) => s && s.type === 'record') ? '[语音]' : '')
     // 「分析一下这个图」这类请求常常先把图单独发出来、再跟一句话：本条没图就回历史里捞最近那张
     if (!imageFiles.length && wantsImageLook(text)) {
       const more = await latestHistoryImages(data, realSenderName)
@@ -6962,6 +6963,9 @@ export function apply(ctx, config) {
         `- ${new Date().toLocaleString('zh-CN', { hour12: false })} recv id=${data.message_id} files=${imageFiles.length} segs=${(data.message || []).map((s) => s.type).join(',')}\n`, 'utf8')
     } catch { /* ignore */ }
     if (!text) return
+    // 自己发的消息（包括刚发出去的语音被 NapCat 推回来）不处理，免得自说自话；
+    // 客户端接管发的也不回——那是主人在用这个号说话
+    if (String(sender) === String(self)) return
 
     // 分享卡片（B站 小程序/链接）：卡片本身只有标题，先顺着短链点进去把内容拿出来，再回话
     let cardInfo = ''
@@ -6983,9 +6987,14 @@ export function apply(ctx, config) {
     {
       const inGroup = data.message_type === 'group'
       const fromOwnerNow = Boolean(owner) && sender === owner
+      // 自己发的（比如语音被 NapCat 推回来）要记成 DS，别记成「群友 自己的名字」——
+      // 不然后面它会把这条当成别人说的，接自己话（2026-10-25 主人报「语音被识别成它自己」）
+      const selfSentNow = String(sender) === String(self)
       logChat({
         kind: inGroup ? 'group-recv' : 'recv',
-        role: fromOwnerNow ? String(config.ownerLabel.get() || 'Admin') : (neighborName || `群友 ${senderName}`),
+        role: selfSentNow
+          ? String(config.selfLabel.get() || 'DS')
+          : fromOwnerNow ? String(config.ownerLabel.get() || 'Admin') : (neighborName || `群友 ${senderName}`),
         from: sender,
         groupId: inGroup ? String(data.group_id || '') : '',
         peer: inGroup ? '' : sender,
