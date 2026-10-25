@@ -5088,6 +5088,10 @@ export function apply(ctx, config) {
       return
     }
 
+    // 消息太旧就别回了：排到队、重载后补处理时，上下文早换了好几轮，回了只会答非所问
+    const msgAt = Number(data.time || 0) * 1000
+    if (msgAt && Date.now() - msgAt > 120_000) return
+
     const self = await ensureSelf()
     const sender = String(data.user_id ?? data.sender?.user_id ?? '')
     if (!sender) return
