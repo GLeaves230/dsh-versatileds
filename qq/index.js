@@ -5330,8 +5330,16 @@ export function apply(ctx, config) {
         )
         if (pokingNeighbor) neighborChatUntil = Math.max(neighborChatUntil, Date.now() + 2 * 60_000)
       }
-      // 隔壁家的鱼跟别人说话时不接茬：两条鱼互相捧哏最容易把话题带跑（2026-10-24 主人点名要改）
-      if (!atMe && neighborLabelOf(data.sender, config) && Date.now() > neighborChatUntil) return
+      // 隔壁家的鱼说话：主人没禁互相接茬（他说「互相吹可以存在」），所以不再一刀切挡掉；
+      // 只是不走「随机接话」，得被 @、被点名、或者主人开了互动窗口才接，免得两条鱼日常自己聊起来。
+      if (!atMe && neighborLabelOf(data.sender, config) && Date.now() > neighborChatUntil) {
+        const neighborQqs = String(config.neighborBots.get?.() || '').split(/[,，\s]+/).filter(Boolean)
+        const atThem = (data.message || []).some(
+          (seg) => seg.type === 'at' && neighborQqs.includes(String(seg.data?.qq)),
+        )
+        const namedMe = /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
+        if (!atThem && !namedMe) return
+      }
       if (!atMe) {
         // 这条在 @ 别人（或 @全体）：那是别人的对话，不插嘴，避免抢答和身份串位
         const atOthers = (data.message || []).some(
