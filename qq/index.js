@@ -7672,6 +7672,12 @@ export function apply(ctx, config) {
                 text: voiceText,
                 group_id: Number(data.group_id),
               })
+              // 和聊天/分享/表情包完全同一套：走 recordSelfSent（发送登记 + chat 流水，role 用 DS）
+              recordSelfSent(config, {
+                kind: 'sent-voice',
+                groupId: String(data.group_id),
+                text: `[语音] ${voiceText}`,
+              })
               appendNote({
                 kind: 'group-auto',
                 role: String(config.selfLabel.get() || 'DS'),
