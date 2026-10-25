@@ -5321,6 +5321,15 @@ export function apply(ctx, config) {
       if (fromOwnerNow && /(多聊|聊聊|互动|跟(他|她|隔壁|那条|这个)|陪(他|她|隔壁|那条))/.test(plainText(data.message))) {
         neighborChatUntil = Date.now() + 5 * 60_000
       }
+      // 主人在跟隔壁鱼说话（@ 它 / 回它）时也放行：自家鱼该能插两句嘴、调侃一下，别当透明
+      if (fromOwnerNow) {
+        const neighborQqs = String(config.neighborBots.get?.() || '')
+          .split(/[,，\s]+/).filter(Boolean)
+        const pokingNeighbor = (data.message || []).some(
+          (seg) => seg.type === 'at' && neighborQqs.includes(String(seg.data?.qq)),
+        )
+        if (pokingNeighbor) neighborChatUntil = Math.max(neighborChatUntil, Date.now() + 2 * 60_000)
+      }
       // 隔壁家的鱼跟别人说话时不接茬：两条鱼互相捧哏最容易把话题带跑（2026-10-24 主人点名要改）
       if (!atMe && neighborLabelOf(data.sender, config) && Date.now() > neighborChatUntil) return
       if (!atMe) {
