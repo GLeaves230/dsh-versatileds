@@ -3438,6 +3438,8 @@ function startStatusServer(config, napcat = null) {
             .split(/[,，\s]+/)
             .map((s) => s.trim())
             .filter(Boolean)[0]
+          // 设置页的测试语音是主人在测，日志里记 Admin，不冒充它自己说的话（它自己发还是 DS）
+          const testRole = String(config.takeoverLabel.get() || 'Admin')
           if (backend !== 'gpt-sovits') {
             // 官方语音只能发群；私聊那条 NapCat 发不出去
             if (target === 'private') throw new Error('私聊只能用 GPT-SoVITS；先把语音方案切成 GPT-SoVITS')
@@ -3448,7 +3450,7 @@ function startStatusServer(config, napcat = null) {
               text,
               group_id: Number(gid),
             })
-            recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音] ${text}` })
+            recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音] ${text}`, role: testRole })
             finish(200, { ok: true, backend: 'qq', target: 'group', text })
             return
           }
@@ -3460,6 +3462,7 @@ function startStatusServer(config, napcat = null) {
               user_id: Number(ownerQq),
               message: [{ type: 'record', data: { file: `file:///${wav}` } }],
             })
+            recordSelfSent(config, { kind: 'sent-voice', peer: String(ownerQq), text: `[语音/gpt-sovits] ${text}`, role: testRole })
           } else {
             const gid = firstGroupId
             if (!gid) throw new Error('没配群号（proactiveGroups），不知道发哪个群')
@@ -3467,7 +3470,7 @@ function startStatusServer(config, napcat = null) {
               group_id: Number(gid),
               message: [{ type: 'record', data: { file: `file:///${wav}` } }],
             })
-            recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/gpt-sovits] ${text}` })
+            recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/gpt-sovits] ${text}`, role: testRole })
           }
           finish(200, { ok: true, backend: 'gpt-sovits', target, text, wav })
         } catch (err) {
@@ -3863,7 +3866,8 @@ function recordSelfSent(config, info) {
   if (config.logSelfMessages?.get?.() !== true) return
   logChat({
     kind: info.kind,
-    role: String(config.selfLabel?.get?.() || 'DS'),
+    // info.role 可以覆盖：设置页的「测试语音」是主人在测，记 Admin 不记 DS
+    role: String(info.role || config.selfLabel?.get?.() || 'DS'),
     from: String(info.selfId || ''),
     groupId: info.groupId || '',
     peer: info.peer || '',
