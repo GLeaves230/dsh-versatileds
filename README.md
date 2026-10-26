@@ -253,6 +253,28 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 5. 人设改 `qq/persona.md`：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。默认人设已带完整家庭关系（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小），开箱即用。
 6. **语音（可选但推荐）**：设置页 →「语音」→ 方案选「GPT-SoVITS（本地）」→ 点「环境检查」，缺依赖就点「一键部署」（自动装 Python 3.11 + torch + 模型，约 20-30 分钟，全程后台）；不装也能用 QQ 官方 AI 语音。默认音色是可莉（参考音频 `kc-1.wav`，CV 花玲），换音色把 3-10 秒干净人声放进 `versatileds/models/gpt-sovits/ref/` 再填文件名。
 
+## 常见问题（排坑）
+
+| 现象 | 原因 / 处理 |
+|---|---|
+| NapCat 起不来 | UAC 弹窗要点「是」；`launcher.bat` 在 `<DSH_HOME>/versatileds/qq/napcat/`；WS 连不上先看 3000 / 3011 端口 |
+| 首次启动卡住 | 正在解压 `vendor/napcat.zip`，约 1-2 分钟；日志里等「依赖已解压」 |
+| ffmpeg 下载慢或失败 | 走清华 PyPI，约 22MB；实在不行手动放到 `<DSH_HOME>/versatileds/ffmpeg/imageio_ffmpeg/binaries/` |
+| 设置页一直「正在读取配置…」 | `cordis.patch.yml` 的 YAML 语法坏了（缩进/引号），用 pyyaml 校验；改这个文件**别用 PowerShell 字符串替换** |
+| 语音没声音 / 像没在说话 | 看 `/voice_status` 的 `apiUp`；本地语音要等 API 起 40 秒左右；`temperature` 别低于 1.0（会循环生成 30 秒噪声） |
+| 语音像别人 / 只剩气音 | 参考音频必须**纯单人、无 BGM**，`prompt_text` 和音频**一字不差** |
+| Python 装不上 | 用华为镜像的 3.11.9；系统自带的 3.15 没有 torch wheel |
+| GitHub / HF 拉不动 | 用镜像：代码 `ghproxy.net`，模型 `hf-mirror.com`，pip `pypi.tuna.tsinghua.edu.cn` |
+| 插件突然不工作 | DSH 启动失败会**静默禁用**插件；去 DSH 日志看原因 |
+| 群消息不回复 | 检查 `autoReplyEnabled`、WS 是否连着、是否在反思期（被嫌吵后静默） |
+
+## 问题反馈
+
+- **GitHub Issues（推荐）**：https://github.com/GLeaves230/dsh-versatileds-plugin/issues
+- **PR / 讨论**：https://github.com/GLeaves230/dsh-versatileds-plugin/pulls
+- 反馈时请带上：DSH 版本、插件版本（当前 0.2.8）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
+- 先在本文档「常见问题」里找一眼，能自己解决就不用等回复
+
 ## 合并时修掉的问题
 
 - QQ 设置页在 2026-10-24 20:07 被写坏（UTF-8 双重编码 + 引号丢失，`node --check` 直接报语法错误）。本包的 QQ 模块页按 14:56 的完好版本重建，并补回之后新增的 `relayEnabled`、`shareCardWatch`、`neighborBots`、`neighborNameKeywords`、`videoShare*` 等字段。
