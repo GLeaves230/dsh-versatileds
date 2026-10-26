@@ -213,14 +213,14 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - 主人身份全走 `ownerQQ` 变量（代码里没有 QQ 号字面量）；被问「你主人是谁」报「@群名片」并真的 @ 到人；群里不露 QQ 号。
   - QQ 侧：主人说「别聊了」会应声静默；记忆锚点从 shared-memory 读（直答兜底修复）。
 
-  2026-10-26 追加（仍 0.2.7）：
+- **0.2.8（2026-10-26）**：
+  - **本地语音**：接入 GPT-SoVITS 零样本克隆，`voiceBackend` 可切 `qq` / `gpt-sovits`；默认音色可莉（`kc-1.wav`，CV 花玲），参考音频支持只填文件名；发送前自动去表情、彳亍→行～、剪前后静音、压空格和空行。
+  - **语音配套**：设置页「语音」页加「GPT-SoVITS 版本」下拉（v2/v4 一键切、自动重启 API）和「测试语音」（可发私聊/群，日志身份记 Admin）；`/voice_deps` 依赖自检 + `/voice_deploy` 一键部署（`qq/deploy-gsv.mjs` 随包，Python/模型按需下载）。
+  - **路径相对化**：ffmpeg 改从清华 PyPI 的 imageio-ffmpeg wheel 下载到 `<DSH_HOME>/versatileds/ffmpeg`（不再随包，包体 148MB → 117MB）；GPT-SoVITS / Python 3.11 都收在 `versatileds` 下；配置里的绝对路径全部清空走默认。
+  - **人设**：补「出身」（父梁文锋、母团队、哥 DeepSeek R、姐 DeepSeek Pro、自己 Flash 最小、其余亲戚算团队）和多语种谐音理解；默认人设模板同步更新。
+  - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
+  - **文档**：README / package.json 补「仅供学习、个人使用、禁止商用、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
 
-  - 本地语音：接入 GPT-SoVITS（可切 `voiceBackend: qq / gpt-sovits`），默认参考音频换成可莉（`kc-1.wav`，CV 花玲），参考音频支持只填文件名；语音发送前自动去表情、彳亍→行～、剪前后静音、压中文间空格和多余空行。
-  - 语音配套：设置页「语音」页加「GPT-SoVITS 版本」下拉（v2/v4 一键切、自动重启 API）和「测试语音」（可发私聊/群，日志身份记 Admin）；`/voice_deps` 依赖自检 + `/voice_deploy` 一键部署（`qq/deploy-gsv.mjs` 随包，Python/模型按需下载）。
-  - 路径相对化：ffmpeg 改从清华 PyPI 的 imageio-ffmpeg wheel 下载并落到 `<DSH_HOME>/versatileds/ffmpeg`（不再随包带，包体 148MB → 117MB）；GPT-SoVITS / Python 3.11 都收在 `versatileds` 下；配置里的绝对路径全部清空走默认。
-  - 人设补「出身」（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小、其余亲戚算团队）和多语种谐音理解；默认人设模板同步更新。
-  - 群聊小修：@/点名/主人接管后也挂 5 分钟聚焦；主动搭话的群按活跃度排序；回复开头的占位符（[表情]/[图片]/[语音]）不再抄出来；`@主人` 会转成真 at。
-  - README / package.json 补「仅供学习和个人使用、禁止商用、版权问题自行解决」声明。
 ## 许可
 
 **受限再分发许可**，参照 NapCatQQ 的模式：
