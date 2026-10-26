@@ -8133,7 +8133,7 @@ export function apply(ctx, config) {
           const quotedSegs = r?.data?.message || r?.message || []
           const innerFwd = (Array.isArray(quotedSegs) ? quotedSegs : []).find((s) => s && s.type === 'forward')
           if (innerFwd) {
-            quotedText = await forwardToText(innerFwd, ob)
+            quotedText = `（这是被引用的聊天记录内容）\n${await forwardToText(innerFwd, ob)}`
           } else {
             const q = plainText(quotedSegs).trim()
             if (q) quotedText = `[引用] ${q.slice(0, 300)}`
@@ -8151,6 +8151,7 @@ export function apply(ctx, config) {
       ? (baseText ? `${baseText}\n${forwardText}` : forwardText)
       : baseText
     if (quotedText) text = text ? `${text}\n${quotedText}` : quotedText
+    if (quotedText) plog('info', `[dsh-versatileds] 引用内容已拼入（${quotedText.length} 字）：${quotedText.slice(0, 60).replace(/\s+/g, ' ')}`)
     text = text
       || (imageFiles.length ? '[图片]' : '')
       || faceText
