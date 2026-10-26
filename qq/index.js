@@ -2532,6 +2532,27 @@ function gsvStatus(config) {
 }
 
 /**
+ * 剪掉语音开头/结尾的静音：GPT-SoVITS 会在前面留 1-2 秒空白，听着很拖。
+ * 找不到 ffmpeg 就原样返回（别因为没装 ffmpeg 整条语音发不出去）。
+ */
+async function trimVoiceSilence(wavPath) {
+  const out = wavPath.replace(/\.wav$/i, '.trim.wav')
+  const args = [
+    '-y', '-loglevel', 'error', '-i', wavPath,
+    '-af', 'silenceremove=start_periods=1:start_silence=0.05:start_threshold=-45dB:stop_periods=-1:stop_silence=0.3:stop_threshold=-45dB',
+    out,
+  ]
+  for (const exe of ['ffmpeg', ...bundledFfmpegCandidates()]) {
+    if (await runQuiet(exe, args, 60000)) {
+      try {
+        if (existsSync(out) && statSync(out).size > 1000) return out
+      } catch { /* 用原文件 */ }
+    }
+  }
+  return wavPath
+}
+
+/**
  * 调本地 GPT-SoVITS（api_v2.py 的 /tts）合成一段 wav，返回文件路径。
  * 参考音频决定音色和情绪；speech 里带表情符号会被去掉（念出来很怪）。
  */
@@ -2566,7 +2587,8 @@ async function gsvSynthesize(text, config) {
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `gsv-${Date.now()}.wav`)
   writeFileSync(file, buf)
-  return file
+  // GPT-SoVITS 前面会留 1-2 秒空白，剪掉再发（找不到 ffmpeg 就用原文件）
+  return trimVoiceSilence(file)
 }
 
 /**
@@ -7800,44 +7822,48 @@ export function apply(ctx, config) {
             // 「念这句：『阿尔泽布，我已登神』」——引号里的原话优先，别被模型改写
             const quoted = text.match(/[：:，,\s]\s*[“"「『‘]([^”"」』’]{1,80})[”"」』’]/)
             const voiceText = (quoted ? quoted[1] : stripBrackets(reply)).trim() || '嗯'
-            // 语音方案：qq＝QQ 官方 AI 语音（零依赖）；gpt-sovits＝本地模型
+            // 语音方案：qq＝QQ 官方 AI 语音（零依赖，只能发群）；gpt-sovits＝本地模型（群/私聊都能发）
             // 选了 gpt-sovits 但机器跑不动（没装/没 N 卡）→ 自动退回官方语音，别整条哑掉
             const backend = String(config.voiceBackend.get() || 'qq')
             const useGsv = backend === 'gpt-sovits' && gsvStatus(config).ok
-            try {
-              if (useGsv) {
-                const wav = await gsvSynthesize(voiceText, config)
-                await ob.call('send_group_msg', {
-                  group_id: Number(data.group_id),
-                  message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+            // 私聊 + 官方语音发不出去（NapCat 限制）→ 这条老实回文字
+            if (isGroup || useGsv) {
+              try {
+                if (useGsv) {
+                  const wav = await gsvSynthesize(voiceText, config)
+                  await ob.call(isGroup ? 'send_group_msg' : 'send_private_msg', {
+                    ...(isGroup ? { group_id: Number(data.group_id) } : { user_id: Number(sender) }),
+                    message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+                  })
+                } else {
+                  await ob.call('send_group_ai_record', {
+                    character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
+                    text: voiceText,
+                    group_id: Number(data.group_id),
+                  })
+                }
+                // 和聊天/分享/表情包完全同一套：走 recordSelfSent（发送登记 + chat 流水，role 用 DS）
+                recordSelfSent(config, {
+                  kind: 'sent-voice',
+                  groupId: isGroup ? String(data.group_id) : '',
+                  peer: isGroup ? '' : String(sender),
+                  text: `[语音${useGsv ? '/gpt-sovits' : ''}] ${voiceText}`,
                 })
-              } else {
-                await ob.call('send_group_ai_record', {
-                  character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
-                  text: voiceText,
-                  group_id: Number(data.group_id),
+                appendNote({
+                  kind: isGroup ? 'group-auto' : 'auto',
+                  role: String(config.selfLabel.get() || 'DS'),
+                  from: sender,
+                  name: senderName,
+                  text,
+                  reply: `（语音）${voiceText}`,
+                  extra,
                 })
+                // 和文字回复一样给一条成功日志，控制台里看得见「这次真发出去了」
+                console.info(`[dsh-versatileds-plugin] ${isGroup ? '群里' : '私聊'}发语音：${voiceText}`)
+                return
+              } catch (err) {
+                console.warn('[dsh-versatileds-plugin] 语音发送失败，回退文本:', err?.message ?? err)
               }
-              // 和聊天/分享/表情包完全同一套：走 recordSelfSent（发送登记 + chat 流水，role 用 DS）
-              recordSelfSent(config, {
-                kind: 'sent-voice',
-                groupId: String(data.group_id),
-                text: `[语音${useGsv ? '/gpt-sovits' : ''}] ${voiceText}`,
-              })
-              appendNote({
-                kind: 'group-auto',
-                role: String(config.selfLabel.get() || 'DS'),
-                from: sender,
-                name: senderName,
-                text,
-                reply: `（语音）${voiceText}`,
-                extra,
-              })
-              // 和文字回复一样给一条成功日志，控制台里看得见「这次真发出去了」
-              console.info(`[dsh-versatileds-plugin] 群里发语音：${voiceText}`)
-              return
-            } catch (err) {
-              console.warn('[dsh-versatileds-plugin] 语音发送失败，回退文本:', err?.message ?? err)
             }
           }
           // 分段发：一句长话拆成两三条短消息，像人一段一段打
