@@ -368,6 +368,8 @@ export const Config = Schema.object({
     .description('要合成的语言：zh / en / ja'),
   gsvSpeed: Schema.number().default(1.0).volatile()
     .description('语速：1.0 正常，0.9 慢一点，1.1 快一点'),
+  gsvPitch: Schema.number().default(2).volatile()
+    .description('音调（半音）：正数更幼更「夹」，负数更成熟；默认 +2，0 保持原声'),
   ruleSyncEnabled: Schema.boolean().default(true).volatile()
     .description('定时主动看群公告和群介绍，记成群规'),
   ruleSyncHours: Schema.number().default(6).volatile()
@@ -2532,6 +2534,31 @@ function gsvStatus(config) {
 }
 
 /**
+ * 变调：正数升（更幼/更「夹」），负数降（更低/更成熟）。
+ * GPT-SoVITS 本身没有音高参数，只能靠 ffmpeg：asetrate 改采样率再 atempo 拉回时长，音色跟着变。
+ * 找不到 ffmpeg 就原样返回。
+ */
+async function pitchVoice(wavPath, semitones) {
+  const st = Number(semitones)
+  if (!Number.isFinite(st) || Math.abs(st) < 0.1) return wavPath
+  const ratio = Math.pow(2, st / 12)
+  const out = wavPath.replace(/\.wav$/i, '.pitch.wav')
+  const args = [
+    '-y', '-loglevel', 'error', '-i', wavPath,
+    '-af', `asetrate=32000*${ratio.toFixed(4)},aresample=32000,atempo=${(1 / ratio).toFixed(4)}`,
+    out,
+  ]
+  for (const exe of ['ffmpeg', ...bundledFfmpegCandidates()]) {
+    if (await runQuiet(exe, args, 60000)) {
+      try {
+        if (existsSync(out) && statSync(out).size > 1000) return out
+      } catch { /* 用原文件 */ }
+    }
+  }
+  return wavPath
+}
+
+/**
  * 剪掉语音开头/结尾的静音：GPT-SoVITS 会在前面留 1-2 秒空白，听着很拖。
  * 找不到 ffmpeg 就原样返回（别因为没装 ffmpeg 整条语音发不出去）。
  */
@@ -2588,7 +2615,9 @@ async function gsvSynthesize(text, config) {
   const file = join(dir, `gsv-${Date.now()}.wav`)
   writeFileSync(file, buf)
   // GPT-SoVITS 前面会留 1-2 秒空白，剪掉再发（找不到 ffmpeg 就用原文件）
-  return trimVoiceSilence(file)
+  const trimmed = await trimVoiceSilence(file)
+  // 再按 gsvPitch 变调：正数更幼更「夹」，负数更成熟
+  return pitchVoice(trimmed, config?.gsvPitch?.get?.() ?? 0)
 }
 
 /**
