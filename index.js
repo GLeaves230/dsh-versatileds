@@ -55,7 +55,7 @@ const VENDOR = join(PLUGIN_ROOT, 'vendor')
 
 /**
  * 外部依赖：插件自带的包 + 期望落地位置 + 判定就绪的探针文件。
- * 缺失就从 vendor 解压，做到「零外部依赖」。
+ * 缺失时**先按镜像下载**，下载失败再退回 vendor 里的自带包（2026-10-26 主人：能下载就别塞包里）。
  * memorix 已于 2026-10-25 停用（记忆改成 md，主人定的），不再自检也不再解压。
  */
 function depSpecs(home) {
@@ -63,12 +63,60 @@ function depSpecs(home) {
     {
       name: 'ffmpeg',
       zip: join(VENDOR, 'ffmpeg.zip'),
-      // 包里是 imageio_ffmpeg/binaries/...，所以解到 ffmpeg 这一层
+      // 包里是 imageio_ffmpeg/binaries/...，解到 .dsh/tmp/live/ffmpeg（和 bundledFfmpegCandidates 找的位置一致）
       target: join(home, 'tmp', 'live', 'ffmpeg'),
       probe: join(home, 'tmp', 'live', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
       hint: 'B站 抓帧和表情包缩图要用',
+      // 优先走 PyPI 镜像的 imageio-ffmpeg wheel（里面就是同一个 exe），下载失败才用 vendor 自带包
+      wheel: true,
+      wheelJson: 'https://pypi.tuna.tsinghua.edu.cn/pypi/imageio-ffmpeg/json',
+      urls: [],
     },
   ]
+}
+
+/** 从镜像下载依赖；返回 { ok, why }。wheel 的（imageio-ffmpeg）下载后解压出 exe。 */
+async function downloadDep(dep) {
+  const urls = Array.isArray(dep.urls) ? dep.urls.slice() : []
+  // wheel 类型：现查 PyPI 镜像的 json，拿 win_amd64 的 wheel 地址（硬写 URL 会被 CDN 换掉）
+  if (dep.wheel) {
+    try {
+      const r = await fetch(dep.wheelJson, { signal: AbortSignal.timeout(30_000) })
+      const j = await r.json()
+      const u = (j.urls || []).find((x) => /win_amd64\.whl$/.test(String(x.filename || '')))
+      if (u?.url) urls.unshift(u.url)
+    } catch (err) {
+      console.warn(`[dsh-versatileds-plugin] ${dep.name} 查 wheel 地址失败：${err?.message ?? err}`)
+    }
+  }
+  if (!urls.length) return { ok: false, why: '没有下载地址' }
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(600_000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length < 1_000_000) throw new Error(`文件太小（${buf.length} 字节）`)
+      if (dep.wheel) {
+        // wheel 就是个 zip：解到 target，ffmpeg 会落在 imageio_ffmpeg/binaries/ 下
+        mkdirSync(dep.target, { recursive: true })
+        const tmpZip = join(dep.target, '_download.whl')
+        writeFileSync(tmpZip, buf)
+        const q = (s) => String(s).replace(/'/g, "''")
+        spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+          `Expand-Archive -LiteralPath '${q(tmpZip)}' -DestinationPath '${q(dep.target)}' -Force`],
+        { stdio: 'ignore', timeout: 300_000 })
+        try { unlinkSync(tmpZip) } catch { /* ignore */ }
+      } else {
+        mkdirSync(dirname(dep.probe), { recursive: true })
+        writeFileSync(dep.probe, buf)
+      }
+      if (existsSync(dep.probe)) return { ok: true, why: '' }
+      throw new Error('写完还是找不到探针')
+    } catch (err) {
+      console.warn(`[dsh-versatileds-plugin] ${dep.name} 下载失败（${String(url).split('/')[2]}）：${err?.message ?? err}`)
+    }
+  }
+  return { ok: false, why: '所有镜像都失败了' }
 }
 
 /** 解压一个依赖包；返回 { ok, why }。 */
@@ -98,20 +146,26 @@ export function apply(ctx, config) {
     console.info(`[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
   }
 
-  // 自检 + 缺失时从自带包解压：后台跑，不挡插件启动
+  // 自检 + 缺失时先下载、下载不行再从自带包解压：后台跑，不挡插件启动
   for (const dep of depSpecs(home)) {
     if (existsSync(dep.probe)) {
       if (firstBoot) console.info(`[dsh-versatileds-plugin] 依赖就绪：${dep.name}`)
       continue
     }
-    console.info(`[dsh-versatileds-plugin] 依赖缺失：${dep.name}，后台解压中…`)
-    setTimeout(() => {
+    console.info(`[dsh-versatileds-plugin] 依赖缺失：${dep.name}，后台下载中…`)
+    setTimeout(async () => {
       try {
+        const got = await downloadDep(dep)
+        if (got.ok) {
+          console.info(`[dsh-versatileds-plugin] 依赖已下载：${dep.name}`)
+          return
+        }
+        console.info(`[dsh-versatileds-plugin] ${dep.name} 下载不可用（${got.why}），退回自带包`)
         const r = extractDep(dep)
         if (r.ok) console.info(`[dsh-versatileds-plugin] 依赖已解压：${dep.name}`)
         else console.warn(`[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
       } catch (err) {
-        console.warn(`[dsh-versatileds-plugin] 依赖 ${dep.name} 解压异常：${err?.message ?? err}`)
+        console.warn(`[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化异常：${err?.message ?? err}`)
       }
     }, 500)
   }
