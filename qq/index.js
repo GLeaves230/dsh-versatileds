@@ -8532,6 +8532,22 @@ export function apply(ctx, config) {
           reply: outReply,
           extra,
         })
+        // 控制台日志：自动回复：@对象 消息内容（聊天目标，回复对象）
+        try {
+          const atQqs = (Array.isArray(data.message) ? data.message : [])
+            .filter((m) => m && m.type === 'at')
+            .map((m) => String(m.data?.qq || ''))
+            .filter((q) => q && q !== 'all')
+          const atNames = atQqs.map((q) => {
+            const hit = Array.isArray(data.message) ? data.message.find((m) => m && m.type === 'at' && String(m.data?.qq) === q) : null
+            return String(hit?.data?.name || q)
+          })
+          const atPart = atNames.length ? `@${atNames.join('/')} ` : ''
+          const targetLabel = isGroup
+            ? `群「${String(data.group_name || data.group_id || '')}」`
+            : `私聊「${senderName}」`
+          plog('info', `[dsh-versatileds] 自动回复：${atPart}${outReply}（${targetLabel}，回复：${senderName}）`)
+        } catch { /* 日志失败不影响回复 */ }
       } catch (err) {
         plog('warn', '[dsh-versatileds] 自动回复失败:', err?.message ?? err)
         if (err?.stack) plog('warn', String(err.stack).split('\n').slice(0, 6).join('\n'))
