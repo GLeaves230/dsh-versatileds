@@ -857,6 +857,7 @@ window.__ModuleLoader__.load({
       const [view, setView] = React.useState({ text: '', error: '', note: '' })
       const [lines, setLines] = React.useState(300)
       const [busy, setBusy] = React.useState(false)
+      const [lastAt, setLastAt] = React.useState(null)
 
       const loadList = React.useCallback(async () => {
         setBusy(true)
@@ -864,6 +865,7 @@ window.__ModuleLoader__.load({
           const r = await fetch(`${QQ_STATUS_URL}/logs`, { cache: 'no-store' })
           const d = await r.json()
           setData(d && d.groups ? d : { groups: [] })
+          setLastAt(new Date())
         } catch {
           setData({ groups: [] })
         } finally {
@@ -877,6 +879,7 @@ window.__ModuleLoader__.load({
           const d = await r.json()
           if (d && d.ok) {
             setView({ text: d.text || '', error: '', note: d.truncated ? '（文件太大，只读了最后 2MB）' : '' })
+            setLastAt(new Date())
           } else {
             setView({ text: '', error: (d && d.error) || '读取失败', note: '' })
           }
@@ -935,6 +938,10 @@ window.__ModuleLoader__.load({
               opacity: busy ? 0.6 : 1,
             },
           }, busy ? '刷新中…' : '刷新'),
+          lastAt
+            ? React.createElement('span', { style: { fontSize: '12px', opacity: 0.55 } },
+                `上次刷新 ${lastAt.toLocaleTimeString('zh-CN', { hour12: false })}`)
+            : null,
           React.createElement('span', { style: { fontSize: '12px', opacity: 0.7 } }, '显示行数'),
           React.createElement('select', {
             value: String(lines),
