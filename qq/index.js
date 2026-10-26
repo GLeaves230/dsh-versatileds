@@ -4903,7 +4903,11 @@ function plainText(segments) {
     .map((seg) => {
       if (seg.type === 'text') return seg.data?.text || ''
       // 分享卡片要能把标题带出来，否则整条消息看着像空的，插件会直接不回
-      if (seg.type === 'json') {
+      if (seg.type === 'json' || seg.type === 'xml') {
+        // QQ 红包是 json/xml 卡片：不单独认出来，模型只会看到「[卡片]」，等于没看见
+        // （2026-10-26 主人：他看不到 QQ 红包）
+        const raw = String(seg.data?.data || seg.data?.xml || '')
+        if (/红包|redpack|RedPacket|hongbao|RedEnvelope/i.test(raw)) return ' [红包] '
         const card = parseShareCard(seg)
         return card ? ` ${cardTextOf(card)} ` : ' [卡片] '
       }
