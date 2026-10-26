@@ -281,7 +281,8 @@ window.__ModuleLoader__.load({
           (status.picked && status.mode === 'auto' ? ` · 自动挑的是 ${status.picked}` : '')
         : '正在读取当前聚焦…'
       return React.createElement(
-        'label',
+        // 用 div 不用 label：label 里的按钮点击会被转发给关联控件，鼠标判定会怪
+        'div',
         { style: rowStyle },
         React.createElement('span', { style: labelStyle }, '当前聚焦'),
         React.createElement(
@@ -292,18 +293,21 @@ window.__ModuleLoader__.load({
             'div',
             { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
             React.createElement('button', {
+              type: 'button',
               disabled: disabled || !status?.picked,
-              onClick: () => { if (status?.picked) { form.set('focusChatTarget', status.picked); refresh() } },
+              onClick: (e) => { e.preventDefault(); e.stopPropagation(); if (status?.picked) { form.set('focusChatTarget', status.picked); refresh() } },
               style: { padding: '4px 12px', cursor: 'pointer' },
             }, '用自动挑的这个'),
             React.createElement('button', {
+              type: 'button',
               disabled: disabled,
-              onClick: () => { form.set('focusChatTarget', ''); refresh() },
+              onClick: (e) => { e.preventDefault(); e.stopPropagation(); form.set('focusChatTarget', ''); refresh() },
               style: { padding: '4px 12px', cursor: 'pointer' },
             }, '清空（回到自动）'),
             React.createElement('button', {
+              type: 'button',
               disabled: false,
-              onClick: refresh,
+              onClick: (e) => { e.preventDefault(); e.stopPropagation(); refresh() },
               style: { padding: '4px 12px', cursor: 'pointer' },
             }, '刷新'),
           ),
@@ -356,11 +360,13 @@ window.__ModuleLoader__.load({
             'div',
             { style: { display: 'flex', gap: '8px' } },
             React.createElement('button', {
+              type: 'button',
               disabled: Boolean(busy),
               onClick: () => send('private'),
               style: { padding: '4px 14px', cursor: 'pointer' },
             }, busy === 'private' ? '发送中…' : '发私聊测试'),
             React.createElement('button', {
+              type: 'button',
               disabled: Boolean(busy),
               onClick: () => send('group'),
               style: { padding: '4px 14px', cursor: 'pointer' },
