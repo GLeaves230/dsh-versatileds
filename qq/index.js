@@ -7969,13 +7969,13 @@ export function apply(ctx, config) {
           const replyId = wantQuote ? data.message_id : ''
           // 正文里写了「@主人名」就发成真正的 at 段（QQ 里 at 靠 at 段提醒，裸文本「@名字」不会亮）：
           // at 段只带 QQ 号，群里显示的是对方群名片，号码不会露出来。
+          // 「@主人」这种称呼也叫得认——它经常写「@主人」而不是「@黑木钟」（2026-10-26 主人发现）。
           const ownerDisplay = ownerDisplayName(await ownerNames())
-          if (ownerDisplay) {
-            const token = `@${ownerDisplay}`
-            if (reply.includes(token)) {
-              reply = reply.split(token).join('').trim()
-              if (!atUid) atUid = ownerQQOf(config)
-            }
+          const ownerTokens = [ownerDisplay ? `@${ownerDisplay}` : '', '@主人'].filter(Boolean)
+          for (const token of ownerTokens) {
+            if (!reply.includes(token)) continue
+            reply = reply.split(token).join('').trim()
+            if (!atUid) atUid = ownerQQOf(config)
           }
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
