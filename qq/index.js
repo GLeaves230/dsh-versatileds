@@ -335,7 +335,7 @@ export const Config = Schema.object({
   proactiveTargets: Schema.string().default('').volatile()
     .description('主动搭话对象列表，英文逗号分隔的多个 QQ 号；填了它就不用管单个对象'),
   focusChatTarget: Schema.string().default('').volatile()
-    .description('手动指定聚焦聊天：填群号或 QQ 号，主动搭话只盯这一个；留空＝按活跃度自动挑'),
+    .description('手动指定聚焦聊天：填群号或 QQ 号，可以逗号分隔填多个（群和私聊都能聚焦），主动搭话轮流盯；留空＝按活跃度自动挑'),
   proactiveMinGapSec: Schema.number().default(7200).volatile()
     .description('两次主动搭话最短间隔（秒）'),
   proactiveMaxGapSec: Schema.number().default(21600).volatile()
@@ -7048,21 +7048,34 @@ export function apply(ctx, config) {
 
   /** 重新扫目标：配置里的群 + 好友；群会跟群列表核对，退掉的群自动剔除。 */
   async function refreshProactiveQueue() {
-    // 手动指定了聚焦聊天就先看它活不活跃：6 小时内没消息 / 群已不在列表，就当它凉了，回退自动挑
-    const pinned = String(config.focusChatTarget.get() || '').trim()
-    if (pinned) {
-      const groupSet = new Set(parseIds(config.proactiveGroups.get()).map(String))
-      let aliveEnough = false
-      if (groupSet.has(pinned)) {
-        try {
-          const f = chatFilePath(`group-${pinned}`)
-          aliveEnough = existsSync(f) && Date.now() - statSync(f).mtimeMs < 6 * 3600_000
-        } catch { aliveEnough = false }
-      } else {
-        aliveEnough = true // 填的是好友：没法查活跃，就按填的来
+    // 手动指定了聚焦聊天（可填多个：群号、QQ 号用逗号分隔；群和私聊都能手动聚焦）
+    const pinnedRaw = String(config.focusChatTarget.get() || '').trim()
+    if (pinnedRaw) {
+      const pinnedIds = parseIds(pinnedRaw)
+      let aliveGroups = null
+      try {
+        const gs = await ob.groups()
+        aliveGroups = new Set((gs || []).map((g) => String(g.group_id)))
+      } catch { /* 拉不到就不按群列表过滤 */ }
+      const configGroups = parseIds(config.proactiveGroups.get()).map(String)
+      const out = []
+      for (const id of pinnedIds) {
+        // 先按群列表认：手动填的群号即使没加进「主动搭话的群」也要当群处理，
+        // 不然会被当成好友 QQ 发私聊，群里永远收不到（2026-10-26 主人：设成群聊聚焦不生效）
+        const isGroup = Boolean(aliveGroups && aliveGroups.has(id)) || configGroups.includes(id)
+        if (isGroup) {
+          let alive = false
+          try {
+            const f = chatFilePath(`group-${id}`)
+            alive = existsSync(f) && Date.now() - statSync(f).mtimeMs < 6 * 3600_000
+          } catch { alive = false }
+          if (alive) out.push({ type: 'group', id })
+          else plog('info', `[dsh-versatileds] 指定聚焦的群 ${id} 6 小时没消息，跳过`)
+        } else {
+          out.push({ type: 'private', id })
+        }
       }
-      if (aliveEnough) return [{ type: groupSet.has(pinned) ? 'group' : 'private', id: pinned }]
-      plog('info', `[dsh-versatileds] 指定聚焦的 ${pinned} 不活跃，回退自动挑`)
+      if (out.length) return out
     }
     const list = []
     const groups = parseIds(config.proactiveGroups.get())
@@ -7789,6 +7802,11 @@ export function apply(ctx, config) {
       const atMe = (data.message || []).some(
         (seg) => seg.type === 'at' && String(seg.data?.qq) === self,
       )
+      // 被 @ 了就先挂 5 分钟聚焦窗口：之前只在「没被 @」的分支里设，被 @ 时反而不会跟随群聊
+      // （2026-10-26 主人：手动聚焦群聊不生效——@ 之后那几条根本没设 focus）
+      if (atMe) {
+        try { focusChat.set(`g:${data.group_id}`, Date.now() + FOCUS_MS) } catch { /* ignore */ }
+      }
       // 群里正在接龙（多人刷同一句）期间就别回正经话了——一发言就把接龙打断。
       // 跟不跟由 trackGroupRelay 决定，被 @ 了才照常回（2026-10-25 主人反馈「接龙不对」）
       const relayNow = relayState.get(String(data.group_id))
