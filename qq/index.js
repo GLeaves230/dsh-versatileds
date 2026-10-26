@@ -345,11 +345,29 @@ export const Config = Schema.object({
   videoShareCardStyle: Schema.string().default('text').volatile()
     .description('分享样式：text＝封面图+标题+b23 短链（手机端样式）；link＝纯文本+标题+完整 bilibili.com 链接（电脑端样式）'),
   voiceEnabled: Schema.boolean().default(true).volatile()
-    .description('允许用 NapCat 的 AI 音色发语音（群里可用；私聊受 NapCat 限制，见 README）'),
+    .description('允许发语音（群里可用；私聊受 NapCat 限制，见 README）'),
+  voiceBackend: Schema.string().default('qq').volatile()
+    .description('语音方案：qq＝QQ 官方 AI 语音（零依赖）；gpt-sovits＝本地 GPT-SoVITS（要装 Python 3.11 + torch + 模型，显存 ≥4GB）'),
   voiceCharacter: Schema.string().default('lucy-voice-female1').volatile()
-    .description('发语音用的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
+    .description('QQ 官方 AI 语音的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
   voiceChance: Schema.number().default(5).volatile()
     .description('闲聊时主动用语音回复的概率（0-100），0 表示只在被要求时才发语音；长回复不转语音'),
+  gsvApiUrl: Schema.string().default('http://127.0.0.1:9880').volatile()
+    .description('GPT-SoVITS API 地址（api_v2.py，默认 9880 端口）'),
+  gsvDir: Schema.string().default('').volatile()
+    .description('GPT-SoVITS 根目录（里面有 api_v2.py）；留空表示没装，只能用 QQ 官方语音'),
+  gsvPython: Schema.string().default('').volatile()
+    .description('跑 GPT-SoVITS 的 Python 3.11 路径；留空用 <DSH_HOME>/python311/python.exe'),
+  gsvRefAudio: Schema.string().default('').volatile()
+    .description('GPT-SoVITS 参考音频路径（wav，3-10 秒，决定音色和情绪）；留空用内置的邻家小妹样本'),
+  gsvRefText: Schema.string().default('').volatile()
+    .description('参考音频里说的那句话（要和音频完全一致）'),
+  gsvRefLang: Schema.string().default('zh').volatile()
+    .description('参考音频语言：zh / en / ja'),
+  gsvTextLang: Schema.string().default('zh').volatile()
+    .description('要合成的语言：zh / en / ja'),
+  gsvSpeed: Schema.number().default(1.0).volatile()
+    .description('语速：1.0 正常，0.9 慢一点，1.1 快一点'),
   ruleSyncEnabled: Schema.boolean().default(true).volatile()
     .description('定时主动看群公告和群介绍，记成群规'),
   ruleSyncHours: Schema.number().default(6).volatile()
@@ -2483,6 +2501,75 @@ function transcribeVoice(wavPath) {
 }
 
 /**
+ * GPT-SoVITS 能不能跑：目录（api_v2.py）、Python 3.11、torch+CUDA 都得在。
+ * 结果缓存 60 秒，别每次设置页刷新都去 spawn 一次 python。
+ */
+let gsvStatusCache = { at: 0, ok: false, reasons: [] }
+
+function gsvStatus(config) {
+  const now = Date.now()
+  if (now - gsvStatusCache.at < 60_000) return gsvStatusCache
+  const reasons = []
+  const dir = String(config?.gsvDir?.get?.() || '').trim()
+  const py = String(config?.gsvPython?.get?.() || '').trim() || join(dshHome(), 'python311', 'python.exe')
+  if (!dir) reasons.push('没填 GPT-SoVITS 目录')
+  else if (!existsSync(join(dir, 'api_v2.py'))) reasons.push(`目录里找不到 api_v2.py：${dir}`)
+  if (!existsSync(py)) {
+    reasons.push(`找不到 Python 3.11：${py}`)
+  } else {
+    try {
+      const r = spawnSync(py, ['-c', 'import torch;print(1 if torch.cuda.is_available() else 0)'], {
+        encoding: 'utf8',
+        timeout: 90_000,
+      })
+      if (!String(r.stdout || '').trim().startsWith('1')) reasons.push('torch 用不了 CUDA（没装 torch 或没有 N 卡）')
+    } catch {
+      reasons.push('Python/torch 检测失败')
+    }
+  }
+  gsvStatusCache = { at: now, ok: reasons.length === 0, reasons }
+  return gsvStatusCache
+}
+
+/**
+ * 调本地 GPT-SoVITS（api_v2.py 的 /tts）合成一段 wav，返回文件路径。
+ * 参考音频决定音色和情绪；speech 里带表情符号会被去掉（念出来很怪）。
+ */
+async function gsvSynthesize(text, config) {
+  const base = String(config?.gsvApiUrl?.get?.() || 'http://127.0.0.1:9880').replace(/\/+$/, '')
+  const refAudio = String(config?.gsvRefAudio?.get?.() || '').trim()
+  const refText = String(config?.gsvRefText?.get?.() || '').trim()
+  if (!refAudio) throw new Error('还没配参考音频（gsvRefAudio）')
+  if (!refText) throw new Error('还没配参考音频对应的文本（gsvRefText）')
+  const q = new URLSearchParams({
+    text: String(text || '').trim(),
+    text_lang: String(config?.gsvTextLang?.get?.() || 'zh'),
+    ref_audio_path: refAudio,
+    prompt_text: refText,
+    prompt_lang: String(config?.gsvRefLang?.get?.() || 'zh'),
+    text_split_method: 'cut5',
+    batch_size: '1',
+    media_type: 'wav',
+    streaming_mode: 'false',
+    speed_factor: String(config?.gsvSpeed?.get?.() ?? 1),
+  })
+  const res = await fetch(`${base}/tts?${q}`, { signal: AbortSignal.timeout(90_000) })
+  if (!res.ok) {
+    // 把 API 的报错带出来，不然只剩一个 400 没法查
+    let detail = ''
+    try { detail = (await res.text()).slice(0, 300) } catch { /* ignore */ }
+    throw new Error(`GPT-SoVITS 返回 ${res.status}${detail ? `：${detail}` : ''}`)
+  }
+  const buf = Buffer.from(await res.arrayBuffer())
+  if (buf.length < 1000) throw new Error('GPT-SoVITS 返回的音频太小')
+  const dir = join(versatiledsBase(), 'qq', 'voice-out')
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, `gsv-${Date.now()}.wav`)
+  writeFileSync(file, buf)
+  return file
+}
+
+/**
  * 记忆文件写入锁：和记忆目录里的 lock.mjs / lock.py 共用同一个 `.lock`。
  * QQ 侧写 notes/bili_log 时先拿锁，DSH 侧写记忆也拿同一把，两边不会同时改同一个文件。
  * 同步实现：抢不到就用 Atomics.wait 小睡重试，等满 timeoutMs 还抢不到就降级直接写（宁可写也别卡住）。
@@ -3196,6 +3283,16 @@ function startStatusServer(config) {
       // 调试点：确认 volatile 的开关值有没有跟着面板/配置翻转
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ enabled: config.enabled.get() !== false }))
+      return
+    }
+    if (url.pathname === '/voice_status') {
+      // 设置页用：这个方案能不能跑、跑不动的原因
+      const gsv = gsvStatus(config)
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({
+        backend: String(config.voiceBackend.get() || 'qq'),
+        gsv,
+      }))
       return
     }
     if (url.pathname === '/login/open') {
@@ -7703,17 +7800,29 @@ export function apply(ctx, config) {
             // 「念这句：『阿尔泽布，我已登神』」——引号里的原话优先，别被模型改写
             const quoted = text.match(/[：:，,\s]\s*[“"「『‘]([^”"」』’]{1,80})[”"」』’]/)
             const voiceText = (quoted ? quoted[1] : stripBrackets(reply)).trim() || '嗯'
+            // 语音方案：qq＝QQ 官方 AI 语音（零依赖）；gpt-sovits＝本地模型
+            // 选了 gpt-sovits 但机器跑不动（没装/没 N 卡）→ 自动退回官方语音，别整条哑掉
+            const backend = String(config.voiceBackend.get() || 'qq')
+            const useGsv = backend === 'gpt-sovits' && gsvStatus(config).ok
             try {
-              await ob.call('send_group_ai_record', {
-                character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
-                text: voiceText,
-                group_id: Number(data.group_id),
-              })
+              if (useGsv) {
+                const wav = await gsvSynthesize(voiceText, config)
+                await ob.call('send_group_msg', {
+                  group_id: Number(data.group_id),
+                  message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+                })
+              } else {
+                await ob.call('send_group_ai_record', {
+                  character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
+                  text: voiceText,
+                  group_id: Number(data.group_id),
+                })
+              }
               // 和聊天/分享/表情包完全同一套：走 recordSelfSent（发送登记 + chat 流水，role 用 DS）
               recordSelfSent(config, {
                 kind: 'sent-voice',
                 groupId: String(data.group_id),
-                text: `[语音] ${voiceText}`,
+                text: `[语音${useGsv ? '/gpt-sovits' : ''}] ${voiceText}`,
               })
               appendNote({
                 kind: 'group-auto',
@@ -8153,10 +8262,22 @@ export function apply(ctx, config) {
             if (!args.live) {
               return JSON.stringify({ 动作: 'voice', 群: gid, 音色: character, 文本: voiceText, 预览: true }, null, 2)
             }
+            // 语音方案跟自动回复一致：qq＝官方 AI 语音；gpt-sovits＝本地模型（跑不动自动退回）
+            const backend = String(args.backend || config.voiceBackend.get() || 'qq')
+            const useGsv = backend === 'gpt-sovits' && gsvStatus(config).ok
+            if (useGsv) {
+              const wav = await gsvSynthesize(voiceText, config)
+              const sent = await ob.call('send_group_msg', {
+                group_id: Number(gid),
+                message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+              })
+              recordSelfSent(config, { kind: 'sent-voice', groupId: gid, text: `[语音/gpt-sovits] ${voiceText}` })
+              return JSON.stringify({ 动作: 'voice', 方案: 'gpt-sovits', 已发送: sent, 音频: wav }, null, 2)
+            }
             const vr = await ob.call('send_group_ai_record', { character, text: voiceText, group_id: Number(gid) })
             // 工具发的语音也要进同一套日志（发送登记 + chat 流水，role=DS）
             recordSelfSent(config, { kind: 'sent-voice', groupId: gid, text: `[语音] ${voiceText}` })
-            return JSON.stringify({ 动作: 'voice', 已发送: vr, 音色: character }, null, 2)
+            return JSON.stringify({ 动作: 'voice', 方案: 'qq', 已发送: vr, 音色: character }, null, 2)
           }
           default:
             return `未知动作: ${args.action}`

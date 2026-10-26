@@ -260,6 +260,38 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 语音方案下拉：QQ 官方 AI 语音 / 本地 GPT-SoVITS。 */
+    const VOICE_GSV_FIELDS = [
+      ['gsvApiUrl', 'API 地址', 'api_v2.py 默认 http://127.0.0.1:9880'],
+      ['gsvDir', 'GPT-SoVITS 目录', '里面有 api_v2.py；留空＝没装，只能用官方语音'],
+      ['gsvPython', 'Python 3.11 路径', '留空用 <DSH_HOME>/python311/python.exe'],
+      ['gsvRefAudio', '参考音频（wav）', '3-10 秒，决定音色和情绪'],
+      ['gsvRefText', '参考音频的文本', '要和音频里说的一字不差'],
+      ['gsvRefLang', '参考音频语言', 'zh / en / ja'],
+      ['gsvTextLang', '合成语言', 'zh / en / ja'],
+    ]
+
+    function VoiceBackendRow(props) {
+      const { form, value, disabled } = props
+      const [pending, setPending] = React.useState(false)
+      const current = String(value || 'qq')
+      return React.createElement(
+        'label',
+        { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, '语音方案'),
+        React.createElement('select', {
+          value: current,
+          disabled: disabled || pending,
+          onChange: async (e) => {
+            setPending(true)
+            try { await form.set('voiceBackend', e.target.value) } finally { setPending(false) }
+          },
+          style: { ...inputStyle, cursor: 'pointer' },
+        }, [['qq', 'QQ 官方 AI 语音'], ['gpt-sovits', 'GPT-SoVITS（本地）']].map(([id, name]) => React.createElement('option', { key: id, value: id }, name))),
+        React.createElement('span', { style: hintStyle }, '官方语音零依赖；GPT-SoVITS 要本机装 Python 3.11 + 模型，跑不动会自动退回官方'),
+      )
+    }
+
     /** 语音音色：QQ 的 AI 音色列表（和 NapCat get_ai_characters 返回的一致）。 */
     const VOICE_OPTIONS = [
       ['lucy-voice-laibixiaoxin', '小新（推荐）'],
@@ -1537,14 +1569,42 @@ window.__ModuleLoader__.load({
         }
 
         if (activeTab === 'voice') {
+          // 先选方案，下面的字段跟着换：QQ 官方只要挑音色；GPT-SoVITS 要填一堆本地参数
           children.push(
-            React.createElement(VoiceRow, {
-              key: 'voice-character',
+            React.createElement(VoiceBackendRow, {
+              key: 'voice-backend',
               form,
-              value: v.voiceCharacter,
+              value: v.voiceBackend,
               disabled: !snap.writable,
             }),
           )
+          if (String(v.voiceBackend || 'qq') === 'gpt-sovits') {
+            for (const [field, label, hint] of VOICE_GSV_FIELDS) {
+              children.push(
+                React.createElement(TextRow, {
+                  key: field, form, field, label, hint,
+                  value: v[field] ?? '',
+                  disabled: !snap.writable,
+                }),
+              )
+            }
+            children.push(
+              React.createElement(NumberRow, {
+                key: 'gsvSpeed', form, field: 'gsvSpeed', label: '语速（0.8-1.2）', action: '',
+                value: Number(v.gsvSpeed ?? 1),
+                disabled: !snap.writable,
+              }),
+            )
+          } else {
+            children.push(
+              React.createElement(VoiceRow, {
+                key: 'voice-character',
+                form,
+                value: v.voiceCharacter,
+                disabled: !snap.writable,
+              }),
+            )
+          }
         }
 
         if (activeTab === 'media') children.push(
