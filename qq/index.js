@@ -3458,15 +3458,34 @@ function startStatusServer(config, napcat = null) {
       return
     }
     if (url.pathname === '/focus_status') {
-      // 设置页「主动」页用：当前聚焦是谁（手动指定 or 自动），以及内存里正在聚焦的窗口
+      // 设置页「主动」页用：手动指定 or 自动挑；把自动挑的结果也告诉前端，输入框可以一键填
       const pinned = String(config.focusChatTarget.get() || '').trim()
       const now = Date.now()
       const active = []
       for (const [key, until] of focusChat.entries()) {
         if (Number(until) > now) active.push({ key, until })
       }
+      const groups = String(config.proactiveGroups.get() || '')
+        .split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
+      const actOf = (gid) => {
+        try {
+          const f = chatFilePath(`group-${gid}`)
+          if (!existsSync(f)) return 0
+          const age = now - statSync(f).mtimeMs
+          return age < 10 * 60_000 ? 3 : age < 3600_000 ? 2 : age < 6 * 3600_000 ? 1 : 0
+        } catch { return 0 }
+      }
+      const picked = groups
+        .map((g) => ({ id: g, act: actOf(g) }))
+        .sort((a, b) => b.act - a.act)[0]?.id || ''
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      res.end(JSON.stringify({ pinned: pinned || '', mode: pinned ? 'manual' : 'auto', active }))
+      res.end(JSON.stringify({
+        pinned: pinned || '',
+        mode: pinned ? 'manual' : 'auto',
+        effective: pinned || picked,
+        picked,
+        active,
+      }))
       return
     }
     if (url.pathname === '/voice_status') {
@@ -6632,13 +6651,21 @@ export function apply(ctx, config) {
 
   /** 重新扫目标：配置里的群 + 好友；群会跟群列表核对，退掉的群自动剔除。 */
   async function refreshProactiveQueue() {
-    // 设置页手动指定了「聚焦聊天」就只盯它（只有一个），别的用户不动就走原来的自动挑选
+    // 手动指定了聚焦聊天就先看它活不活跃：6 小时内没消息 / 群已不在列表，就当它凉了，回退自动挑
     const pinned = String(config.focusChatTarget.get() || '').trim()
     if (pinned) {
-      const isGroup = /^\d{5,}$/.test(pinned) && pinned.length >= 6
-      // 群里 6-10 位；好友 5-11 位，用配置里的群号集合判断更准
       const groupSet = new Set(parseIds(config.proactiveGroups.get()).map(String))
-      return [{ type: groupSet.has(pinned) ? 'group' : 'private', id: pinned }]
+      let aliveEnough = false
+      if (groupSet.has(pinned)) {
+        try {
+          const f = chatFilePath(`group-${pinned}`)
+          aliveEnough = existsSync(f) && Date.now() - statSync(f).mtimeMs < 6 * 3600_000
+        } catch { aliveEnough = false }
+      } else {
+        aliveEnough = true // 填的是好友：没法查活跃，就按填的来
+      }
+      if (aliveEnough) return [{ type: groupSet.has(pinned) ? 'group' : 'private', id: pinned }]
+      console.info(`[dsh-versatileds-plugin] 指定聚焦的 ${pinned} 不活跃，回退自动挑`)
     }
     const list = []
     const groups = parseIds(config.proactiveGroups.get())

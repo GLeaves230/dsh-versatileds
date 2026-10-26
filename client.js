@@ -260,6 +260,57 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 聚焦聊天的实时状态：显示大肥鱼现在盯的是哪个会话（手动指定 / 自动挑），可一键填进输入框。 */
+    function FocusStatusRow(props) {
+      const { form, disabled } = props
+      const [status, setStatus] = React.useState(null)
+      const refresh = async () => {
+        try {
+          const r = await fetch(`${QQ_STATUS_URL}/focus_status`, { cache: 'no-store' })
+          setStatus(await r.json())
+        } catch {
+          setStatus(null)
+        }
+      }
+      React.useEffect(() => { refresh() }, [])
+      const modeText = status
+        ? (status.mode === 'manual' ? '手动指定' : '自动挑（大肥鱼自己找活跃的）')
+        : '读取中…'
+      const html = status
+        ? `当前聚焦：${status.effective || '（还没有）'} · ${modeText}` +
+          (status.picked && status.mode === 'auto' ? ` · 自动挑的是 ${status.picked}` : '')
+        : '正在读取当前聚焦…'
+      return React.createElement(
+        'label',
+        { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, '当前聚焦'),
+        React.createElement(
+          'div',
+          { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' } },
+          React.createElement('span', { style: hintStyle }, html),
+          React.createElement(
+            'div',
+            { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            React.createElement('button', {
+              disabled: disabled || !status?.picked,
+              onClick: () => { if (status?.picked) { form.set('focusChatTarget', status.picked); refresh() } },
+              style: { padding: '4px 12px', cursor: 'pointer' },
+            }, '用自动挑的这个'),
+            React.createElement('button', {
+              disabled: disabled,
+              onClick: () => { form.set('focusChatTarget', ''); refresh() },
+              style: { padding: '4px 12px', cursor: 'pointer' },
+            }, '清空（回到自动）'),
+            React.createElement('button', {
+              disabled: false,
+              onClick: refresh,
+              style: { padding: '4px 12px', cursor: 'pointer' },
+            }, '刷新'),
+          ),
+        ),
+      )
+    }
+
     /** 测试语音：按当前参数念一段文本，先发私聊、也能发群。 */
     function VoiceTestRow(props) {
       const [text, setText] = React.useState('')
@@ -1668,6 +1719,10 @@ window.__ModuleLoader__.load({
               disabled: !snap.writable,
             }),
           )
+          // 「聚焦聊天」下面挂一行实时状态：当前实际聚焦的是谁（手动 or 自动挑的），可一键填
+          if (field === 'focusChatTarget') {
+            children.push(React.createElement(FocusStatusRow, { key: 'focus-status', form, disabled: !snap.writable }))
+          }
         }
 
         for (const [field, label, hint] of QQ_SECRET_FIELDS) {
