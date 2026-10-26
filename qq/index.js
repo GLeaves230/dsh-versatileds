@@ -8120,18 +8120,23 @@ export function apply(ctx, config) {
     // 合并转发（聊天记录）以前直接读成空 → 整条不回；这里把内容拉出来
     const forwardSeg = (data.message || []).find((s) => s && s.type === 'forward')
     const forwardText = forwardSeg ? await forwardToText(forwardSeg, ob) : ''
-    // 引用回复：被引用的那条如果是合并转发，也要套进去看内容
-    // （2026-10-26 主人：我回复引用的是聊天记录时，要能看到里面的内容）
-    let quotedForwardText = ''
+    // 引用回复：被引用的那条不管是聊天记录还是普通消息，都把内容带进来
+    // （2026-10-26 主人：我引用回复聊天记录时看不到内容；普通引用也一起补上）
+    let quotedText = ''
     if (!forwardSeg) {
       const replySeg = (data.message || []).find((s) => s && s.type === 'reply')
       const quotedId = replySeg?.data?.id || replySeg?.data?.message_id
       if (quotedId) {
         try {
-          const r = await ob.call('get_msg', { message_id: Number(quotedId) })
+          const r = await ob.call('get_msg', { message_id: Number(quotedId) || quotedId })
           const quotedSegs = r?.data?.message || r?.message || []
           const innerFwd = (Array.isArray(quotedSegs) ? quotedSegs : []).find((s) => s && s.type === 'forward')
-          if (innerFwd) quotedForwardText = await forwardToText(innerFwd, ob)
+          if (innerFwd) {
+            quotedText = await forwardToText(innerFwd, ob)
+          } else {
+            const q = plainText(quotedSegs).trim()
+            if (q) quotedText = `[引用] ${q.slice(0, 300)}`
+          }
         } catch { /* 拉不到就算了 */ }
       }
     }
@@ -8144,7 +8149,7 @@ export function apply(ctx, config) {
     let text = forwardText
       ? (baseText ? `${baseText}\n${forwardText}` : forwardText)
       : baseText
-    if (quotedForwardText) text = text ? `${text}\n${quotedForwardText}` : quotedForwardText
+    if (quotedText) text = text ? `${text}\n${quotedText}` : quotedText
     text = text
       || (imageFiles.length ? '[图片]' : '')
       || faceText
