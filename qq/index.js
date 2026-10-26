@@ -6613,7 +6613,10 @@ export function apply(ctx, config) {
     if (!topic) return false
 
     const context = `群里的人：${memberNames || '（没拉到）'}\n最近在聊：\n${topic}`
-    const reply = await generateGroupReply(context, groupRuleText(gid))
+    const replyRaw = await generateGroupReply(context, groupRuleText(gid))
+    if (!replyRaw) return false
+    // 主动接话也要挡「又发这张/来回就这几张」这类抱怨重复图的话（2026-10-26 巡检：这条路径漏了过滤）
+    const reply = /又(是)?这张|又发这张|来回就这[一两几]张|来回就那么几张|就那么几张|就这几张|能不能换一张|刚看过|刚发过/.test(replyRaw) ? '' : replyRaw
     if (!reply) return false
     try {
       // 主动接话不 @ 人：群里被莫名 @ 到会被追问「你@我干嘛」（2026-10-25 实测），
