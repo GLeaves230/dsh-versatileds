@@ -1,5 +1,9 @@
 # dsh-versatileds-plugin — 多功能DS插件
 
+<p align="center">
+  <img src="./assets/cover.jpg" alt="大肥鱼 · 多功能DS插件" width="320">
+</p>
+
 > **免责声明（先看这段）**
 >
 > 本插件及随包附带 / 按需下载的各项组件（NapCat、ffmpeg、GPT-SoVITS 相关脚本、参考音频等）**仅供学习、研究和个人自用**。
