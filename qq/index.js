@@ -3164,6 +3164,30 @@ function saveQuietState() {
 loadQuietState()
 
 /**
+ * 「主动聊天」状态：被 @ / 点名叫来闲聊（不是正事）时，这个群进入主动聊天 N 分钟，
+ * 期间接话概率拉高；群友一聊正事就退出（2026-10-26 主人要求）。
+ * gid -> 截止时间戳。
+ */
+const activeChatUntil = new Map()
+const ACTIVE_CHAT_MS = 10 * 60_000
+/** 每个群最后一次真人（非邻居 AI）说话的时间，用来判断「群友之间的空闲时段」。 */
+const lastHumanAt = new Map()
+const IDLE_BEFORE_NEIGHBOR_MS = 3 * 60_000
+
+function isActiveChatMode(groupId) {
+  return Number(activeChatUntil.get(String(groupId || '')) || 0) > Date.now()
+}
+
+/** 这句像在聊正事（学习/工作/技术/求助）还是闲聊。 */
+function looksLikeSeriousTopic(text) {
+  const t = String(text || '')
+  if (!t) return false
+  if (/(作业|考试|复习|论文|答辩|上班|加班|工作|项目|需求|外包|接单|面试|简历|招聘|工资|报价|合同|代码|报错|bug|BUG|部署|服务器|配置|安装|插件|模型|训练|数据集|显卡|显存|接口|文档|方案|预算|报销|开会|会议|客户|甲方|乙方|发货|快递|退款|维修|故障)/.test(t)) return true
+  if (t.length >= 60 && /[？?]/.test(t)) return true
+  return false
+}
+
+/**
  * 防复读：同一个人 30 秒内连发同一句（三条「闭嘴」那种）只处理一次；
  * 同一个群 60 秒内不重复发同一句话。
  */
@@ -7786,6 +7810,14 @@ export function apply(ctx, config) {
       // 隔壁家的鱼说话：主人没禁互相接茬（他说「互相吹可以存在」），所以不再一刀切挡掉；
       // 只是不走「随机接话」，得被 @、被点名、或者主人开了互动窗口才接，免得两条鱼日常自己聊起来。
       // 隔壁家的 AI 余额挂了会连发报错，这种别接（2026-10-25 截图实测小肥鱼刷了一屏 Insufficient Balance）
+      // 主动聊天状态：真人（非邻居 AI）说话刷新「人声时间」；一聊正事就退出主动聊天
+      // （2026-10-26 主人：看群友是不是在聊正事，不是正事、被 @ 来闲聊才进主动聊天，进正事就收）
+      if (!neighborLabelOf(data.sender, config, self)) {
+        lastHumanAt.set(String(data.group_id), Date.now())
+        if (looksLikeSeriousTopic(plainText(data.message))) {
+          activeChatUntil.delete(String(data.group_id))
+        }
+      }
       if (neighborLabelOf(data.sender, config, self) && looksLikeAgentError(plainText(data.message))) return
       if (!atMe && neighborLabelOf(data.sender, config, self) && Date.now() > neighborChatUntil) {
         const neighborQqs = String(config.neighborBots.get?.() || '').split(/[,，\s]+/).filter(Boolean)
@@ -7795,9 +7827,13 @@ export function apply(ctx, config) {
         // 「本鲸」「大肥鱼」邻居自己也这么叫，只有 @ 才是硬证据（2026-10-25 修）
         const namedMe = /(笨鱼|鲸鱼娘)/.test(plainText(data.message))
         if (!atThem && !namedMe) {
-          // 没点到你：多数时候不插嘴，但偶尔凑个热闹——主人要的是几条鱼能聊起来，
-          // 不是对面说话就全程装死（2026-10-25 主人问「怎么不跟别的大肥鱼聊天了」）
-          const chance = Math.max(0, Math.min(100, Number(config.neighborReplyChance.get() ?? 30)))
+          // 没点到你：平时不插嘴；只有「群友之间的空闲时段」（最近 3 分钟没真人说话）
+          // 或主动聊天状态里，才试着跟隔壁 AI 聊两句（2026-10-26 主人要求）
+          const humanIdle = Date.now() - Number(lastHumanAt.get(String(data.group_id)) || 0) > IDLE_BEFORE_NEIGHBOR_MS
+          const baseNeighborChance = Math.max(0, Math.min(100, Number(config.neighborReplyChance.get() ?? 30)))
+          const chance = (humanIdle || isActiveChatMode(data.group_id))
+            ? Math.max(baseNeighborChance, 60)
+            : baseNeighborChance
           if (chance <= 0 || Math.random() * 100 >= chance) return
         }
       }
@@ -7841,6 +7877,10 @@ export function apply(ctx, config) {
         // 反思期只认「被 @」和「主人本人说话」：名字里带「肥鱼」的还有隔壁家，宽正则会把
         // 别人聊另一条鱼当成在叫它（2026-10-26 主人：反思时是人要求它不说话，别自己找补）
         if (quietNow && !atMe && !(Boolean(owner) && String(sender) === String(owner))) return
+        // 被 @ / 点名叫来闲聊（不是正事）：进入主动聊天状态，接下来 10 分钟主动一点
+        if ((atMe || calledByName) && !quietNow && !looksLikeSeriousTopic(plainText(data.message))) {
+          activeChatUntil.set(String(data.group_id), Date.now() + ACTIVE_CHAT_MS)
+        }
         // 被 @ 或点名之后也盯住这个窗口 5 分钟（跟搓一搓一样）：
         // 主人问「@ 他之后聚焦聊天有没有在跑」——之前只有搓一搓和分享会设 focus，@ 完只回那一条。
         if (atMe || calledByName) {
@@ -7853,7 +7893,9 @@ export function apply(ctx, config) {
           const baseChance = Number(config.groupReplyChance.get() ?? 30)
           // 隔壁家的同类在聊：压低概率，热闹归热闹，别几条鱼对刷屏
           const asked = !peerSender && /[？?]/.test(plainText(data.message))
-          const chance = peerSender ? Math.min(baseChance, 12) : (asked ? Math.max(baseChance, 80) : baseChance)
+          const base = peerSender ? Math.min(baseChance, 12) : (asked ? Math.max(baseChance, 80) : baseChance)
+          // 主动聊天状态里（被 @ 来闲聊过、群友还没聊正事）：接话概率拉高到 85
+          const chance = isActiveChatMode(data.group_id) ? Math.max(base, 85) : base
           if (baseChance <= 0 || Math.random() * 100 >= chance) return
         }
       }
