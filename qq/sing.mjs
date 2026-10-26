@@ -4,8 +4,10 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 
-const HOME = process.env.DSH_HOME || 'F:/DeepSeek/tool/.dsh'
+// 不写死盘符：优先环境变量，其次用户目录下的 .dsh（2026-10-26 去掉 F:/DeepSeek 绝对路径）
+const HOME = process.env.DSH_HOME || join(homedir(), '.dsh')
 const base = join(HOME, 'versatileds')
 const venv = join(base, 'models', 'seed-vc', 'venv', 'Scripts')
 const songs = join(base, 'models', 'seed-vc', 'songs')

@@ -19,7 +19,7 @@ const VERSION = (() => {
 })()
 
 /** 当前版本 tag（硬编码，每次源码更新后一起改这里；更新自检拿它跟远端比）。 */
-const CURRENT_TAG = 'v0.4.1'
+const CURRENT_TAG = 'v0.4.2'
 
 /** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序；顺带带上版本号。 */
 function plog(level, ...args) {
@@ -31,6 +31,7 @@ function plog(level, ...args) {
 import { spawn, spawnSync } from 'node:child_process'
 import http from 'node:http'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync, writeSync } from 'node:fs'
+import { readFile as readFileAsync } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -1130,6 +1131,35 @@ function notesPath() {
   return join(versatiledsBase(), 'qq', 'notes.md')
 }
 
+/**
+ * 内存里的笔记镜像：2026-10-26 插件进程里读 notes.md 会卡死（外部只要 5ms），
+ * loadNotes 改成只读这个数组；启动时后台异步灌一次，之后靠 appendNoteLine 追加。
+ */
+const notesMem = []
+let notesMemLoaded = false
+
+async function initNotesMem() {
+  if (notesMemLoaded) return
+  notesMemLoaded = true
+  // 先读小快照（appendNoteLine 每次都会更新）：小文件、不会卡
+  try {
+    const snap = join(versatiledsBase(), 'qq', 'notes-snapshot.json')
+    if (existsSync(snap)) {
+      const arr = JSON.parse(readFileSync(snap, 'utf8'))
+      if (Array.isArray(arr) && arr.length) {
+        for (const l of arr) notesMem.push(String(l))
+        while (notesMem.length > 800) notesMem.shift()
+        return
+      }
+    }
+  } catch { /* 快照坏了就退回读 notes.md */ }
+  try {
+    const raw = await readFileAsync(notesPath(), 'utf8')
+    for (const l of raw.split(/\r?\n/).filter(Boolean)) notesMem.push(l)
+    while (notesMem.length > 800) notesMem.shift()
+  } catch { /* 读不到就算了 */ }
+}
+
 function biliLogPath() {
   return join(versatiledsBase(), 'qq', 'bili_log.md')
 }
@@ -1161,11 +1191,30 @@ function loadBiliLog(limit = 8) {
  */
 function loadNotes(limit = 30, scope = '', isolate = false) {
   try {
-    const lines = readFileSync(notesPath(), 'utf8').split(/\r?\n/).filter(Boolean)
+    // 只读内存镜像（2026-10-26 读文件会卡死）：为空就当没笔记
+    const lines = notesMem
+    if (!lines.length) return ''
     if (!isolate || !scope) return lines.slice(-limit).join('\n')
     const mine = lines.filter((l) => {
       const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
       if (!m) return true          // 老记录 / 公共记录：两边都能看
+      return m[1] === scope
+    })
+    return mine.slice(-limit).join('\n')
+  } catch {
+    return ''
+  }
+}
+
+/** 异步版 loadNotes：私聊生成前读它，卡住时能用超时兜（2026-10-26 私聊卡在同步读文件）。 */
+async function loadNotesAsync(limit = 30, scope = '', isolate = false) {
+  try {
+    const raw = await readFileAsync(notesPath(), 'utf8')
+    const lines = raw.split(/\r?\n/).filter(Boolean)
+    if (!isolate || !scope) return lines.slice(-limit).join('\n')
+    const mine = lines.filter((l) => {
+      const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
+      if (!m) return true
       return m[1] === scope
     })
     return mine.slice(-limit).join('\n')
@@ -3151,6 +3200,14 @@ function withMemoryLock(fn, timeoutMs = 800) {
 
 function appendNoteLine(line) {
   try {
+    // 内存镜像先更新：2026-10-26 插件进程里读 notes.md 会卡死，loadNotes 改成只读内存
+    try {
+      notesMem.push(`- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${line}`)
+      while (notesMem.length > 800) notesMem.shift()
+      // 顺手存一份小快照：重启/退出后再启动时优先读它（小文件快、不会卡）
+      writeFileSync(join(versatiledsBase(), 'qq', 'notes-snapshot.json'),
+        JSON.stringify(notesMem.slice(-800)), 'utf8')
+    } catch { /* ignore */ }
     withMemoryLock(() => {
       mkdirSync(join(versatiledsBase(), 'qq'), { recursive: true })
       const time = new Date().toLocaleString('zh-CN', { hour12: false })
@@ -4800,12 +4857,15 @@ function appendNote(entry) {
     // 给每条笔记打上归属（g:群号 / p:QQ号），B 模式隔离时按它筛；
     // 老记录没有标记，当「公共」处理，两种模式都看得到
     const kind = String(entry.kind || '')
-    // to 为空时别写成「g:」「p:」这种空标记——B 模式过滤时会匹配不上，整条记录被漏掉；
-    // 没归属就当公共记录，两种模式都看得到。
+    // 2026-10-26 修：原来看 kind.startsWith('group')/('private')，但私聊 kind 是 'recv'、
+    // 自己发的群消息是 'sent-group'，都不匹配 → 大部分笔记没标记，B 模式隔离等于失效。
+    // 改成优先用 groupId/peer 判定，再退回 kind + to。
     const scope = entry.scope
-      || (kind.startsWith('group') && entry.to ? `g:${entry.to}`
-        : kind.startsWith('private') && entry.to ? `p:${entry.to}`
-          : '')
+      || (entry.groupId ? `g:${entry.groupId}`
+        : entry.peer ? `p:${entry.peer}`
+          : (kind.startsWith('group') || kind === 'sent-group') && entry.to ? `g:${entry.to}`
+            : (/private/.test(kind)) && entry.to ? `p:${entry.to}`
+              : '')
     appendFileSync(file, (scope ? `${line} 〔${scope}〕` : line) + '\n', 'utf8')
   } catch { /* ignore */ }
 }
@@ -5245,12 +5305,21 @@ export function apply(ctx, config) {
   // 重载后保留反思静默期：quiet.json 里落盘，热重载/重启都不该把「被嫌吵」后的安静弄丢
   // （2026-10-26 主人发现：热重载后它又在反思期里接话。以前这里 clear() 就是原因）
   loadQuietState()
+  // 笔记镜像后台灌一次（读文件在插件进程里会卡，所以不 await、失败就算了）
+  initNotesMem().catch(() => {})
   // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
   shutdownLock.on = false
   shutdownLock.at = 0
   // 总开关只关「聊天自动化」：状态服务 + 拉起/退出登录 继续保留，
   // 不然关了 QQ 连二维码和「退出登录」都点不了（2026-10-25 主人要求）。
   const ob = new OneBotClient(config)
+  /** 私聊排查探针：写 qq/private_debug.log（2026-10-26 私聊不回时用，查完可以删）。 */
+  const qqProbe = (msg) => {
+    try {
+      appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+        `[${new Date().toLocaleString('zh-CN', { hour12: false })}] ${msg}\n`, 'utf8')
+    } catch { /* ignore */ }
+  }
   const sent = new Map()
   const busy = new Set()
 
@@ -6054,6 +6123,7 @@ export function apply(ctx, config) {
   }
 
   async function generateReply(text, senderName, history = [], extra = '', rulesText = '', isGroup = false, groupRecent = '', webInfo = '', imageInfo = '', sharedText = '', cardInfo = '', talkerIsOwner = false, groupId = '') {
+    qqProbe(`generateReply start isGroup=${isGroup} text=${String(text).slice(0, 16)}`)
     const key = loadApiKey(config)
     const base = String(config.llmBaseUrl.get() || '').trim()
     if (!key || !base) return pickReply()
@@ -6081,7 +6151,9 @@ export function apply(ctx, config) {
     // 主人叫什么：按 ownerQQ 查 QQ 名称和群名片（不是写死的名字）
     let ownerNameBlock = ''
     try {
-      const on = await ownerNames()
+    qqProbe('gen: before ownerNames')
+    const on = await ownerNames()
+    qqProbe(`gen: after ownerNames qqName=${String(on?.qqName || '').slice(0, 10)}`)
       if (on.qqName || on.card) {
         ownerNameBlock = `## 主人叫什么（按 QQ 号 ${ownerQQOf(config)} 查到的，会随他改名变）\n`
           + `QQ 名称：${on.qqName || '（没查到）'}`
@@ -6096,11 +6168,14 @@ export function apply(ctx, config) {
       }
     } catch { /* 查不到就不注入 */ }
 
+    qqProbe('gen: owner block done')
     // 群主和管理员是谁：昵称里看不出来，得查成员列表
     let groupRolesBlock = ''
     if (isGroup && groupId) {
       try {
+        qqProbe('gen: before groupRoles')
         const roles = await groupRoles(groupId)
+        qqProbe('gen: after groupRoles')
         if (roles.owner) {
           groupRolesBlock = `## 这个群的身份\n群主：${roles.owner}`
             + (roles.admins.length ? `\n管理员：${roles.admins.join('、')}` : '')
@@ -6110,6 +6185,7 @@ export function apply(ctx, config) {
       } catch { /* 查不到就不注入 */ }
     }
 
+    qqProbe('gen: system start')
     let system
     const live = config.liveEnabled.get() === true
       ? loadLive(Number(config.liveMaxAgeSec.get() ?? 1200))
@@ -6194,15 +6270,24 @@ export function apply(ctx, config) {
         versionFactHint(text, sharedText),
       ].filter(Boolean).join('\n\n')
     } else {
+      qqProbe('gen: l1 persona')
       const persona = loadPersona()
+      qqProbe('gen: l2 memory')
       const memory = loadMemory()
-      const notes = loadNotes(30, `p:${sender}`,
-        config.isolateGroupPrivate.get() === true)
+      qqProbe('gen: l3 notes')
+      // 恢复「小本本」上下文：只读内存镜像（启动时后台灌，不碰磁盘），2026-10-26
+      const notes = loadNotes(30, `p:${sender}`, config.isolateGroupPrivate.get() === true)
+      qqProbe(`gen: notes got len=${String(notes || '').length}`)
+      qqProbe('gen: l4 bili')
       const biliLog = loadBiliLog(8)
+      qqProbe('gen: l5 topics')
       const topicText = loadTopics(8)
+      qqProbe('gen: l6 anchor')
       const anchorText = `${memory}\n${sharedText}`
+      qqProbe('gen: private loads done')
       const numMatch = anchorText.match(/当前数字[：:]\s*\**(\d+)/)
       const alphaMatch = anchorText.match(/当前字母[：:]\s*\**([A-Za-z]+)/)
+      qqProbe('gen: private matches done')
       system = [
         SYSTEM_PROMPT,
         talkerIsOwner
@@ -6236,34 +6321,43 @@ export function apply(ctx, config) {
       ].filter(Boolean).join('\n\n')
     }
 
+    qqProbe('gen: prompt built')
     try {
-      const res = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: String(config.llmModel.get() || 'deepseek-chat'),
-          messages: [
-            { role: 'system', content: system },
-            ...history,
-            {
-              role: 'user',
-              // 有联网搜索结果时，别再把它往「看视频」上带
-              content: extra && !webInfo
-                ? `${senderName}：${text}\n（你刚刚看了这个视频，直接说出它是什么、谁做的、讲了什么，别说没看到、也别问「怎么了」：${extra}）`
-                : `${senderName}：${text}`,
-            },
-          ],
-          max_tokens: problemHint(imageInfo) ? 1600 : 520,
-          // 题目类要算准，高温会把推导写飘：0.9 会算出 f(x)=x³−x/6 这种错答案
-          temperature: problemHint(imageInfo) ? 0.3 : 0.9,
+      // 用 race 兜一层硬超时：AbortSignal.timeout 在某些网络（连接卡住）下不肯生效，
+      // 之前私聊发「你在干嘛」就永久挂在这，锁不释放（2026-10-26）
+      const res = await Promise.race([
+        fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+          body: JSON.stringify({
+            model: String(config.llmModel.get() || 'deepseek-chat'),
+            messages: [
+              { role: 'system', content: system },
+              ...history,
+              {
+                role: 'user',
+                // 有联网搜索结果时，别再把它往「看视频」上带
+                content: extra && !webInfo
+                  ? `${senderName}：${text}\n（你刚刚看了这个视频，直接说出它是什么、谁做的、讲了什么，别说没看到、也别问「怎么了」：${extra}）`
+                  : `${senderName}：${text}`,
+              },
+            ],
+            max_tokens: problemHint(imageInfo) ? 1600 : 520,
+            // 题目类要算准，高温会把推导写飘：0.9 会算出 f(x)=x³−x/6 这种错答案
+            temperature: problemHint(imageInfo) ? 0.3 : 0.9,
+          }),
+          signal: AbortSignal.timeout(20000),
         }),
-        signal: AbortSignal.timeout(20000),
-      })
+        new Promise((_, reject) => setTimeout(() => reject(new Error('llm-hard-timeout')), 25_000)),
+      ])
+      qqProbe(`gen: llm resp status=${res.status}`)
       if (!res.ok) return pickReply()
       const data = await res.json()
       const reply = data?.choices?.[0]?.message?.content?.trim()
+      qqProbe(`gen: done len=${String(reply || '').length}`)
       return reply || pickReply()
-    } catch {
+    } catch (err) {
+      qqProbe(`gen: catch ${err?.message ?? err}`)
       return pickReply()
     }
   }
@@ -8543,6 +8637,7 @@ export function apply(ctx, config) {
       if (!allowed('auto-reply')) return
 
       const isGroup = data.message_type === 'group'
+      qqProbe(`enter try type=${data.message_type} from=${sender} text=${String(text).slice(0, 20)}`)
 
       // 明确让它发一张表情包：直接发图，别用文字或 emoji 糊弄
       if (config.stickerEnabled.get() === true && wantsStickerImage(text)) {
@@ -8962,14 +9057,21 @@ export function apply(ctx, config) {
           ? (Math.random() < 0.5 ? '主人啊' : '我主人啊，这还用问')
           : String(senderName || '群友')
       }
+      qqProbe(`before generate reply=${String(reply || '').slice(0, 20) || '(空)'}`)
       if (!reply) {
         const rulesText = isGroup ? groupRuleText(data.group_id) : ''
         // 记忆直答只给私聊；群里全靠模型按群规接话
+        // 生成也加超时：LLM 卡住时以前会一直挂着，busy 锁不释放，后面所有私聊都在排队（2026-10-26 私聊不回）
         reply = (isGroup ? '' : quickAnswer(text))
-          || await generateReply(text, senderName, history, extra, rulesText, isGroup, groupRecent, webInfo, imageInfo, sharedText, cardInfo, talkerIsOwner, data.group_id ? String(data.group_id) : '')
+          || await Promise.race([
+            generateReply(text, senderName, history, extra, rulesText, isGroup, groupRecent, webInfo, imageInfo, sharedText, cardInfo, talkerIsOwner, data.group_id ? String(data.group_id) : ''),
+            new Promise((resolve) => setTimeout(() => resolve(''), 60_000)),
+          ])
+        if (!reply) qqProbe('generate timeout/empty')
       }
 
       // 模型判断「这条不用回」：什么都不发，连表情包都不补（2026-10-25 主人：不回就没事了）
+      qqProbe(`after generate len=${String(reply || '').length}`)
       if (reply && /\[免回\]/.test(reply)) {
         try {
           appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
