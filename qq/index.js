@@ -8197,11 +8197,15 @@ export function apply(ctx, config) {
           : /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
         // 反思期：被动回复按「@ 或点名」豁免（豁免不收紧）；
         // 主动输出（分享、表情包、拍一拍、主动搭话）由各自的出口用 inQuiet() 挡。
-        // 反思期：**只有主人本人说话（含 @ 它）才放行**；别人 @ 它不算，除非主人明确让它说。
-        // 但群友@它多次、真是在找它聊，气氛到位就让模型判断结束反思（2026-10-26 主人）。
+        // 反思期：**只有「主人 @ 它」或「主人明确说可以说话」才放行**；
+        // 主人普通一句「？」「闭嘴」不豁免（2026-10-26 主人截图质疑：反思中还回了「咋了主人」）。
+        // 别人 @ 它也不算，除非群友多次 @ 且模型判断气氛到位。
         const ownerSpokeNow = Boolean(owner) && String(sender) === String(owner)
+        const ownerBreakQuiet = ownerSpokeNow && (
+          atMe || /(继续|可以说话|说话吧|出来吧|聊吧|说吧|恢复了|好了|行了|醒醒|醒来)/.test(plainText(data.message))
+        )
         let quietNow = inQuiet(data.group_id)
-        if (quietNow && !ownerSpokeNow) {
+        if (quietNow && !ownerBreakQuiet) {
           if (atMe) {
             const k = String(data.group_id)
             const now = Date.now()
