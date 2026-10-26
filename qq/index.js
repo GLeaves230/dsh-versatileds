@@ -3303,6 +3303,8 @@ function looksLikeSeriousTopic(text) {
  * 同一个群 60 秒内不重复发同一句话。
  */
 const repeatGuard = { inKey: '', inAt: 0, outKey: '', outAt: 0 }
+/** 超短应声（彳亍/行/嗯…）的限流：同群 2 分钟最多一次（2026-10-26 小鲸鱼连发图它一直「彳亍」）。 */
+const ackClock = new Map()
 
 /** 这个群是不是在反思静默期（发言总闸）。 */
 function inQuiet(groupId) {
@@ -4924,6 +4926,15 @@ class OneBotClient {
     const outNow = Date.now()
     if (outKey === repeatGuard.outKey && outNow - repeatGuard.outAt < 180_000) {
       return { message_id: 'dedupe-skipped', deduped: true }
+    }
+    // 超短应声（彳亍/行/好/嗯/啊…）单独限流：同群 2 分钟最多一次，别连发刷屏
+    const ackText = String(text || '').trim()
+    if (ackText.length <= 3 && /^(彳亍|行|好|嗯|哦|啊+|？|啊？|哈+)[！!。.~～\s]*$/.test(ackText)) {
+      const ackLast = Number(ackClock.get(`g:${groupId}`) || 0)
+      if (outNow - ackLast < 120_000) {
+        return { message_id: 'ack-skipped', deduped: true }
+      }
+      ackClock.set(`g:${groupId}`, outNow)
     }
     repeatGuard.outKey = outKey
     repeatGuard.outAt = outNow
