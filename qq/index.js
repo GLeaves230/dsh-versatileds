@@ -8970,7 +8970,13 @@ export function apply(ctx, config) {
       }
 
       // 模型判断「这条不用回」：什么都不发，连表情包都不补（2026-10-25 主人：不回就没事了）
-      if (reply && /\[免回\]/.test(reply)) return
+      if (reply && /\[免回\]/.test(reply)) {
+        try {
+          appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+            `[${new Date().toLocaleString('zh-CN', { hour12: false })}] 免回标记，静默返回（${data.message_type} ${data.group_id || sender}）\n`, 'utf8')
+        } catch { /* ignore */ }
+        return
+      }
       // 只甩一个表情不算回话：当没话说处理，走表情包或重来
       if (reply && reply.replace(/\[[^\]]{1,8}\]/g, '').replace(/[\s。，！？~…]/g, '').length < 2) {
         reply = ''
