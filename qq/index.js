@@ -1814,7 +1814,7 @@ function runQuiet(exe, args, timeoutMs = 15000) {
   })
 }
 
-/** 随环境附带的 ffmpeg 候选路径：按 DSH_HOME 反推（.dsh 的 ../.. 是工作区根），换电脑不用改代码。 */
+/** 随环境附带的 ffmpeg 候选路径：<DSH_HOME>/versatileds/ffmpeg（跟 index.js 的 depSpecs 一致），换电脑不用改代码。 */
 function bundledFfmpegCandidates() {
   return [
     // 和 index.js 里 depSpecs 的落地位置保持一致：<DSH_HOME>/versatileds/ffmpeg
@@ -2543,7 +2543,12 @@ function checkGsvDeps(config) {
   const dir = String(config?.gsvDir?.get?.() || '').trim() || join(versatiledsBase(), 'models', 'gpt-sovits', 'app')
   const py = String(config?.gsvPython?.get?.() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
   const pm = join(dir, 'GPT_SoVITS', 'pretrained_models')
-  const ref = String(config?.gsvRefAudio?.get?.() || '').trim()
+  // 参考音频支持文件名（按 ref 目录解析）/ 绝对路径 / 留空默认，跟 gsvSynthesize 一致
+  const refRaw = String(config?.gsvRefAudio?.get?.() || '').trim()
+  const refDir = join(versatiledsBase(), 'models', 'gpt-sovits', 'ref')
+  const ref = !refRaw
+    ? join(refDir, 'lucy-voice-female1.wav')
+    : (/[\\/]/.test(refRaw) ? refRaw : join(refDir, refRaw))
   const items = [
     { key: 'python', name: 'Python 3.11', path: py },
     { key: 'app', name: 'GPT-SoVITS 代码（api_v2.py）', path: join(dir, 'api_v2.py') },
@@ -2627,9 +2632,14 @@ function prepareVoiceText(raw) {
  */
 async function gsvSynthesize(text, config) {
   const base = String(config?.gsvApiUrl?.get?.() || 'http://127.0.0.1:9880').replace(/\/+$/, '')
-  const refAudio = String(config?.gsvRefAudio?.get?.() || '').trim()
+  // 参考音频支持三种写法：留空＝默认 lucy；只写文件名＝按 versatileds/models/gpt-sovits/ref 解析；绝对路径照用
+  const refRaw = String(config?.gsvRefAudio?.get?.() || '').trim()
+  const refDir = join(versatiledsBase(), 'models', 'gpt-sovits', 'ref')
+  const refAudio = !refRaw
+    ? join(refDir, 'lucy-voice-female1.wav')
+    : (/[\\/]/.test(refRaw) ? refRaw : join(refDir, refRaw))
   const refText = String(config?.gsvRefText?.get?.() || '').trim()
-  if (!refAudio) throw new Error('还没配参考音频（gsvRefAudio）')
+  if (!existsSync(refAudio)) throw new Error(`参考音频不存在：${refAudio}`)
   if (!refText) throw new Error('还没配参考音频对应的文本（gsvRefText）')
   const q = new URLSearchParams({
     text: prepareVoiceText(text),
