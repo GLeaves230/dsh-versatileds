@@ -1819,13 +1819,6 @@ window.__ModuleLoader__.load({
           children.push(React.createElement(LoginPanel, { key: 'login-panel' }))
         }
 
-        // 日志子页面：插件日志 + NapCat 日志 + 聊天记录
-        if (activeTab === 'group') {
-          children.push(React.createElement(GroupProfilesPanel, {
-            key: 'group-profiles', form, value: v.groupProfiles, disabled: !snap.writable,
-          }))
-        }
-
         if (activeTab === 'logs') {
           children.push(React.createElement(LogsPanel, { key: 'logs-panel' }))
         }
@@ -1894,6 +1887,13 @@ window.__ModuleLoader__.load({
           if (field === 'focusChatTarget') {
             children.push(React.createElement(FocusStatusRow, { key: 'focus-status', form, disabled: !snap.writable }))
           }
+        }
+
+        // 群聊页最下面的空位：群级独立设置（折叠，默认收起）
+        if (activeTab === 'group') {
+          children.push(React.createElement(GroupProfilesPanel, {
+            key: 'group-profiles', form, value: v.groupProfiles, disabled: !snap.writable,
+          }))
         }
 
         for (const [field, label, hint] of QQ_SECRET_FIELDS) {
