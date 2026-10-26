@@ -8158,7 +8158,11 @@ export function apply(ctx, config) {
 
     const realSenderName = data.sender?.nickname || data.sender?.card || '对方'
     // 被嫌吵就进入反思期：接下来几分钟少说话（被 @ 除外）
-    if (data.message_type === 'group' && looksLikeComplaint(plainText(data.message))) {
+    // 但「别人 @ 别人说闭嘴」不算嫌自己吵——2026-10-26 机器管家 @ 小鲸鱼 说「闭嘴」，
+    // 它误以为自己被要求闭嘴，启动反思后还回了「飞舞鲸」，白安静 10 分钟。
+    const atOthersQuiet = (data.message || []).some((s) => s && s.type === 'at'
+      && String(s.data?.qq) !== String(self) && String(s.data?.qq) !== 'all')
+    if (data.message_type === 'group' && !atOthersQuiet && looksLikeComplaint(plainText(data.message))) {
       const sec = Number(config.quietAfterComplaintSec.get() ?? 180)
       if (sec > 0) {
         quietState.set(String(data.group_id), Date.now() + sec * 1000)
