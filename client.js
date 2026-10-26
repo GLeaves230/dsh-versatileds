@@ -854,12 +854,60 @@ window.__ModuleLoader__.load({
       ['memory', '记忆'],
       ['balance', '余额'],
       ['system', '系统'],
+      ['advanced', '高级'],
       ['logs', '日志'],
     ]
 
+    /** 高级页：按群独立设置（免打扰时段、群规/记忆注入、删除），像日志那样列表管理。 */
+    function GroupProfilesPanel(props) {
+      const { form, value, disabled } = props
+      const [draft, setDraft] = React.useState('')
+      const list = React.useMemo(() => {
+        try { return JSON.parse(String(value || '{}')) || {} } catch { return {} }
+      }, [value])
+      const gids = Object.keys(list)
+      const save = (next) => form.set('groupProfiles', JSON.stringify(next))
+      const update = (gid, patch) => save({ ...list, [gid]: { ...(list[gid] || {}), ...patch } })
+      const remove = (gid) => { const n = { ...list }; delete n[gid]; save(n) }
+      const add = () => {
+        const gid = draft.trim()
+        if (!/^\d{5,12}$/.test(gid)) return
+        update(gid, { quietStart: '23:00', quietEnd: '08:00', ruleInject: true, memoryInject: true })
+        setDraft('')
+      }
+      const chk = (gid, key, label, p) => React.createElement('label', { key: `${gid}-${key}`, style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 } },
+        React.createElement('input', { type: 'checkbox', checked: p[key] !== false, disabled, onChange: (e) => update(gid, { [key]: e.target.checked }) }),
+        label)
+      return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        React.createElement('div', { style: rowStyle },
+          React.createElement('span', { style: labelStyle }, '添加群号'),
+          React.createElement('input', {
+            value: draft, disabled, placeholder: '群号，比如 1087558589',
+            onChange: (e) => setDraft(e.target.value), style: inputStyle,
+          }),
+          React.createElement('button', { type: 'button', onClick: add, disabled, style: { padding: '4px 10px', cursor: 'pointer' } }, '添加'),
+        ),
+        gids.length === 0
+          ? React.createElement('div', { style: hintStyle }, '还没有群级设置。添加群号后可以给这个群单独设免打扰时段（全局免打扰另算，两边取交集）。')
+          : null,
+        ...gids.map((gid) => {
+          const p = list[gid] || {}
+          return React.createElement('div', { key: gid, style: { ...rowStyle, flexWrap: 'wrap', gap: 8, borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: 8 } },
+            React.createElement('span', { style: { ...labelStyle, minWidth: 110 } }, gid),
+            React.createElement('span', { style: hintStyle }, '免打扰'),
+            React.createElement('input', { type: 'time', value: p.quietStart || '', disabled, onChange: (e) => update(gid, { quietStart: e.target.value }), style: inputStyle }),
+            React.createElement('span', { style: hintStyle }, '到'),
+            React.createElement('input', { type: 'time', value: p.quietEnd || '', disabled, onChange: (e) => update(gid, { quietEnd: e.target.value }), style: inputStyle }),
+            chk(gid, 'ruleInject', '群规注入', p),
+            chk(gid, 'memoryInject', '记忆注入', p),
+            React.createElement('button', { type: 'button', onClick: () => remove(gid), disabled, style: { padding: '2px 8px', cursor: 'pointer' } }, '删除'),
+          )
+        }),
+      )
+    }
+
     /** 日志页：插件日志 / NapCat 日志 / 聊天记录，点开看尾部内容。 */
-    function LogsPanel() {
-      const [data, setData] = React.useState({ groups: [] })
+    function LogsPanel() {      const [data, setData] = React.useState({ groups: [] })
       const [sel, setSel] = React.useState('')
       const [view, setView] = React.useState({ text: '', error: '', note: '' })
       const [lines, setLines] = React.useState(300)
@@ -1749,6 +1797,12 @@ window.__ModuleLoader__.load({
         }
 
         // 日志子页面：插件日志 + NapCat 日志 + 聊天记录
+        if (activeTab === 'advanced') {
+          children.push(React.createElement(GroupProfilesPanel, {
+            key: 'group-profiles', form, value: v.groupProfiles, disabled: !snap.writable,
+          }))
+        }
+
         if (activeTab === 'logs') {
           children.push(React.createElement(LogsPanel, { key: 'logs-panel' }))
         }

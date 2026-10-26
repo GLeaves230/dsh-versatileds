@@ -449,6 +449,8 @@ export const Config = Schema.object({
     .description('两次要帧最短间隔（秒）'),
   groupHistoryLimit: Schema.number().default(6).volatile()
     .description('群聊回复时参考最近几条群消息'),
+  groupProfiles: Schema.string().default('{}').volatile()
+    .description('群级独立设置（JSON）：{"群号":{"quietStart":"23:00","quietEnd":"08:00","muteOnlyAt":true,"ruleInject":true,"memoryInject":true}}；免打扰时段内该群只在被 @ 或主人说话时回，主动搭话跳过'),
   webSearchEnabled: Schema.boolean().default(true).volatile()
     .description('联网搜索总开关，关掉就一句都不查'),
   webSearchPrivate: Schema.boolean().default(true).volatile()
@@ -2933,6 +2935,43 @@ async function toAmrVoice(wavPath) {
     if (r.status === 0 && existsSync(amr) && statSync(amr).size > 1000) return amr
   } catch { /* 转码失败就退回 WAV */ }
   return wavPath
+}
+
+/**
+ * 群级独立设置（groupProfiles JSON）：每个群可以有自己的免打扰时段等。
+ * 全局的 proactiveQuietStart/End 还在，两边取交集：任一命中就静默。
+ * 2026-10-26 主人要求：群里设置一个「高级折叠页」，按群做独立设置。
+ */
+function groupProfileOf(config, gid) {
+  try {
+    const obj = JSON.parse(String(config?.groupProfiles?.get?.() || '{}'))
+    const p = obj[String(gid)]
+    return p && typeof p === 'object' ? p : null
+  } catch { return null }
+}
+
+/** "23:30" → 分钟数；非法返回 -1。 */
+function hhmmToMin(s) {
+  const m = String(s || '').match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return -1
+  const h = Number(m[1]), mi = Number(m[2])
+  if (h > 23 || mi > 59) return -1
+  return h * 60 + mi
+}
+
+/** 当前时间是否落在 start-end 区间（跨午夜：start>end 时按两段算）。 */
+function inTimeRange(start, end, now = new Date()) {
+  const a = hhmmToMin(start), b = hhmmToMin(end)
+  if (a < 0 || b < 0 || a === b) return false
+  const cur = now.getHours() * 60 + now.getMinutes()
+  return a < b ? (cur >= a && cur < b) : (cur >= a || cur < b)
+}
+
+/** 这个群现在是不是群级免打扰时段。 */
+function inGroupQuiet(config, gid, now = new Date()) {
+  const p = groupProfileOf(config, gid)
+  if (!p) return false
+  return inTimeRange(p.quietStart, p.quietEnd, now)
 }
 
 /**
@@ -7524,7 +7563,7 @@ export function apply(ctx, config) {
     try {
       // 主动接话不 @ 人：群里被莫名 @ 到会被追问「你@我干嘛」（2026-10-25 实测），
       // 也让 prompt 里「群里回话别 @ 人」这条真正成立。
-      if (inQuiet(gid)) return false
+      if (inQuiet(gid) || inGroupQuiet(config, gid)) return false
       await ob.sendGroup(gid, reply)
     } catch (err) {
       plog('warn', '[dsh-versatileds] 群接话失败:', err?.message ?? err)
@@ -8060,6 +8099,9 @@ export function apply(ctx, config) {
         // 反思期只认「被 @」和「主人本人说话」：名字里带「肥鱼」的还有隔壁家，宽正则会把
         // 别人聊另一条鱼当成在叫它（2026-10-26 主人：反思时是人要求它不说话，别自己找补）
         if (quietNow && !atMe && !(Boolean(owner) && String(sender) === String(owner))) return
+        // 群级免打扰：这个群单独设了时段（groupProfiles），时段内只在被 @ 或主人说话时回
+        // 跟全局 proactiveQuiet 取交集：任一生效就静默（2026-10-26 主人）
+        if (inGroupQuiet(config, data.group_id) && !atMe && !(Boolean(owner) && String(sender) === String(owner))) return
         // 被 @ / 点名叫来闲聊（不是正事）：进入主动聊天状态，接下来 10 分钟主动一点
         if ((atMe || calledByName) && !quietNow && !looksLikeSeriousTopic(plainText(data.message))) {
           activeChatUntil.set(String(data.group_id), Date.now() + ACTIVE_CHAT_MS)
