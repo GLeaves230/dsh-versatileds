@@ -8128,12 +8128,13 @@ export function apply(ctx, config) {
         // 反思期：被动回复按「@ 或点名」豁免（豁免不收紧）；
         // 主动输出（分享、表情包、拍一拍、主动搭话）由各自的出口用 inQuiet() 挡。
         const quietNow = inQuiet(data.group_id)
-        // 反思期只认「被 @」和「主人本人说话」：名字里带「肥鱼」的还有隔壁家，宽正则会把
-        // 别人聊另一条鱼当成在叫它（2026-10-26 主人：反思时是人要求它不说话，别自己找补）
-        if (quietNow && !atMe && !(Boolean(owner) && String(sender) === String(owner))) return
-        // 群级免打扰：这个群单独设了时段（groupProfiles），时段内只在被 @ 或主人说话时回
+        // 反思期：**只有主人本人说话（含 @ 它）才放行**；别人 @ 它不算，除非主人明确让它说。
+        // （2026-10-26 主人定：被我 @ 出来才豁免，其他除非我让他说话才能继续）
+        const ownerSpokeNow = Boolean(owner) && String(sender) === String(owner)
+        if (quietNow && !ownerSpokeNow) return
+        // 群级免打扰：这个群单独设了时段（groupProfiles），时段内只要不是主人说话就静默
         // 跟全局 proactiveQuiet 取交集：任一生效就静默（2026-10-26 主人）
-        if (inGroupQuiet(config, data.group_id) && !atMe && !(Boolean(owner) && String(sender) === String(owner))) return
+        if (inGroupQuiet(config, data.group_id) && !ownerSpokeNow) return
         // 被 @ / 点名叫来闲聊（不是正事）：进入主动聊天状态，接下来 10 分钟主动一点
         if ((atMe || calledByName) && !quietNow && !looksLikeSeriousTopic(plainText(data.message))) {
           activeChatUntil.set(String(data.group_id), Date.now() + ACTIVE_CHAT_MS)
