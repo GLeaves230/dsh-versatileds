@@ -8061,6 +8061,9 @@ export function apply(ctx, config) {
     }
 
     const self = await ensureSelf()
+    // 反思期「主人叫醒」豁免标记：在群分支里赋值，但私聊路径的发前检查也会读它。
+    // 2026-10-26 私聊报 ownerBreakQuiet is not defined（const 只定义在 group 块里）
+    let ownerBreakQuiet = false
     const sender = String(data.user_id ?? data.sender?.user_id ?? '')
     if (!sender) return
     // 同一人连发同一句（刷「闭嘴」那种）：30 秒内只处理第一条，别逐条回出一样的答案
@@ -8244,7 +8247,7 @@ export function apply(ctx, config) {
         // 主人普通一句「？」「闭嘴」不豁免（2026-10-26 主人截图质疑：反思中还回了「咋了主人」）。
         // 别人 @ 它也不算，除非群友多次 @ 且模型判断气氛到位。
         const ownerSpokeNow = Boolean(owner) && String(sender) === String(owner)
-        const ownerBreakQuiet = ownerSpokeNow && (
+        ownerBreakQuiet = ownerSpokeNow && (
           atMe || /(继续|可以说话|说话吧|出来吧|聊吧|说吧|恢复了|好了|行了|醒醒|醒来)/.test(plainText(data.message))
         )
         let quietNow = inQuiet(data.group_id)
