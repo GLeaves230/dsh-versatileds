@@ -8177,8 +8177,15 @@ export function apply(ctx, config) {
         const rec = await ob.call('get_record', { file: recordSeg.data.file, out_format: 'wav' })
         const wavPath = rec?.data?.file || rec?.data?.url || ''
         const heard = wavPath ? await transcribeVoice(String(wavPath)) : ''
-        if (heard) text = heard
-      } catch { /* 保持 [语音]，别因为转写失败丢消息 */ }
+        if (heard) {
+          text = heard
+          plog('info', `[dsh-versatileds] 语音转文字：${heard.slice(0, 40)}`)
+        } else {
+          plog('warn', `[dsh-versatileds] 语音没转出文字（${wavPath ? '有 wav 但识别为空' : '没拿到 wav'}）：${String(recordSeg.data.file || '').slice(0, 60)}`)
+        }
+      } catch (err) { /* 保持 [语音]，别因为转写失败丢消息 */
+        plog('warn', '[dsh-versatileds] 语音转写失败:', err?.message ?? err)
+      }
     }
     // 「分析一下这个图」这类请求常常先把图单独发出来、再跟一句话：本条没图就回历史里捞最近那张
     if (!imageFiles.length && wantsImageLook(text)) {
