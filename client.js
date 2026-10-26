@@ -1090,7 +1090,7 @@ window.__ModuleLoader__.load({
       if (/^videoShare/.test(field)) return 'share'
       if (/^voice/.test(field)) return 'voice'
       if (/^(image|sticker|live|shareCard)/.test(field)) return 'media'
-      if (/^proactive/.test(field)) return 'proactive'
+      if (/^(proactive|focusChat)/.test(field)) return 'proactive'
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
       if (/^balance/.test(field)) return 'balance'
       if (/^(isolateHostQq|isolateGroupPrivate|sharedMemory)/.test(field)) return 'memory'
@@ -1196,6 +1196,7 @@ window.__ModuleLoader__.load({
       ['liveUrl', '直播间链接', ''],
       ['liveFramePath', '抓图路径覆盖', ''],
       ['videoShareTarget', '分享视频的目标', '留空＝发主人私聊；*＝当前聚焦的 QQ 会话；也可以填群号或 QQ 号'],
+      ['focusChatTarget', '聚焦聊天（手动指定）', '填群号或 QQ 号就只盯这一个会话：主动搭话不去别处、这个窗口的消息都跟上。留空＝按活跃度自动挑（大肥鱼自己的玩法，别的用户不用动）'],
       ['videoShareCardStyle', '分享样式', 'text＝封面图+标题+b23 短链（手机端样式）；link＝纯文本+标题+完整 bilibili.com 链接（电脑端样式）'],
       ['taskSessionName', 'DSH 会话名', '主人派活时新会话叫什么'],
       ['taskDefaultModel', '派活默认模型', 'flash 或 pro'],

@@ -307,6 +307,8 @@ export const Config = Schema.object({
     .description('主动搭话开关'),
   proactiveTargets: Schema.string().default('').volatile()
     .description('主动搭话对象列表，英文逗号分隔的多个 QQ 号；填了它就不用管单个对象'),
+  focusChatTarget: Schema.string().default('').volatile()
+    .description('手动指定聚焦聊天：填群号或 QQ 号，主动搭话只盯这一个；留空＝按活跃度自动挑'),
   proactiveMinGapSec: Schema.number().default(7200).volatile()
     .description('两次主动搭话最短间隔（秒）'),
   proactiveMaxGapSec: Schema.number().default(21600).volatile()
@@ -3453,6 +3455,18 @@ function startStatusServer(config, napcat = null) {
       // 调试点：确认 volatile 的开关值有没有跟着面板/配置翻转
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ enabled: config.enabled.get() !== false }))
+      return
+    }
+    if (url.pathname === '/focus_status') {
+      // 设置页「主动」页用：当前聚焦是谁（手动指定 or 自动），以及内存里正在聚焦的窗口
+      const pinned = String(config.focusChatTarget.get() || '').trim()
+      const now = Date.now()
+      const active = []
+      for (const [key, until] of focusChat.entries()) {
+        if (Number(until) > now) active.push({ key, until })
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ pinned: pinned || '', mode: pinned ? 'manual' : 'auto', active }))
       return
     }
     if (url.pathname === '/voice_status') {
@@ -6618,6 +6632,14 @@ export function apply(ctx, config) {
 
   /** 重新扫目标：配置里的群 + 好友；群会跟群列表核对，退掉的群自动剔除。 */
   async function refreshProactiveQueue() {
+    // 设置页手动指定了「聚焦聊天」就只盯它（只有一个），别的用户不动就走原来的自动挑选
+    const pinned = String(config.focusChatTarget.get() || '').trim()
+    if (pinned) {
+      const isGroup = /^\d{5,}$/.test(pinned) && pinned.length >= 6
+      // 群里 6-10 位；好友 5-11 位，用配置里的群号集合判断更准
+      const groupSet = new Set(parseIds(config.proactiveGroups.get()).map(String))
+      return [{ type: groupSet.has(pinned) ? 'group' : 'private', id: pinned }]
+    }
     const list = []
     const groups = parseIds(config.proactiveGroups.get())
     if (groups.length) {
