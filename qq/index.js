@@ -2537,6 +2537,26 @@ function gsvStatus(config) {
   return gsvStatusCache
 }
 
+/** 完整依赖自检：Python / 代码 / 模型 / 参考音频，缺什么列什么（只查文件，不跑 python）。 */
+function checkGsvDeps(config) {
+  const dir = String(config?.gsvDir?.get?.() || '').trim() || join(versatiledsBase(), 'models', 'gpt-sovits', 'app')
+  const py = String(config?.gsvPython?.get?.() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
+  const pm = join(dir, 'GPT_SoVITS', 'pretrained_models')
+  const ref = String(config?.gsvRefAudio?.get?.() || '').trim()
+  const items = [
+    { key: 'python', name: 'Python 3.11', path: py },
+    { key: 'app', name: 'GPT-SoVITS 代码（api_v2.py）', path: join(dir, 'api_v2.py') },
+    { key: 'bert', name: '中文 BERT 权重', path: join(pm, 'chinese-roberta-wwm-ext-large', 'pytorch_model.bin') },
+    { key: 'hubert', name: 'HuBERT 权重', path: join(pm, 'chinese-hubert-base', 'pytorch_model.bin') },
+    { key: 's1', name: 'GPT 权重 s1v3.ckpt', path: join(pm, 's1v3.ckpt') },
+    { key: 's2', name: 'SoVITS 权重 s2Gv4.pth', path: join(pm, 'gsv-v4-pretrained', 's2Gv4.pth') },
+    { key: 'langdetect', name: '语言检测 lid.176.bin', path: join(pm, 'fast_langdetect', 'lid.176.bin') },
+    { key: 'refAudio', name: '参考音频', path: ref },
+  ].map((it) => ({ ...it, ok: Boolean(it.path) && existsSync(it.path) }))
+  const missing = items.filter((it) => !it.ok)
+  return { ok: missing.length === 0, items, missing: missing.map((it) => it.name) }
+}
+
 /**
  * 变调：正数升（更幼/更「夹」），负数降（更低/更成熟）。
  * GPT-SoVITS 本身没有音高参数，只能靠 ffmpeg：asetrate 改采样率再 atempo 拉回时长，音色跟着变。
@@ -3413,6 +3433,48 @@ function startStatusServer(config, napcat = null) {
         apiUp,
         gsv,
       }))
+      return
+    }
+    if (url.pathname === '/voice_deps') {
+      // 依赖自检：找到的不动，缺的列出来；/voice_deploy 会自动补
+      const deps = checkGsvDeps(config)
+      let deploy = null
+      try {
+        const f = join(versatiledsBase(), 'models', 'gpt-sovits', 'deploy-status.json')
+        if (existsSync(f)) deploy = JSON.parse(readFileSync(f, 'utf8'))
+      } catch { /* 没部署过 */ }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ...deps, deploy }))
+      return
+    }
+    if (url.pathname === '/voice_deploy') {
+      // 一键部署：已装的跳过，缺的补（Python → 依赖 → 模型 → API），后台跑
+      // 部署脚本随插件走（qq/deploy-gsv.mjs，小文件直接融进包里）；大模型和 Python 安装包用它按需下载
+      const gsvRoot = join(versatiledsBase(), 'models', 'gpt-sovits')
+      const pyPath = String(config.gsvPython.get() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
+      const here = dirname(fileURLToPath(import.meta.url))
+      const candidates = [join(here, 'deploy-gsv.mjs'), join(gsvRoot, 'deploy.mjs')]
+      const script = candidates.find((p) => existsSync(p))
+      if (!script) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: '找不到部署脚本（deploy-gsv.mjs）' }))
+        return
+      }
+      try {
+        const child = spawn('node', [script], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+          env: { ...process.env, GSV_ROOT: gsvRoot, GSV_PY: pyPath },
+        })
+        child.unref()
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: String(err?.message ?? err) }))
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, note: '部署已开始，进度看 /voice_deps 的 deploy 字段' }))
       return
     }
     if (url.pathname === '/voice_switch') {
