@@ -1980,6 +1980,8 @@ function squashSpaces(text) {
   return String(text ?? '')
     .replace(/\r\n/g, '\n')
     .replace(/[ \t\u3000]+/g, ' ')
+    // 表情（[呲牙] / [图片] 这类）前面不留空格：「鱼  [呲牙]」→「鱼[呲牙]」
+    .replace(/\s+(?=\[[^\[\]]{1,8}\])/g, '')
     .replace(/(?<=[\u4e00-\u9fff]) (?=[\u4e00-\u9fff])/g, '')
     .replace(/\n{2,}/g, '\n')
     .trim()
