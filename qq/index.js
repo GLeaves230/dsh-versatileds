@@ -1411,8 +1411,8 @@ async function checkUpdate() {
   }
   // 两个源都没通：给用户两个地址自己查
   plog('info', '[dsh-versatileds] 无法查询最新版本，请自行查询：')
-  plog('info', '  GitHub 官方：https://github.com/GLeaves230/dsh-versatileds/releases')
-  plog('info', '  gh-proxy 镜像：https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases')
+  plog('info', '[dsh-versatileds]   GitHub 官方：https://github.com/GLeaves230/dsh-versatileds/releases')
+  plog('info', '[dsh-versatileds]   gh-proxy 镜像：https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases')
 }
 
 async function downloadNapcatPackage() {
