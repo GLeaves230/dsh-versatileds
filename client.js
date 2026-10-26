@@ -949,6 +949,17 @@ window.__ModuleLoader__.load({
             React.createElement('input', { type: 'time', value: p.quietEnd || '', disabled, onChange: (e) => update(gid, { quietEnd: e.target.value }), style: inputStyle }),
             chk(gid, 'ruleInject', '群规注入', p),
             chk(gid, 'memoryInject', '记忆注入', p),
+            (() => {
+              const qk = contacts.groups.some((x) => x.id === String(gid)) ? `g:${gid}` : `p:${gid}`
+              const q = quies.find((x) => x.key === qk)
+              return React.createElement('button', {
+                type: 'button',
+                disabled,
+                onClick: () => clearQuiet(qk),
+                title: q ? `反思中，剩 ${Math.ceil(Number(q.left))} 秒` : '当前不在反思期',
+                style: { padding: '2px 8px', cursor: 'pointer' },
+              }, q ? `跳过反思（${Math.ceil(Number(q.left))} 秒）` : '跳过反思')
+            })(),
             React.createElement('button', { type: 'button', onClick: () => remove(gid), disabled, style: { padding: '2px 8px', cursor: 'pointer' } }, '删除'),
           )
         }),
