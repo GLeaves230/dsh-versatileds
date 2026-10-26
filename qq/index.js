@@ -2883,6 +2883,26 @@ async function toAmrVoice(wavPath) {
 }
 
 /**
+ * 点歌曲库：提前用 Seed-VC 做好的翻唱，放在 <DSH_HOME>/versatileds/models/seed-vc/library/。
+ * 做歌流程：B站 下原曲 → demucs 分人声/伴奏 → Seed-VC 换音色（f0-condition） → 混伴奏 → 转 AMR。
+ */
+function songLibraryDir() {
+  return join(versatiledsBase(), 'models', 'seed-vc', 'library')
+}
+
+/** 这句是不是在点曲库里的歌：是就返回曲目，交回模型正常聊。 */
+function pickSongFor(text) {
+  const t = String(text || '')
+  if (!/唱|来一首|来一段|点歌|听听|吼一|整一/.test(t)) return null
+  const dir = songLibraryDir()
+  const songs = [
+    { title: '朋友的酒', keys: ['朋友的酒', '朋友的洒'], file: join(dir, 'ptdj.amr') },
+  ]
+  const hit = songs.find((s) => s.keys.some((k) => t.includes(k)))
+  return hit && existsSync(hit.file) ? hit : null
+}
+
+/**
  * 念之前把文本收拾成人话：
  * - 去掉 QQ 表情（[白眼] 念出来就是「白眼」两个字）
  * - 拆字梗还原并拉长：「彳亍」→「行～」（念着像拖长一点，不是 chì chù）
@@ -8279,6 +8299,32 @@ export function apply(ctx, config) {
         }
       }
       let reply = ''
+      // 点歌直唱：曲库里有的歌（目前《朋友的酒》）直接发提前做好的翻唱，不走 LLM（2026-10-26）
+      // 歌词是原唱人声转成它的音色再混伴奏，真旋律真词，不是念白。
+      if (!reply && isGroup) {
+        const song = pickSongFor(text)
+        if (song) {
+          try {
+            await ob.call('send_group_msg', {
+              group_id: Number(data.group_id),
+              message: [{ type: 'record', data: { file: `file:///${song.file}` } }],
+            })
+            recordSelfSent(config, { kind: 'sent-voice', groupId: String(data.group_id), text: `[语音/翻唱] ${song.title}` })
+            appendNote({
+              kind: 'group-auto',
+              role: String(config.selfLabel.get() || 'DS'),
+              from: sender,
+              name: senderName,
+              text,
+              reply: `（翻唱）${song.title}`,
+            })
+            plog('info', `[dsh-versatileds] 点歌翻唱：${song.title}`)
+            return
+          } catch (err) {
+            plog('warn', '[dsh-versatileds] 翻唱发送失败:', err?.message ?? err)
+          }
+        }
+      }
       const bvHit = text.match(/BV[0-9A-Za-z]{10}/)
       // 卡片已经点开看过内容了，就交给模型自然接话，别再套「看了《…》，UP 是…」的模板
       if (bvHit && !isGroup && !cardInfo) reply = await watchReply(bvHit[0])
