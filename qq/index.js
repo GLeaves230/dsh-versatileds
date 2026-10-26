@@ -8497,9 +8497,13 @@ export function apply(ctx, config) {
           const plainVoiceText = stripBrackets(reply)
           const voiceChance = Math.max(0, Math.min(100, Number(config.voiceChance.get() ?? 0)))
           // 对方是 AI 群友就只打字：不是所有 AI 都能听语音，别拿语音去烦人家
+          // 手动名单（可选）+ 自动识别：第 7810 行 observeSpeaker 每来一条群消息就打分，
+          // 强证据（自称 AI / 系统提示词泄漏）或累计分够高就 confirmed
           const aiNames = new Set(String(config.aiGroupMembers.get() || '')
             .split(/[，,]/).map((s) => s.trim()).filter(Boolean))
+          const aiRec = aiSuspects.get(String(sender || ''))
           const replyIsAI = aiNames.has(String(senderName || '')) || aiNames.has(String(sender || ''))
+            || Boolean(aiRec && aiRec.confirmed)
           const casualVoice = !replyIsAI && !wantVoice && config.voiceEnabled.get() === true && isGroup
             && plainVoiceText && plainVoiceText.length <= 60
             && voiceChance > 0 && Math.random() * 100 < voiceChance
