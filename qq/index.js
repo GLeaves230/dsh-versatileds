@@ -368,8 +368,12 @@ export const Config = Schema.object({
     .description('要合成的语言：zh / en / ja'),
   gsvSpeed: Schema.number().default(1.0).volatile()
     .description('语速：1.0 正常，0.9 慢一点，1.1 快一点'),
-  gsvPitch: Schema.number().default(2).volatile()
-    .description('音调（半音）：正数更幼更「夹」，负数更成熟；默认 +2，0 保持原声'),
+  gsvPitch: Schema.number().default(0).volatile()
+    .description('音调（半音）：正数更幼更「夹」，负数更成熟；默认 0 保持原声'),
+  gsvSplit: Schema.string().default('cut0').volatile()
+    .description('文本切分：cut0＝整句一次生成（音色最稳）；cut5＝按标点切段（长句更自然，但音色会飘）'),
+  gsvTemperature: Schema.number().default(0.5).volatile()
+    .description('采样温度：越低音色越稳，越高越有变化；默认 0.5'),
   ruleSyncEnabled: Schema.boolean().default(true).volatile()
     .description('定时主动看群公告和群介绍，记成群规'),
   ruleSyncHours: Schema.number().default(6).volatile()
@@ -2583,11 +2587,16 @@ async function gsvSynthesize(text, config) {
     ref_audio_path: refAudio,
     prompt_text: refText,
     prompt_lang: String(config?.gsvRefLang?.get?.() || 'zh'),
-    text_split_method: 'cut5',
+    // cut0＝不切分，整句一次生成：切段的话每段独立采样，音色会飘（2026-10-26 主人：声音不错但不稳）
+    text_split_method: String(config?.gsvSplit?.get?.() || 'cut0'),
     batch_size: '1',
     media_type: 'wav',
     streaming_mode: 'false',
     speed_factor: String(config?.gsvSpeed?.get?.() ?? 1),
+    // 采样参数压稳一点：temperature 低、top_k 小，音色波动小
+    temperature: String(config?.gsvTemperature?.get?.() ?? 0.5),
+    top_k: '5',
+    top_p: '0.9',
   })
   const res = await fetch(`${base}/tts?${q}`, { signal: AbortSignal.timeout(90_000) })
   if (!res.ok) {
