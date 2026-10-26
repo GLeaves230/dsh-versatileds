@@ -2898,6 +2898,7 @@ function pickSongFor(text) {
   const songs = [
     { title: '朋友的酒', keys: ['朋友的酒', '朋友的洒'], file: join(dir, 'ptdj.amr') },
     { title: '叹云兮', keys: ['叹云兮'], file: join(dir, 'tyx.amr') },
+    { title: '云原神之歌', keys: ['云原神', '云·原神', '云朵之歌'], file: join(dir, 'yyy.amr') },
   ]
   const hit = songs.find((s) => s.keys.some((k) => t.includes(k)))
   return hit && existsSync(hit.file) ? hit : null
