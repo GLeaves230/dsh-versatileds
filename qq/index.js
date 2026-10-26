@@ -368,6 +368,8 @@ export const Config = Schema.object({
     .description('要合成的语言：zh / en / ja'),
   gsvSpeed: Schema.number().default(1.0).volatile()
     .description('语速：1.0 正常，0.9 慢一点，1.1 快一点'),
+  gsvVersion: Schema.string().default('v4').volatile()
+    .description('GPT-SoVITS 版本：v4＝音色更稳但慢（20-40 秒/句）；v2＝快（6-17 秒/句）。切换会自动重启 API'),
   gsvPitch: Schema.number().default(0).volatile()
     .description('音调（半音）：正数更幼更「夹」，负数更成熟；默认 0 保持原声'),
   gsvSplit: Schema.string().default('cut0').volatile()
@@ -2619,6 +2621,40 @@ async function gsvSynthesize(text, config) {
 }
 
 /**
+ * 重启 GPT-SoVITS API，用指定版本的 yaml（v2 / v4）。
+ * 版本是启动配置，没法热切，所以换版本 = 杀掉 9880 上的旧进程再拉新的。
+ */
+function restartGsvApi(config, version) {
+  const dir = String(config?.gsvDir?.get?.() || '').trim() || join(versatiledsBase(), 'models', 'gpt-sovits', 'app')
+  const py = String(config?.gsvPython?.get?.() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
+  const cfg = version === 'v2' ? 'GPT_SoVITS/configs/tts_infer_v2.yaml' : 'GPT_SoVITS/configs/tts_infer.yaml'
+  // 找 9880 端口占用进程并杀掉
+  try {
+    const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 20000 })
+    const pids = new Set()
+    for (const line of String(out.stdout || '').split(/\r?\n/)) {
+      if (!line.includes(':9880') || !line.includes('LISTENING')) continue
+      const pid = line.trim().split(/\s+/).pop()
+      if (pid && /^\d+$/.test(pid)) pids.add(pid)
+    }
+    for (const pid of pids) {
+      try { spawnSync('taskkill', ['/F', '/PID', pid], { timeout: 10000 }) } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  // 拉新的（detached，别跟着 DSH 退出）
+  try {
+    const child = spawn(py, ['api_v2.py', '-a', '127.0.0.1', '-p', '9880', '-c', cfg], {
+      cwd: dir,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    child.unref()
+  } catch { /* ignore */ }
+  return { version, configFile: cfg, dir }
+}
+
+/**
  * 记忆文件写入锁：和记忆目录里的 lock.mjs / lock.py 共用同一个 `.lock`。
  * QQ 侧写 notes/bili_log 时先拿锁，DSH 侧写记忆也拿同一把，两边不会同时改同一个文件。
  * 同步实现：抢不到就用 Atomics.wait 小睡重试，等满 timeoutMs 还抢不到就降级直接写（宁可写也别卡住）。
@@ -3340,8 +3376,17 @@ function startStatusServer(config) {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({
         backend: String(config.voiceBackend.get() || 'qq'),
+        version: String(config.gsvVersion.get() || 'v4'),
         gsv,
       }))
+      return
+    }
+    if (url.pathname === '/voice_switch') {
+      // 换 GPT-SoVITS 版本：切 yaml 重启 API（约 40 秒后才能用）
+      const version = url.searchParams.get('version') === 'v2' ? 'v2' : 'v4'
+      const info = restartGsvApi(config, version)
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, ...info, note: 'API 正在重启，约 40 秒后可用' }))
       return
     }
     if (url.pathname === '/login/open') {

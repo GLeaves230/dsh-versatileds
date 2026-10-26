@@ -260,6 +260,45 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** GPT-SoVITS 版本下拉：换版本会重启 API（v4 慢但稳，v2 快但略飘）。 */
+    const VOICE_VERSION_OPTIONS = [
+      ['v4', 'v4（音色稳，20-40 秒/句）'],
+      ['v2', 'v2（快，6-17 秒/句，音色略飘）'],
+    ]
+
+    function VoiceVersionRow(props) {
+      const { form, value, disabled } = props
+      const [pending, setPending] = React.useState(false)
+      const [note, setNote] = React.useState('')
+      const current = String(value || 'v4')
+      const switchTo = async (next) => {
+        setPending(true)
+        setNote('')
+        try {
+          await form.set('gsvVersion', next)
+          const r = await fetch(`${QQ_STATUS_URL}/voice_switch?version=${encodeURIComponent(next)}`)
+          const j = await r.json()
+          setNote(j?.note || '已发起重启')
+        } catch (e) {
+          setNote('重启失败：' + (e?.message ?? e))
+        } finally {
+          setPending(false)
+        }
+      }
+      return React.createElement(
+        'label',
+        { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, 'GPT-SoVITS 版本'),
+        React.createElement('select', {
+          value: current,
+          disabled: disabled || pending,
+          onChange: (e) => switchTo(e.target.value),
+          style: { ...inputStyle, cursor: 'pointer' },
+        }, VOICE_VERSION_OPTIONS.map(([id, name]) => React.createElement('option', { key: id, value: id }, name))),
+        React.createElement('span', { style: hintStyle }, note || '换版本会重启 API（约 40 秒），期间发不出语音'),
+      )
+    }
+
     /** 语音方案下拉：QQ 官方 AI 语音 / 本地 GPT-SoVITS。 */
     const VOICE_GSV_FIELDS = [
       ['gsvApiUrl', 'API 地址', 'api_v2.py 默认 http://127.0.0.1:9880'],
@@ -1579,6 +1618,15 @@ window.__ModuleLoader__.load({
             }),
           )
           if (String(v.voiceBackend || 'qq') === 'gpt-sovits') {
+            // 版本选择放最前：v4 稳但慢，v2 快但飘
+            children.push(
+              React.createElement(VoiceVersionRow, {
+                key: 'gsv-version',
+                form,
+                value: v.gsvVersion,
+                disabled: !snap.writable,
+              }),
+            )
             for (const [field, label, hint] of VOICE_GSV_FIELDS) {
               children.push(
                 React.createElement(TextRow, {
