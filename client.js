@@ -854,7 +854,6 @@ window.__ModuleLoader__.load({
       ['memory', '记忆'],
       ['balance', '余额'],
       ['system', '系统'],
-      ['advanced', '高级'],
       ['logs', '日志'],
     ]
 
@@ -862,9 +861,25 @@ window.__ModuleLoader__.load({
     function GroupProfilesPanel(props) {
       const { form, value, disabled } = props
       const [draft, setDraft] = React.useState('')
+      const [contacts, setContacts] = React.useState({ groups: [], friends: [] })
       const list = React.useMemo(() => {
         try { return JSON.parse(String(value || '{}')) || {} } catch { return {} }
       }, [value])
+      React.useEffect(() => {
+        let alive = true
+        fetch(`${QQ_STATUS_URL}/contacts`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (alive) setContacts({ groups: d.groups || [], friends: d.friends || [] }) })
+          .catch(() => {})
+        return () => { alive = false }
+      }, [])
+      const nameOf = (id) => {
+        const g = contacts.groups.find((x) => x.id === String(id))
+        if (g) return `群 ${g.name}`
+        const f = contacts.friends.find((x) => x.id === String(id))
+        if (f) return `好友 ${f.name}`
+        return String(id)
+      }
       const gids = Object.keys(list)
       const save = (next) => form.set('groupProfiles', JSON.stringify(next))
       const update = (gid, patch) => save({ ...list, [gid]: { ...(list[gid] || {}), ...patch } })
@@ -878,13 +893,20 @@ window.__ModuleLoader__.load({
       const chk = (gid, key, label, p) => React.createElement('label', { key: `${gid}-${key}`, style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 } },
         React.createElement('input', { type: 'checkbox', checked: p[key] !== false, disabled, onChange: (e) => update(gid, { [key]: e.target.checked }) }),
         label)
-      return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+      return React.createElement('details', { style: { marginTop: 12 } },
+        React.createElement('summary', { style: { cursor: 'pointer', fontSize: 13, fontWeight: 600 } }, '高级：群级独立设置（免打扰 / 群规 / 记忆）'),
+        React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 } },
         React.createElement('div', { style: rowStyle },
-          React.createElement('span', { style: labelStyle }, '添加群号'),
-          React.createElement('input', {
-            value: draft, disabled, placeholder: '群号，比如 1087558589',
-            onChange: (e) => setDraft(e.target.value), style: inputStyle,
-          }),
+          React.createElement('span', { style: labelStyle }, '添加群 / 个人'),
+          React.createElement('select', {
+            value: draft, disabled, onChange: (e) => setDraft(e.target.value), style: inputStyle,
+          },
+            React.createElement('option', { value: '' }, '-- 选已加入的群或好友 --'),
+            React.createElement('optgroup', { label: '群' },
+              contacts.groups.map((g) => React.createElement('option', { key: `g${g.id}`, value: g.id }, `${g.name}（${g.id}）`))),
+            React.createElement('optgroup', { label: '好友' },
+              contacts.friends.map((f) => React.createElement('option', { key: `f${f.id}`, value: f.id }, `${f.name}（${f.id}）`))),
+          ),
           React.createElement('button', { type: 'button', onClick: add, disabled, style: { padding: '4px 10px', cursor: 'pointer' } }, '添加'),
         ),
         gids.length === 0
@@ -893,7 +915,7 @@ window.__ModuleLoader__.load({
         ...gids.map((gid) => {
           const p = list[gid] || {}
           return React.createElement('div', { key: gid, style: { ...rowStyle, flexWrap: 'wrap', gap: 8, borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: 8 } },
-            React.createElement('span', { style: { ...labelStyle, minWidth: 110 } }, gid),
+            React.createElement('span', { style: { ...labelStyle, minWidth: 110 } }, `${nameOf(gid)}（${gid}）`),
             React.createElement('span', { style: hintStyle }, '免打扰'),
             React.createElement('input', { type: 'time', value: p.quietStart || '', disabled, onChange: (e) => update(gid, { quietStart: e.target.value }), style: inputStyle }),
             React.createElement('span', { style: hintStyle }, '到'),
@@ -903,6 +925,7 @@ window.__ModuleLoader__.load({
             React.createElement('button', { type: 'button', onClick: () => remove(gid), disabled, style: { padding: '2px 8px', cursor: 'pointer' } }, '删除'),
           )
         }),
+        ),
       )
     }
 
@@ -1797,7 +1820,7 @@ window.__ModuleLoader__.load({
         }
 
         // 日志子页面：插件日志 + NapCat 日志 + 聊天记录
-        if (activeTab === 'advanced') {
+        if (activeTab === 'group') {
           children.push(React.createElement(GroupProfilesPanel, {
             key: 'group-profiles', form, value: v.groupProfiles, disabled: !snap.writable,
           }))

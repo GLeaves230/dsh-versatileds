@@ -4138,6 +4138,22 @@ button{margin:8px;padding:10px 30px;font-size:16px;border-radius:8px;border:0;cu
       }
       return
     }
+    if (url.pathname === '/contacts') {
+      // 高级页的「添加群/个人」用：直接列出已经加入的群和好友，省得手输群号（2026-10-26）
+      try {
+        const groups = await ob.groups()
+        const friends = await ob.friends()
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(JSON.stringify({
+          groups: (groups || []).map((g) => ({ id: String(g.group_id), name: String(g.group_name || g.group_id) })),
+          friends: (friends || []).map((f) => ({ id: String(f.user_id), name: String(f.remark || f.nickname || f.user_id) })),
+        }))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ error: String(err?.message ?? err) }))
+      }
+      return
+    }
     if (url.pathname === '/logs') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify(listLogFiles(config)))
