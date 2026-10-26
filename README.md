@@ -1,5 +1,13 @@
 # dsh-versatileds-plugin — 多功能DS插件
 
+> **免责声明（先看这段）**
+>
+> 本插件及随包附带的各项组件（NapCat、ffmpeg、GPT-SoVITS 相关脚本、参考音频等）**仅供学习、研究和个人自用**。
+>
+> - ❌ **禁止商用**：不得用于出售、付费托管、盈利性集成、随商业产品捆绑
+> - ⚠️ **版权问题自行解决**：第三方组件、声线素材、游戏语音等的版权归各自权利人所有；要商用或公开分发请自行取得授权，作者不承担任何版权责任
+> - ✅ 首次使用按下面「新用户上手」走一遍，就能让你自己的大肥鱼在 QQ 上说话（语音默认走本地 GPT-SoVITS，缺环境会自动下载部署）
+
 **多功能DS插件（VersatileDS）**：B站 小号代理与 QQ 代理合体，一个左侧栏入口同时管两边：
 
 - 左侧栏一个入口「多功能DS插件」，点进去上面切 **B站模块 / QQ模块**，每个模块页就是原来各自插件设置页的样子。
@@ -19,7 +27,8 @@ dsh-versatileds-plugin/
 │   ├── live.js         # 直播 / 抓帧
 │   └── share-card.js   # QQ 分享卡片解析
 ├── cordis.patch.yml    # 插入 id: versatileds 的条目
-├── vendor/             # 随包依赖：napcat.zip、ffmpeg.zip（首次启动自动解压）
+├── qq/deploy-gsv.mjs   # GPT-SoVITS 一键部署脚本（随包，小文件）
+├── vendor/             # 随包依赖：napcat.zip（首次启动解压；ffmpeg 改成从 PyPI 镜像下载）
 └── package.json
 ```
 
@@ -40,9 +49,12 @@ dsh-versatileds-plugin/
 | 依赖 | 用在哪 | 缺了会怎样 |
 |---|---|---|
 | NapCat（OneBot 11） | QQ 模块全部功能 | 连不上 `3000` / `3011`，`versatileds_qq` 会提示 NapCat 没在跑 |
-| ffmpeg | B站 抓帧、直播帧、表情包缩图、感知哈希 dHash | 抓帧和缩图失败，纯文字功能不受影响 |
+| ffmpeg | B站 抓帧、直播帧、表情包缩图、语音前后处理 | 抓帧和缩图失败，纯文字功能不受影响（缺失会自动下载） |
+| GPT-SoVITS（可选） | QQ 模块的本地语音（`voiceBackend: gpt-sovits`） | 自动退回 QQ 官方 AI 语音；首次用可在设置页「语音」点「一键部署」 |
+| Python 3.11（可选） | 跑 GPT-SoVITS 用 | 同上，部署脚本会自动装到 `versatileds/python311` |
 
-ffmpeg 的查找顺序：B站 模块的配置项 `ffmpegPath` → PATH 里的 `ffmpeg` → 随包解压出来的位置（`<DSH_HOME>/tmp/live/ffmpeg/imageio_ffmpeg/binaries/...`）。
+ffmpeg 的查找顺序：配置项 `ffmpegPath` → PATH 里的 `ffmpeg` → `<DSH_HOME>/versatileds/ffmpeg/imageio_ffmpeg/binaries/...`。
+**缺失时自动从清华 PyPI 镜像下载 `imageio-ffmpeg` wheel（约 22MB）解压到 `versatileds/ffmpeg`**，不再随包塞 ffmpeg。
 
 **数据与凭据**（都在 `DSH_HOME` 下，换机器时一起搬或者重新登录）
 
@@ -171,7 +183,8 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
    - 点「启动登录服务」，UAC 点「是」，手机 QQ 扫码并确认。
 3. 登录后二维码自动删除，`3000` / `3011` 起来就通了。不想挂着了点「退出登录」（会杀掉 NapCat 进程），下次点启动走快速登录。
 4. B站 模块要自己的 cookie（`cookieFile`），没配就只能匿名看公开内容，点赞/投币/评论都会失败。
-5. 人设改 `qq/persona.md`：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。
+5. 人设改 `qq/persona.md`：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。默认人设已带完整家庭关系（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小），开箱即用。
+6. **语音（可选但推荐）**：设置页 →「语音」→ 方案选「GPT-SoVITS（本地）」→ 点「环境检查」，缺依赖就点「一键部署」（自动装 Python 3.11 + torch + 模型，约 20-30 分钟，全程后台）；不装也能用 QQ 官方 AI 语音。默认音色是可莉（参考音频 `kc-1.wav`，CV 花玲），换音色把 3-10 秒干净人声放进 `versatileds/models/gpt-sovits/ref/` 再填文件名。
 
 ## 合并时修掉的问题
 
@@ -199,6 +212,15 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - `AGENTS.md` 模板加「这套东西怎么跑起来的」前置常识 + 人设节；旧模板自动补节。
   - 主人身份全走 `ownerQQ` 变量（代码里没有 QQ 号字面量）；被问「你主人是谁」报「@群名片」并真的 @ 到人；群里不露 QQ 号。
   - QQ 侧：主人说「别聊了」会应声静默；记忆锚点从 shared-memory 读（直答兜底修复）。
+
+  2026-10-26 追加（仍 0.2.7）：
+
+  - 本地语音：接入 GPT-SoVITS（可切 `voiceBackend: qq / gpt-sovits`），默认参考音频换成可莉（`kc-1.wav`，CV 花玲），参考音频支持只填文件名；语音发送前自动去表情、彳亍→行～、剪前后静音、压中文间空格和多余空行。
+  - 语音配套：设置页「语音」页加「GPT-SoVITS 版本」下拉（v2/v4 一键切、自动重启 API）和「测试语音」（可发私聊/群，日志身份记 Admin）；`/voice_deps` 依赖自检 + `/voice_deploy` 一键部署（`qq/deploy-gsv.mjs` 随包，Python/模型按需下载）。
+  - 路径相对化：ffmpeg 改从清华 PyPI 的 imageio-ffmpeg wheel 下载并落到 `<DSH_HOME>/versatileds/ffmpeg`（不再随包带，包体 148MB → 117MB）；GPT-SoVITS / Python 3.11 都收在 `versatileds` 下；配置里的绝对路径全部清空走默认。
+  - 人设补「出身」（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小、其余亲戚算团队）和多语种谐音理解；默认人设模板同步更新。
+  - 群聊小修：@/点名/主人接管后也挂 5 分钟聚焦；主动搭话的群按活跃度排序；回复开头的占位符（[表情]/[图片]/[语音]）不再抄出来；`@主人` 会转成真 at。
+  - README / package.json 补「仅供学习和个人使用、禁止商用、版权问题自行解决」声明。
 ## 许可
 
 **受限再分发许可**，参照 NapCatQQ 的模式：
