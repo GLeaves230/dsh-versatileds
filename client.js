@@ -1214,6 +1214,11 @@ window.__ModuleLoader__.load({
       poke: '搓一搓',
     }
 
+    /** 「连接」页里默认收起的进阶字段：目录/启动方式这类，填错才会动。 */
+    const CONN_ADVANCED_FIELDS = new Set([
+      'napcatDir', 'napcatLauncher', 'napcatQrPath', 'napcatHiddenLaunch', 'napcatQuickLogin',
+    ])
+
     /** QQ 字段归到哪个分类页，按名字前缀判断。 */
     function qqGroupOf(field) {
       if (/^(enabled|napcatHttp|napcatWs|onebotToken|autoStartNapCat|napcatHiddenLaunch|napcatDir|napcatLauncher|napcatQrPath|napcatQuickLogin|ownerLabel|takeoverLabel|selfLabel)$/.test(field)) return 'conn'
@@ -1750,6 +1755,7 @@ window.__ModuleLoader__.load({
 
         for (const [field, label, hint] of QQ_BOOL_FIELDS) {
           if (qqGroupOf(field) !== activeTab) continue
+          if (activeTab === 'conn' && CONN_ADVANCED_FIELDS.has(field)) continue
           children.push(React.createElement(BoolRow, {
             key: field, form, field, label, hint, pending, setPending,
             checked: Boolean(v[field]),
@@ -1797,6 +1803,7 @@ window.__ModuleLoader__.load({
 
         for (const [field, label, hint] of QQ_TEXT_FIELDS) {
           if (qqGroupOf(field) !== activeTab) continue
+          if (activeTab === 'conn' && CONN_ADVANCED_FIELDS.has(field)) continue
           children.push(
             React.createElement(TextRow, {
               key: field, form, field, label, hint,
@@ -2283,6 +2290,35 @@ window.__ModuleLoader__.load({
           ),
         )
 
+        // 「连接」页：进阶字段默认收起，避免一屏几十个输入框吓人
+        if (activeTab === 'conn') {
+          const advancedRows = []
+          for (const [field, label, hint] of QQ_BOOL_FIELDS) {
+            if (!CONN_ADVANCED_FIELDS.has(field)) continue
+            advancedRows.push(React.createElement(BoolRow, {
+              key: field, form, field, label, hint, pending, setPending,
+              checked: Boolean(v[field]),
+              disabled: !snap.writable,
+            }))
+          }
+          for (const [field, label, hint] of QQ_TEXT_FIELDS) {
+            if (!CONN_ADVANCED_FIELDS.has(field)) continue
+            advancedRows.push(React.createElement(TextRow, {
+              key: field, form, field, label, hint,
+              value: v[field] ?? '',
+              disabled: !snap.writable,
+            }))
+          }
+          children.push(React.createElement('details', {
+            key: 'conn-advanced',
+            style: { marginTop: '10px', borderTop: '1px solid rgba(128,128,128,0.2)', paddingTop: '8px' },
+          },
+            React.createElement('summary', {
+              style: { cursor: 'pointer', fontSize: '13px', opacity: 0.75 },
+            }, `高级设置（目录 / 启动方式，共 ${advancedRows.length} 项）`),
+            React.createElement('div', { style: { marginTop: '8px' } }, advancedRows),
+          ))
+        }
         return React.createElement('div', { style: { padding: '8px 0' } }, ...children)
       }
     }
