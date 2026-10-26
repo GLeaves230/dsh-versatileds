@@ -1302,7 +1302,78 @@ function ensureOneBotConfig(config) {
 }
 
 /**
- * 首次使用时把插件自带的 NapCat 包解压到 napcatRoot。
+ * 从 NapCat 官方 GitHub 下最新的 Windows Node 包，存到 vendor/napcat.zip。
+ * npm 包不带这个 118MB 的大文件（超 npm 的 100MB 限制），所以第一次用时现拉。
+ */
+async function downloadNapcatPackage() {
+  const q = (s) => String(s).replace(/'/g, "''")
+  // DSH 里的 fetch 拉外网会 "fetch failed"（同一个 node 在交互式 shell 又能连），下载交给 PowerShell。
+  // github.com 的 release 下载在国内直连超时，所以优先走 gh-proxy.com 镜像，官方地址兜底。
+  const api = 'https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest'
+  const psApi = `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
+    `$r = Invoke-RestMethod -Uri '${api}' -Headers @{ 'User-Agent' = 'dsh-versatileds-plugin' } -TimeoutSec 30; ` +
+    `$a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.Windows.Node.zip' } | Select-Object -First 1; ` +
+    `if (-not $a) { $a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.zip' } | Select-Object -First 1 }; ` +
+    `if (-not $a) { Write-Error 'no asset'; exit 2 }; ` +
+    `Write-Output ($r.tag_name + '|' + $a.name + '|' + $a.browser_download_url)`
+  const meta = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psApi], {
+    encoding: 'utf8', timeout: 60000, windowsHide: true,
+  })
+  if (meta.status !== 0) throw new Error(`查 NapCat 最新版本失败（PowerShell）：${String(meta.stderr || '').trim().slice(0, 200)}`)
+  const line = String(meta.stdout || '').trim().split('\n').pop().trim()
+  const [tag, assetName, officialUrl] = line.split('|')
+  if (!officialUrl) throw new Error(`没解析到 NapCat 下载地址：${line.slice(0, 120)}`)
+
+  // 主人定的顺序：官方优先 → gh-proxy.com → 都不行就提示手动下载并关掉插件
+  const candidates = [
+    officialUrl,
+    `https://gh-proxy.com/${officialUrl}`,
+  ]
+  mkdirSync(dirname(NAPCAT_VENDOR_ZIP), { recursive: true })
+  let lastErr = ''
+  for (const url of candidates) {
+    console.info(`[dsh-versatileds-plugin] 下载 NapCat ${tag}：${url}`)
+    const isOfficial = url === officialUrl
+    // 官方直连：90 秒内下不完就当「太慢」换镜像；镜像给足 25 分钟
+    const psTimeout = isOfficial ? 90 : 1500
+    const psDl = `$ProgressPreference = 'SilentlyContinue'; ` +
+      `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
+      `Invoke-WebRequest -Uri '${q(url)}' -OutFile '${q(NAPCAT_VENDOR_ZIP)}' -Headers @{ 'User-Agent' = 'dsh-versatileds-plugin' } -TimeoutSec ${psTimeout}`
+    const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psDl], {
+      encoding: 'utf8', timeout: (psTimeout + 15) * 1000, windowsHide: true,
+    })
+    let size = 0
+    try { size = statSync(NAPCAT_VENDOR_ZIP).size } catch { size = 0 }
+    if (r.status === 0 && size > 5 * 1024 * 1024) {
+      // 镜像可能返回截断的 zip，验一下能不能读目录
+      let ok = false
+      try {
+        const q2 = (s) => String(s).replace(/'/g, "''")
+        const chk = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+          `$ProgressPreference = 'SilentlyContinue'; ` +
+          `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+          `try { $z = [System.IO.Compression.ZipFile]::OpenRead('${q2(NAPCAT_VENDOR_ZIP)}'); $n = $z.Entries.Count; $z.Dispose(); if ($n -gt 100) { exit 0 } else { exit 3 } } catch { exit 4 }`], {
+          timeout: 60000, windowsHide: true,
+        })
+        ok = chk.status === 0
+      } catch { ok = false }
+      if (ok) {
+        console.info(`[dsh-versatileds-plugin] NapCat 已存到 ${NAPCAT_VENDOR_ZIP}（${Math.round(size / 1048576)} MB）`)
+        return tag
+      }
+      lastErr = `zip 校验失败（${Math.round(size / 1048576)} MB），可能被截断`
+      console.info(`[dsh-versatileds-plugin] ${lastErr}，换下一个源`)
+      continue
+    }
+    lastErr = `下载失败（exit ${r.status}）：${String(r.stderr || '').trim().slice(0, 160)}`
+    console.info(`[dsh-versatileds-plugin] ${lastErr}`)
+  }
+  throw new Error(`NapCat 下载失败：${lastErr}`)
+}
+
+/**
+ * 首次使用时把 NapCat 包解压到 napcatRoot。
+ * 包里没有 vendor/napcat.zip（npm 版不带大文件）就从 NapCat 官方下最新的。
  * 依赖检查：解压后关键文件齐了才算 ready；不齐就记错误，登录页会显示。
  */
 async function ensureNapcatPackage(config) {
@@ -1314,15 +1385,15 @@ async function ensureNapcatPackage(config) {
     return true
   }
   if (napcatPkg.busy) return false
-  if (!existsSync(NAPCAT_VENDOR_ZIP)) {
-    napcatPkg.error = '插件里没有 vendor/napcat.zip'
-    return false
-  }
   napcatPkg.busy = true
   napcatPkg.error = ''
   try {
+    if (!existsSync(NAPCAT_VENDOR_ZIP)) {
+      console.info('[dsh-versatileds-plugin] 插件里没有 NapCat 包，去官方下最新版')
+      await downloadNapcatPackage()
+    }
     mkdirSync(dir, { recursive: true })
-    console.info('[dsh-versatileds-plugin] 首次初始化：解压自带 NapCat 到', dir)
+    console.info('[dsh-versatileds-plugin] 首次初始化：解压 NapCat 到', dir)
     const q = (s) => String(s).replace(/'/g, "''")
     const r = spawnSync('powershell', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
@@ -1334,6 +1405,15 @@ async function ensureNapcatPackage(config) {
     return napcatPkg.ready
   } catch (err) {
     napcatPkg.error = String(err?.message ?? err)
+    // 自动下载彻底失败（官方和 gh-proxy 都不行）：提示手动下载，并把 QQ 模块关掉，
+    // 免得每次启动都卡在这、日志一直刷。
+    if (/下载失败|no asset|zip 校验失败/.test(napcatPkg.error)) {
+      try { config.enabled.set(false) } catch { /* 老框架没有 set 就算了 */ }
+      napcatPkg.error =
+        '自动下载 NapCat 失败。请手动下载 NapCat.Shell.Windows.Node.zip，'
+        + '放到插件目录 vendor/napcat.zip；下载地址 https://gh-proxy.com/https://github.com/NapNeko/NapCatQQ/releases/latest 。'
+        + 'QQ 模块已自动关闭，放好包后重新启用它即可。'
+    }
     return false
   } finally {
     napcatPkg.busy = false
@@ -6296,6 +6376,8 @@ export function apply(ctx, config) {
 
   /** 确保 NapCat 在跑：没跑就拉起、等登录，登录完清掉二维码缓存。openPage=false 时不弹独立网页；force=true 是设置页手动点的，不受 autoStartNapCat 限制。 */
   async function ensureNapCat(reason = '', openPage = true, force = false) {
+  // 启动/登录/工具调用前先确保 NapCat 包在（npm 版不自带 118MB 大包，缺了就现下最新的）
+  await ensureNapcatPackage(config).catch(() => {})
     if (await napcatAlive()) {
       if (napcatLoggedOut) {
         napcatLoggedOut = false
