@@ -1223,6 +1223,7 @@ window.__ModuleLoader__.load({
       ['webSearchCooldownSec', '搜索最短间隔（秒）', 'webSearch'],
       ['balanceWarnThreshold', '余额预警阈值（元）', 'balance'],
       ['balanceCheckHours', '余额多久查一次（小时）', 'balance'],
+  ['updateCheckHours', '更新自检间隔（小时，0 关闭）', 'proactive'],
       ['contextRotateRounds', '多少轮提醒归档/换会话', '0 关闭'],
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
       ['stickerChance', '群里发表情包概率（0-100）', '回完话后附一张的概率'],

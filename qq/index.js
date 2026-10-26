@@ -461,6 +461,9 @@ export const Config = Schema.object({
     .description('余额预警阈值（元）'),
   balanceCheckHours: Schema.number().default(6).volatile()
     .description('多久查一次余额（小时），最小 1'),
+  /** 更新自检间隔（小时）：0 关闭，默认 24。 */
+  updateCheckHours: Schema.number().default(24).volatile()
+    .description('多久查一次新版本（小时），0 关闭'),
   balanceStopGroupOnLow: Schema.boolean().default(true).volatile()
     .description('余额低于阈值时停掉群聊与主动搭话，只回主人私聊'),
 
@@ -1378,7 +1381,14 @@ function runAsync(exe, args, timeoutMs) {
  * 启动后异步自检：查 GitHub 最新 release tag（官方 API → gh-proxy 镜像），
  * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新；顺便告诉用户「哪个源通」。
  */
-async function checkUpdate() {
+async function checkUpdate(config) {
+  // 自检间隔（小时），0 = 关闭；状态存在 qq/update-check.json，别每次启动都查一遍
+  const hours = Math.max(0, Number(config?.updateCheckHours?.get?.() ?? 24))
+  if (!hours) return
+  const stateFile = join(versatiledsBase(), 'qq', 'update-check.json')
+  let lastAt = 0
+  try { lastAt = Number(JSON.parse(readFileSync(stateFile, 'utf8')).lastAt || 0) } catch { /* 没记录过 */ }
+  if (lastAt && Date.now() - lastAt < hours * 3600_000) return
   const api = 'https://api.github.com/repos/GLeaves230/dsh-versatileds/releases/latest'
   const sources = [
     {
@@ -1408,13 +1418,16 @@ async function checkUpdate() {
       }
       // 哪个源自检通了就推荐从哪儿下（国内直连 GitHub 常常超时）
       plog('info', `[dsh-versatileds] 推荐从${s.name}下载：${s.download}`)
+      try { writeFileSync(stateFile, JSON.stringify({ lastAt: Date.now() }), 'utf8') } catch { /* ignore */ }
       return
     } catch { /* 换下一个源 */ }
   }
+  // 无论成功失败都记一笔，避免短时间内反复查
+  try { writeFileSync(stateFile, JSON.stringify({ lastAt: Date.now() }), 'utf8') } catch { /* ignore */ }
   // 两个源都没通：给用户两个地址自己查
   plog('info', '[dsh-versatileds] 无法查询最新版本，请自行查询：')
-  plog('info', '[dsh-versatileds]   GitHub 官方：https://github.com/GLeaves230/dsh-versatileds/releases')
-  plog('info', '[dsh-versatileds]   gh-proxy 镜像：https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases')
+  plog('info', '[dsh-versatileds] GitHub 官方：https://github.com/GLeaves230/dsh-versatileds/releases')
+  plog('info', '[dsh-versatileds] gh-proxy 镜像：https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases')
 }
 
 async function downloadNapcatPackage() {
@@ -4880,7 +4893,7 @@ export function apply(ctx, config) {
     } catch { /* 目录不可写就跳过 */ }
   }, 0)
   // 启动完成后（8 秒）异步查一下有没有新版本，别拖慢启动
-  setTimeout(() => { checkUpdate().catch(() => {}) }, 8000)
+  setTimeout(() => { checkUpdate(config).catch(() => {}) }, 8000)
   // 重载会复用模块实例：上一轮的反思静默期要清掉，不然改完配置还在「反思中」
   quietState.clear()
   // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
