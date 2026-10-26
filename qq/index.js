@@ -8,11 +8,14 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-/** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序。 */
+/** 当前插件版本（和 package.json 手动同步；聊天日志会带上它）。 */
+const VERSION = '0.3.9'
+
+/** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序；顺带带上版本号。 */
 function plog(level, ...args) {
   const t = new Date().toTimeString().slice(0, 8)
   const fn = typeof console[level] === 'function' ? console[level] : console.info
-  fn.call(console, `[${t}]`, ...args)
+  fn.call(console, `[${t}] [v${VERSION}]`, ...args)
 }
 
 import { spawn, spawnSync } from 'node:child_process'
@@ -4095,11 +4098,13 @@ function logChat(entry, config) {
     const file = chatFilePath(key)
     rotateChatIfNeeded(file, config?.chatLogMaxKB?.get?.())
     const record = {
-      ts: Number(entry.ts) || Date.now(),
-      role: String(entry.role || '群友'),
-      kind: String(entry.kind || 'recv'),
-      text: String(entry.text ?? entry.reply ?? ''),
-    }
+    ts: Number(entry.ts) || Date.now(),
+    role: String(entry.role || '群友'),
+    kind: String(entry.kind || 'recv'),
+    text: String(entry.text ?? entry.reply ?? ''),
+    // 记录写入时的插件版本（旧记录没这个字段，按 0.3.9 算）
+    ver: String(entry.ver || VERSION || '0.3.9'),
+  }
     const raw = JSON.stringify(record)
     appendFileSync(file, raw + '\n', 'utf8')
     const index = loadChatIndex()
