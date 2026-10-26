@@ -885,8 +885,19 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
-      React.useEffect(() => { loadList() }, [loadList])
-      React.useEffect(() => { if (sel) loadView(sel, lines) }, [sel, lines, loadView])
+      // 文件列表每 10 秒刷新一次：新群/新日志文件会自动出现在列表里
+      React.useEffect(() => {
+        loadList()
+        const timer = setInterval(() => { loadList() }, 10000)
+        return () => clearInterval(timer)
+      }, [loadList])
+      // 选中的文件也定时刷新尾部内容，像 tail -f
+      React.useEffect(() => {
+        if (!sel) return undefined
+        loadView(sel, lines)
+        const timer = setInterval(() => { loadView(sel, lines) }, 10000)
+        return () => clearInterval(timer)
+      }, [sel, lines, loadView])
 
       const btn = (label, onClick, active) => React.createElement('button', {
         type: 'button',

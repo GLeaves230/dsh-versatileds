@@ -3457,7 +3457,7 @@ function listLogFiles(config) {
 
 /** 把日志 id 还原成绝对路径，并挡住目录穿越。 */
 function resolveLogPath(config, id) {
-  const base = dshHome()
+  const base = versatiledsBase()
   const napcatBase = napcatRoot(config)
   let file = ''
   if (id.startsWith('qq/')) {
