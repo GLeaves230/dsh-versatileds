@@ -7807,6 +7807,17 @@ export function apply(ctx, config) {
         const rec = observeSpeaker(sender, realSenderName, plainText(data.message))
         if (rec && rec.confirmed && !aiNotified.has(String(sender))) {
           aiNotified.add(String(sender))
+          // 自动识别达标（强证据或累计分够）的 AI 也写进「隔壁家的 AI QQ 号」名单：
+          // 持久化到配置，重启不用重新观察；跟它们说话只打字不发语音
+          try {
+            const cur = String(config.neighborBots.get() || '')
+            const list = cur.split(/[，,]/).map((s) => s.trim()).filter(Boolean)
+            if (!list.includes(String(sender))) {
+              list.push(String(sender))
+              config.neighborBots.set(list.join(','))
+              plog('info', `[dsh-versatileds] 自动识别到 AI 群友 ${realSenderName || sender}（${sender}），已加入隔壁家 AI 名单`)
+            }
+          } catch { /* 写配置失败不影响回话 */ }
           appendNote({
             kind: 'ai-suspect',
             role: 'DS',
