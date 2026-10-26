@@ -7921,7 +7921,12 @@ export function apply(ctx, config) {
       await new Promise((resolve) => setTimeout(resolve, humanDelay(config)))
 
       try {
-        let outReply = reply
+        // 别把上下文里的占位符当话引出来：它看见「[表情 #334]」会写成「[表情] 咋还只发表情不说话」
+        let outReply = String(reply || '')
+          .replace(/^\s*\[表情[^\]]*\]\s*/g, '')
+          .replace(/^\s*\[图片\]\s*/g, '')
+          .replace(/^\s*\[语音\]\s*/g, '')
+          .trim() || reply
         if (data.message_type === 'private') {
           // 私聊轮数记着，到点提醒归档/换会话
           const cst = loadJsonFile(contextStatePath())
