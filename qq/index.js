@@ -7088,7 +7088,9 @@ export function apply(ctx, config) {
     state.nextAt = Date.now() + minGap + Math.random() * (maxGap - minGap)
     state.forceNext = false
     saveProactiveState(state)
-    plog('info', `[dsh-versatileds] 主动搭话目标 ${target.type}:${target.id} ${ok ? '已完成' : '跳过'}`)
+    if (!ok) {
+      plog('info', `[dsh-versatileds] 主动搭话目标 ${target.type}:${target.id} 本轮没接上，下次继续试`)
+    }
   }
 
   /** 群接话：读最近 15 分钟的话题，接一句并 @ 最近说话的人。 */
@@ -7097,7 +7099,10 @@ export function apply(ctx, config) {
     state.groups = state.groups || {}
     const gapMs = Math.max(10, Number(config.proactiveGroupMinGapSec.get() ?? 3600)) * 1000
     const last = Number(state.groups[String(gid)] || 0)
-    if (last && Date.now() - last < gapMs) return false
+    if (last && Date.now() - last < gapMs) {
+      plog('info', `[dsh-versatileds] 主动搭话跳过：群 ${gid} 距上次不足 ${Math.round(gapMs / 60000)} 分钟`)
+      return false
+    }
 
     const me = await ensureSelf()
     let msgs = []
@@ -7145,7 +7150,10 @@ export function apply(ctx, config) {
     }
     // 最近 10 分钟至少有两句别人说的话，才算「有话题」，否则不硬凑
     const recent = msgs.filter((m) => nowMs - at(m) < 10 * 60_000)
-    if (recent.length < 2) return false
+    if (recent.length < 2) {
+      plog('info', `[dsh-versatileds] 主动搭话跳过：群 ${gid} 最近 10 分钟没什么人说话（${recent.length} 条）`)
+      return false
+    }
 
     let members = []
     try {
@@ -7165,11 +7173,17 @@ export function apply(ctx, config) {
       })
       .filter((line) => line.length > 4)
       .join('\n')
-    if (!topic) return false
+    if (!topic) {
+      plog('info', `[dsh-versatileds] 主动搭话跳过：群 ${gid} 话题太短凑不出上下文`)
+      return false
+    }
 
     const context = `群里的人：${memberNames || '（没拉到）'}\n最近在聊：\n${topic}`
     const replyRaw = await generateGroupReply(context, groupRuleText(gid))
-    if (!replyRaw) return false
+    if (!replyRaw) {
+      plog('info', `[dsh-versatileds] 主动搭话跳过：群 ${gid} 模型没生成回复`)
+      return false
+    }
     // 主动接话也要挡「又发这张/来回就这几张」这类抱怨重复图的话（2026-10-26 巡检：这条路径漏了过滤）
     const reply = /又(是)?这张|又发这张|来回就这[一两几]张|来回就那么几张|就那么几张|就这几张|能不能换一张|刚看过|刚发过/.test(replyRaw) ? '' : replyRaw
     if (!reply) return false
@@ -7185,7 +7199,7 @@ export function apply(ctx, config) {
     state.groups[String(gid)] = Date.now()
     saveProactiveState(state)
     appendNote({ kind: 'group-proactive', to: gid, reply })
-    plog('info', `[dsh-versatileds] 群里接了句：${reply}`)
+    plog('info', `[dsh-versatileds] 主动搭话：${reply}（群 ${gid}）`)
     return true
   }
 
