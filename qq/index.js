@@ -1985,6 +1985,9 @@ async function forwardToText(seg, ob, depth = 0, seen = null) {
       line = '[这条没解析出来]'
     }
     lines.push(line)
+    // 纯文本节点不会 await，20 条连着跑会占住主线程：每 5 条让出一次事件循环
+    // （2026-10-26 主人要求：套进去的循环别阻塞，改成异步）
+    if (lines.length % 5 === 0) await new Promise((r) => setTimeout(r, 0))
   }
   const more = nodes.length > 20 ? `\n…（还有 ${nodes.length - 20} 条）` : ''
   return `[合并转发]\n${lines.join('\n')}${more}`
