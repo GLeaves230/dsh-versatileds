@@ -8985,7 +8985,9 @@ export function apply(ctx, config) {
           const casualVoice = !replyIsAI && !wantVoice && config.voiceEnabled.get() === true && isGroup
             && plainVoiceText && plainVoiceText.length <= 60
             && voiceChance > 0 && Math.random() * 100 < voiceChance
-          if ((wantVoice || casualVoice) && reply.trim()) {
+          // 反思期（被要求闭嘴）不发语音：说了「继续静音」就别再出声
+          // （2026-10-26 主人：「他还能发语音」——5625 反思期里发了「好，那我就继续静音待着」）
+          if ((wantVoice || casualVoice) && reply.trim() && !inQuiet(data.group_id)) {
             // 「念这句：『阿尔泽布，我已登神』」——引号里的原话优先，别被模型改写
             const quoted = text.match(/[：:，,\s]\s*[“"「『‘]([^”"」』’]{1,80})[”"」』’]/)
             const voiceText = (quoted ? quoted[1] : stripBrackets(reply)).trim() || '嗯'
