@@ -1195,8 +1195,6 @@ window.__ModuleLoader__.load({
       ['pokeReplyEnabled', '搓完再想想要不要接一句', '搓回去以后交给模型判断：想接就接一句，不想接就只回搓一下'],
       ['faceReplyEnabled', '允许用 QQ 表情回话', '回复里写 [微笑] 这类会变成真表情'],
       ['groupSplitReply', '群回复分段发', '一句话拆成两三条短消息，像人一段一段打'],
-      ['shortReplySplitChance', '短回复拆条概率（0-100）', '80 字以内的短回复拆成两条发的概率，0 = 永远整条发；30 = 大约三成会拆'],
-      ['queueStaleSec', '排队消息过期（秒）', '同一会话正在回时后来的消息会排队；排太久的直接不回，免得回一句跟当前聊天对不上号。0 = 不限制'],
     ]
 
     const QQ_NUM_FIELDS = [
@@ -1223,6 +1221,8 @@ window.__ModuleLoader__.load({
       ['webSearchCooldownSec', '搜索最短间隔（秒）', 'webSearch'],
       ['balanceWarnThreshold', '余额预警阈值（元）', 'balance'],
       ['balanceCheckHours', '余额多久查一次（小时）', 'balance'],
+  ['shortReplySplitChance', '短回复拆条概率（0-100）', 'reply'],
+  ['queueStaleSec', '排队消息过期（秒，0 不限）', 'reply'],
   ['updateCheckHours', '更新自检间隔（小时，0 关闭）', 'proactive'],
       ['contextRotateRounds', '多少轮提醒归档/换会话', '0 关闭'],
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
