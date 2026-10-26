@@ -78,6 +78,11 @@ function depSpecs(home) {
       hint: 'B站 抓帧和表情包缩图要用',
       // 优先走 PyPI 镜像的 imageio-ffmpeg wheel（里面就是同一个 exe），下载失败才用 vendor 自带包
       wheel: true,
+      // PyPI wheel 拿不到时的备选：GitHub 上的 Windows 预编译包，走 gh-proxy 镜像（国内能下）
+      urls: [
+        'https://gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+      ],
+
       wheelJson: 'https://pypi.tuna.tsinghua.edu.cn/pypi/imageio-ffmpeg/json',
       urls: [],
     },
@@ -114,6 +119,22 @@ async function downloadDep(dep) {
         spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
           `Expand-Archive -LiteralPath '${q(tmpZip)}' -DestinationPath '${q(dep.target)}' -Force`],
         { stdio: 'ignore', timeout: 300_000 })
+        try { unlinkSync(tmpZip) } catch { /* ignore */ }
+      } else if (/\.zip$/i.test(String(url))) {
+        // GitHub 预编译 zip（BtbN/FFmpeg-Builds）：解压后把 bin/ffmpeg.exe 收成统一名字，
+        // 让 probe 和 bundledFfmpegCandidates() 都能找到。
+        mkdirSync(dep.target, { recursive: true })
+        const binDir = join(dep.target, 'imageio_ffmpeg', 'binaries')
+        const tmpZip = join(dep.target, '_dep_download.zip')
+        const tmpDir = join(dep.target, '_dep_unzip')
+        writeFileSync(tmpZip, buf)
+        const q = (s) => String(s).replace(/'/g, "''")
+        spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+          `Expand-Archive -LiteralPath '${q(tmpZip)}' -DestinationPath '${q(tmpDir)}' -Force; ` +
+          `$exe = Get-ChildItem -LiteralPath '${q(tmpDir)}' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1; ` +
+          `if ($exe) { New-Item -ItemType Directory -Force -Path '${q(binDir)}' | Out-Null; ` +
+          `Copy-Item $exe.FullName '${q(join(binDir, 'ffmpeg-win-x86_64-v7.1.exe'))}' -Force }`,
+        ], { stdio: 'ignore', timeout: 300_000 })
         try { unlinkSync(tmpZip) } catch { /* ignore */ }
       } else {
         mkdirSync(dirname(dep.probe), { recursive: true })
