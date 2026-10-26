@@ -1149,7 +1149,7 @@ window.__ModuleLoader__.load({
       if (/^videoShare/.test(field)) return 'share'
       if (/^voice/.test(field)) return 'voice'
       if (/^(image|sticker|live|shareCard)/.test(field)) return 'media'
-      if (/^(proactive|focusChat)/.test(field)) return 'proactive'
+      if (/^(proactive|focusChat|updateCheck)/.test(field)) return 'proactive'
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
       if (/^balance/.test(field)) return 'balance'
       if (/^(isolateHostQq|isolateGroupPrivate|sharedMemory)/.test(field)) return 'memory'
@@ -1223,7 +1223,7 @@ window.__ModuleLoader__.load({
       ['balanceCheckHours', '余额多久查一次（小时）', 'balance'],
   ['shortReplySplitChance', '短回复拆条概率（0-100）', 'reply'],
   ['queueStaleSec', '排队消息过期（秒，0 不限）', 'reply'],
-  ['updateCheckHours', '更新自检间隔（小时，0 关闭）', 'proactive'],
+  ['updateCheckHours', '更新自检间隔（小时，0 关闭）', 'updateCheck'],
       ['contextRotateRounds', '多少轮提醒归档/换会话', '0 关闭'],
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
       ['stickerChance', '群里发表情包概率（0-100）', '回完话后附一张的概率'],

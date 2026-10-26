@@ -19,7 +19,7 @@ const VERSION = (() => {
 })()
 
 /** 当前版本 tag（硬编码，每次源码更新后一起改这里；更新自检拿它跟远端比）。 */
-const CURRENT_TAG = 'v0.3.9'
+const CURRENT_TAG = 'v0.3.8'
 
 /** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序；顺带带上版本号。 */
 function plog(level, ...args) {
@@ -3485,6 +3485,11 @@ function startStatusServer(config, napcat = null) {
         webSearch: leftOf(lastWebSearchAt, Math.max(10, Number(config.webSearchCooldownSec.get() ?? 90)) * 1000, config.webSearchEnabled.get() === true),
         ruleSync: leftOf(rs.lastSyncAt, Math.max(1, Number(config.ruleSyncHours.get() ?? 6)) * 3600_000, config.ruleSyncEnabled.get() !== false),
         balance: leftOf(bs.lastCheckAt, Math.max(1, Number(config.balanceCheckHours.get() ?? 6)) * 3600_000, config.balanceWarnEnabled.get() === true),
+        updateCheck: leftOf(
+          loadJsonFile(join(versatiledsBase(), 'qq', 'update-check.json')).lastAt,
+          Math.max(0, Number(config.updateCheckHours.get() ?? 24)) * 3600_000,
+          Number(config.updateCheckHours.get() ?? 24) > 0,
+        ),
         lastBalance: bs.lastBalance ?? null,
         lastCheckAt: Number(bs.lastCheckAt || 0),
         balanceLow: bs.low === true,
