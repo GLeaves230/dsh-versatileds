@@ -6,6 +6,13 @@
  */
 
 import http from 'node:http'
+/** 带时间戳的日志（跟主插件一致）。 */
+function plog(level, ...args) {
+  const t = new Date().toTimeString().slice(0, 8)
+  const fn = typeof console[level] === 'function' ? console[level] : console.info
+  fn.call(console, `[${t}]`, ...args)
+}
+
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
@@ -716,7 +723,7 @@ export function apply(ctx, config) {
         ffmpeg: String(config.ffmpegPath.get() || ''),
         out: String(outPath || '').trim() || liveFramePath(config),
       })
-      if (r.ok) console.info(`[dsh-versatileds-plugin] 抓到直播帧 ${room}`)
+      if (r.ok) plog('info', `[dsh-versatileds-plugin] 抓到直播帧 ${room}`)
       return r
     },
   })
@@ -741,7 +748,7 @@ export function apply(ctx, config) {
         ffmpeg: String(config.ffmpegPath.get() || ''),
         out: liveFramePath(config),
       }).catch(() => ({ ok: false, reason: '异常' }))
-      if (!r.ok) console.warn('[dsh-versatileds-plugin] 定时抓帧失败:', r.reason)
+      if (!r.ok) plog('warn', '[dsh-versatileds-plugin] 定时抓帧失败:', r.reason)
     }
     const first = setTimeout(() => { tick().catch(() => {}) }, 20_000)
     const timer = setInterval(() => { tick().catch(() => {}) }, 60_000)
@@ -759,7 +766,7 @@ export function apply(ctx, config) {
       const lastAt = readAutoLastRun()
       if (lastAt && Date.now() - lastAt < intervalMs) return
       const r = await autoBrowseOnce('tick').catch(() => ({ ok: false }))
-      if (r?.ok) console.info(`[dsh-versatileds-plugin] 自动刷完成，看了 ${r.results.length} 条`)
+      if (r?.ok) plog('info', `[dsh-versatileds-plugin] 自动刷完成，看了 ${r.results.length} 条`)
     }
     const first = setTimeout(() => { tick().catch(() => {}) }, 120_000)
     const timer = setInterval(() => { tick().catch(() => {}) }, 60_000)

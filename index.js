@@ -84,7 +84,6 @@ function depSpecs(home) {
       ],
 
       wheelJson: 'https://pypi.tuna.tsinghua.edu.cn/pypi/imageio-ffmpeg/json',
-      urls: [],
     },
   ]
 }
@@ -136,6 +135,9 @@ async function downloadDep(dep) {
           `Copy-Item $exe.FullName '${q(join(binDir, 'ffmpeg-win-x86_64-v7.1.exe'))}' -Force }`,
         ], { stdio: 'ignore', timeout: 300_000 })
         try { unlinkSync(tmpZip) } catch { /* ignore */ }
+        if (!existsSync(dep.probe)) {
+          plog('warn', `[dsh-versatileds-plugin] ${dep.name} wheel 解压后没找到 ${dep.probe}`)
+        }
       } else {
         mkdirSync(dirname(dep.probe), { recursive: true })
         writeFileSync(dep.probe, buf)
