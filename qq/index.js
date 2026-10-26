@@ -3858,7 +3858,8 @@ const takeoverLogged = new Set()
 
 /**
  * 热重载会清空 takeoverLogged，重启后历史轮询会把旧接管再记一遍；
- * 所以补记前先翻一下日志尾巴，同文本的 takeover 已经有了就别重复写。
+ * 所以补记前先翻一下日志尾巴：同文本的 takeover 有了就别重复写，
+ * **同文本的 sent- 记录也说明是插件自己发的**（2026-10-26 巡检：DS 的三条回复被记成 Admin 接管）。
  */
 function takeoverAlreadyLogged(scope, text) {
   try {
@@ -3867,7 +3868,10 @@ function takeoverAlreadyLogged(scope, text) {
     const raw = readFileSync(chatFilePath(key), 'utf8')
     const lines = raw.split(/\r?\n/).slice(-400).filter(Boolean)
     const needle = JSON.stringify(String(text)).slice(1, -1)
-    return lines.some((l) => l.includes('"kind":"takeover"') && l.includes(needle))
+    return lines.some((l) => {
+      if (!l.includes(needle)) return false
+      return l.includes('"kind":"takeover"') || /"kind":"sent-/.test(l)
+    })
   } catch {
     return false
   }
