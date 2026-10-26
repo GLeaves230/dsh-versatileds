@@ -7054,6 +7054,40 @@ export function apply(ctx, config) {
   }
 
   /**
+   * 统一解除反思（2026-10-26 主人要求）：清状态 + 清计数 + 记一笔 + 群里说一声。
+   * 到期、群友多次 @ 恢复，都走这里；跳过（skip）直接清倒计时，不走这里。
+   */
+  async function endQuiet(gid, reason = '') {
+    const k = String(gid)
+    if (!quietState.has(k) && !quietKnock.has(k)) return false
+    quietState.delete(k)
+    saveQuietState()
+    quietKnock.delete(k)
+    appendNote({ kind: 'quiet-end', role: 'DS', to: k, reply: `反思结束（${reason || '到期'}）` })
+    plog('info', `[dsh-versatileds] 反思结束（${reason || '到期'}）：群 ${k}`)
+    try {
+      await ob.sendGroup(k, '我回来了，刚才安静了一会儿')
+    } catch { /* 发不出去就算了 */ }
+    return true
+  }
+
+  /** 每 20 秒看一眼反思倒计时：到点了就走 endQuiet（会发一句「我回来了」）。 */
+  function startQuietWatcher() {
+    let stopped = false
+    const tick = async () => {
+      if (stopped) return
+      const now = Date.now()
+      for (const [k, until] of [...quietState.entries()]) {
+        if (now >= Number(until || 0)) {
+          await endQuiet(k, '到点了')
+        }
+      }
+    }
+    const timer = setInterval(() => { tick().catch(() => {}) }, 20_000)
+    return () => { stopped = true; clearInterval(timer) }
+  }
+
+  /**
    * 主动聊天状态里，每 2.5 分钟让模型自己看一次群气氛：最近几条是不是在聊正事。
    * 是正事就退出主动聊天（2026-10-26 主人选：不要关键词硬判，让模型主观判断）。
    */
@@ -8176,11 +8210,8 @@ export function apply(ctx, config) {
             if (rec.count >= 2) {
               try {
                 if (await judgeResumeChat(k, plainText(data.message))) {
-                  quietState.delete(k)
-                  saveQuietState()
-                  quietKnock.delete(k)
                   quietNow = false
-                  plog('info', `[dsh-versatileds] 群 ${k} 反思期被群友多次 @，恢复聊天`)
+                  await endQuiet(k, '群友多次@想聊')
                 }
               } catch { /* 判断失败保持安静 */ }
             }
@@ -9265,6 +9296,7 @@ export function apply(ctx, config) {
       startTopicSummary(),
       startTopicJudge(),
       startGsvGuard(),
+      startQuietWatcher(),
     ].filter((stop) => typeof stop === 'function')
     if (!qqToolDisposer) qqToolDisposer = registerQqTool()
   }
