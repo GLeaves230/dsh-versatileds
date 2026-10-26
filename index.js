@@ -18,6 +18,13 @@ import { fileURLToPath } from 'node:url'
 
 import Schema from '@deepseek-ai/schemastery'
 
+/** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序。 */
+function plog(level, ...args) {
+  const t = new Date().toTimeString().slice(0, 8)
+  const fn = typeof console[level] === 'function' ? console[level] : console.info
+  fn.call(console, `[${t}]`, ...args)
+}
+
 import {
   Config as BiliConfig,
   apply as applyBili,
@@ -65,7 +72,9 @@ function depSpecs(home) {
       zip: join(VENDOR, 'ffmpeg.zip'),
       // 包里是 imageio_ffmpeg/binaries/...，落到 <DSH_HOME>/versatileds/ffmpeg（2026-10-26 主人要求）
       target: join(home, 'versatileds', 'ffmpeg'),
-      probe: join(home, 'versatileds', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
+      // wheel 解出来的 exe 版本号随 imageio-ffmpeg 变，别写死文件名；
+      // 只要 binaries 目录在就行，具体用哪个 exe 由 bundledFfmpegCandidates() 去 glob。
+      probe: join(home, 'versatileds', 'ffmpeg', 'imageio_ffmpeg', 'binaries'),
       hint: 'B站 抓帧和表情包缩图要用',
       // 优先走 PyPI 镜像的 imageio-ffmpeg wheel（里面就是同一个 exe），下载失败才用 vendor 自带包
       wheel: true,
@@ -86,7 +95,7 @@ async function downloadDep(dep) {
       const u = (j.urls || []).find((x) => /win_amd64\.whl$/.test(String(x.filename || '')))
       if (u?.url) urls.unshift(u.url)
     } catch (err) {
-      console.warn(`[dsh-versatileds-plugin] ${dep.name} 查 wheel 地址失败：${err?.message ?? err}`)
+      plog('warn', `[dsh-versatileds-plugin] ${dep.name} 查 wheel 地址失败：${err?.message ?? err}`)
     }
   }
   if (!urls.length) return { ok: false, why: '没有下载地址' }
@@ -113,7 +122,7 @@ async function downloadDep(dep) {
       if (existsSync(dep.probe)) return { ok: true, why: '' }
       throw new Error('写完还是找不到探针')
     } catch (err) {
-      console.warn(`[dsh-versatileds-plugin] ${dep.name} 下载失败（${String(url).split('/')[2]}）：${err?.message ?? err}`)
+      plog('warn', `[dsh-versatileds-plugin] ${dep.name} 下载失败（${String(url).split('/')[2]}）：${err?.message ?? err}`)
     }
   }
   return { ok: false, why: '所有镜像都失败了' }
@@ -143,29 +152,29 @@ export function apply(ctx, config) {
   const firstBoot = globalThis.__versatiledsBootLogged !== true
   if (firstBoot) {
     globalThis.__versatiledsBootLogged = true
-    console.info(`[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
+    plog('info', `[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
   }
 
   // 自检 + 缺失时先下载、下载不行再从自带包解压：后台跑，不挡插件启动
   for (const dep of depSpecs(home)) {
     if (existsSync(dep.probe)) {
-      if (firstBoot) console.info(`[dsh-versatileds-plugin] 依赖就绪：${dep.name}`)
+      if (firstBoot) plog('info', `[dsh-versatileds-plugin] 依赖就绪：${dep.name}`)
       continue
     }
-    console.info(`[dsh-versatileds-plugin] 依赖缺失：${dep.name}，后台下载中…`)
+    plog('info', `[dsh-versatileds-plugin] 依赖缺失：${dep.name}，后台下载中…`)
     setTimeout(async () => {
       try {
         const got = await downloadDep(dep)
         if (got.ok) {
-          console.info(`[dsh-versatileds-plugin] 依赖已下载：${dep.name}`)
+          plog('info', `[dsh-versatileds-plugin] 依赖已下载：${dep.name}`)
           return
         }
-        console.info(`[dsh-versatileds-plugin] ${dep.name} 下载不可用（${got.why}），退回自带包`)
+        plog('info', `[dsh-versatileds-plugin] ${dep.name} 下载不可用（${got.why}），退回自带包`)
         const r = extractDep(dep)
-        if (r.ok) console.info(`[dsh-versatileds-plugin] 依赖已解压：${dep.name}`)
-        else console.warn(`[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
+        if (r.ok) plog('info', `[dsh-versatileds-plugin] 依赖已解压：${dep.name}`)
+        else plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
       } catch (err) {
-        console.warn(`[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化异常：${err?.message ?? err}`)
+        plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化异常：${err?.message ?? err}`)
       }
     }, 500)
   }
