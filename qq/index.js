@@ -1348,6 +1348,29 @@ function runPsAsync(command, timeoutMs) {
   })
 }
 
+/** 通用异步跑命令（netstat/taskkill 这类），返回 {status, stdout}；不阻塞事件循环。 */
+function runAsync(exe, args, timeoutMs) {
+  return new Promise((resolve) => {
+    let child
+    try {
+      child = spawn(exe, args, { windowsHide: true })
+    } catch (err) {
+      resolve({ status: -2, stdout: '', stderr: String(err?.message ?? err) })
+      return
+    }
+    let out = ''
+    let errText = ''
+    const timer = setTimeout(() => {
+      try { child.kill() } catch { /* ignore */ }
+      resolve({ status: -1, stdout: out, stderr: errText + ' timeout' })
+    }, timeoutMs)
+    child.stdout?.on('data', (d) => { out += d })
+    child.stderr?.on('data', (d) => { errText += d })
+    child.on('close', (code) => { clearTimeout(timer); resolve({ status: code, stdout: out, stderr: errText }) })
+    child.on('error', (e) => { clearTimeout(timer); resolve({ status: -2, stdout: out, stderr: String(e?.message ?? e) }) })
+  })
+}
+
 
 /**
  * 启动后异步自检：查 GitHub 最新 release tag（官方 API → gh-proxy 镜像），
@@ -2881,13 +2904,13 @@ async function gsvSynthesize(text, config) {
  * 重启 GPT-SoVITS API，用指定版本的 yaml（v2 / v4）。
  * 版本是启动配置，没法热切，所以换版本 = 杀掉 9880 上的旧进程再拉新的。
  */
-function restartGsvApi(config, version) {
+async function restartGsvApi(config, version) {
   const dir = String(config?.gsvDir?.get?.() || '').trim() || join(versatiledsBase(), 'models', 'gpt-sovits', 'app')
   const py = String(config?.gsvPython?.get?.() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
   const cfg = version === 'v2' ? 'GPT_SoVITS/configs/tts_infer_v2.yaml' : 'GPT_SoVITS/configs/tts_infer.yaml'
-  // 找 9880 端口占用进程并杀掉
+  // 找 9880 端口占用进程并杀掉（netstat 有 1-2 秒，别用 spawnSync 卡事件循环）
   try {
-    const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 20000 })
+    const out = await runAsync('netstat', ['-ano'], 20000)
     const pids = new Set()
     for (const line of String(out.stdout || '').split(/\r?\n/)) {
       if (!line.includes(':9880') || !line.includes('LISTENING')) continue
@@ -2895,7 +2918,7 @@ function restartGsvApi(config, version) {
       if (pid && /^\d+$/.test(pid)) pids.add(pid)
     }
     for (const pid of pids) {
-      try { spawnSync('taskkill', ['/F', '/PID', pid], { timeout: 10000 }) } catch { /* ignore */ }
+      try { await runAsync('taskkill', ['/F', '/PID', pid], 10000) } catch { /* ignore */ }
     }
   } catch { /* ignore */ }
   // 拉新的（detached，别跟着 DSH 退出）
@@ -3735,7 +3758,7 @@ function startStatusServer(config, napcat = null) {
     if (url.pathname === '/voice_switch') {
       // 换 GPT-SoVITS 版本：切 yaml 重启 API（约 40 秒后才能用）
       const version = url.searchParams.get('version') === 'v2' ? 'v2' : 'v4'
-      const info = restartGsvApi(config, version)
+      const info = await restartGsvApi(config, version)
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true, ...info, note: 'API 正在重启，约 40 秒后可用' }))
       return
