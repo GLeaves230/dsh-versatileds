@@ -1757,6 +1757,16 @@ function looksForeignOrGarbled(text) {
 }
 
 /** 文本里的 [表情名] 转成 QQ 表情段，其余保留成文本段。 */
+/**
+ * 中文之间的空格是多余的（它爱写成「主人就是 啊」），只保留 @ 后面的那一格和英文词之间的空格。
+ */
+function squashSpaces(text) {
+  return String(text ?? '')
+    .replace(/[ \t\u3000]+/g, ' ')
+    .replace(/(?<=[\u4e00-\u9fff]) (?=[\u4e00-\u9fff])/g, '')
+    .trim()
+}
+
 function buildTextSegments(text) {
   const segs = []
   const source = String(text ?? '')
@@ -4202,7 +4212,7 @@ class OneBotClient {
     const message = []
     // 私聊也能引用：QQ 客户端会显示「回复 你」，回答问题时有据可查
     if (replyId) message.push({ type: 'reply', data: { id: String(replyId) } })
-    message.push(...buildTextSegments(text))
+    message.push(...buildTextSegments(squashSpaces(text)))
     const info = { kind: 'sent-private', peer: String(userId), text }
     // NapCat 会回 1006514「网络连接异常」，但消息其实已经发出去了：先登记，失败也留痕
     rememberSent(info)
@@ -4252,7 +4262,7 @@ class OneBotClient {
       message.push({ type: 'at', data: { qq: String(atUid) } })
       message.push({ type: 'text', data: { text: ' ' } })
     }
-    message.push(...buildTextSegments(text))
+    message.push(...buildTextSegments(squashSpaces(text)))
     // at / reply 也记进 info：排查「凭空 @ 人」时能直接看到当时带了什么
     const info = {
       kind: 'sent-group',
