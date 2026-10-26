@@ -8856,7 +8856,8 @@ export function apply(ctx, config) {
       }
 
       // 没话茬了：群里就发个表情包（优先常用），别硬憋文字
-      if (!reply && isGroup && config.stickerEnabled.get() === true) {
+      // 反思期（刚被要求闭嘴）不能再甩表情包——2026-10-26 主人问「你表情包怎么还能发」，它又发了一张
+      if (!reply && isGroup && !inQuiet(data.group_id) && config.stickerEnabled.get() === true) {
         // 刚发过表情包就别再甩一张（2026-10-25 群友「大肥鱼刷屏」：没话就发表情，连着发两条）
         const stGapMs = Math.max(1, Number(config.stickerSendMinGapSec.get() ?? 600)) * 1000
         const stState = loadJsonFile(stickerStatePath())
