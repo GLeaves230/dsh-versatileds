@@ -1382,8 +1382,10 @@ function runAsync(exe, args, timeoutMs) {
  * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新；顺便告诉用户「哪个源通」。
  */
 async function checkUpdate(config) {
+  plog('info', '[dsh-versatileds] 更新自检开始')
   // 自检间隔（小时），0 = 关闭；状态存在 qq/update-check.json，别每次启动都查一遍
   const hours = Math.max(0, Number(config?.updateCheckHours?.get?.() ?? 24))
+  plog('info', `[dsh-versatileds] 自检间隔 ${hours} 小时`)
   if (!hours) return
   const stateFile = join(versatiledsBase(), 'qq', 'update-check.json')
   let lastAt = 0
