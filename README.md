@@ -333,17 +333,12 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
   - **文档**：README / package.json 补「仅供学习、个人使用、商用需完整授权、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
 
-- **0.3.7（2026-10-26）**：
-  - **改名**：包名 / 插件名 / 日志前缀统一为 `dsh-versatileds`（原 `dsh-versatileds-plugin`）；`cordis.patch.yml` 的 `name`、profile 依赖键、bundles 四处同步改，缺一处配置就失效。
-  - **下载策略更新**：NapCat **不再随包**（打包 117MB → 0.35MB），首次启动自动下载——官方 GitHub → `gh-proxy.com` 镜像 → 手动提示并自动关 QQ 模块；ffmpeg 同理——清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示并自动关 B站 模块。
-  - **下载全异步**：拉包/解压不再阻塞 DSH，日志带 `[HH:MM:SS]`。
-
 - **0.3.6（2026-10-26）**：
   - **新机器首启修复**：`writeFileSync` 没导入导致 ffmpeg 下载报错；共享记忆未建时 `ENOENT`；NapCat 下载/解压从同步改异步，不再卡住 DSH；插件日志全部加 `[HH:MM:SS]` 时间戳。
   - **依赖下载**：NapCat 官方 GitHub → `gh-proxy.com` 镜像 → 手动提示（失败自动关 QQ 模块）；ffmpeg 清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示（失败自动关 B站 模块）。
   - **ffmpeg 解压根因**：wheel 临时文件必须存成 `.zip`（`Expand-Archive` 不认 `.whl`），之前一直卡在「写完还是找不到探针」。
   - **npm**：包绑定 GitHub 仓库（repository / homepage / bugs / keywords），首版发布用 Granular token（Bypass 2FA）。
-  - **注意**：npm 包**不含 vendor**（NapCat 118MB 超 npm 限制），首次启动自动下载；GitHub Release 的 zip 才带完整 vendor。
+  - **注意**：npm 包**不含 vendor**（NapCat 118MB 超 npm 限制），首次启动自动下载；当时 GitHub Release 的 zip 还带完整 vendor，**0.3.7 起 Release 也改成不含 vendor**。
 
 ## 许可
 
@@ -360,3 +355,8 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 > **即便获得完整商用授权，也请尽量奉行 DSH 的即插即用、开放公开的插件精神。**
 
 完整条款见 [`LICENSE-GLeaves.txt`](./LICENSE-GLeaves.txt)。
+
+- **0.3.7（2026-10-26）**：
+  - **改名**：包名 / 插件名 / 日志前缀统一为 `dsh-versatileds`（原 `dsh-versatileds-plugin`）；`cordis.patch.yml` 的 `name`、profile 依赖键、bundles 四处同步改，缺一处配置就失效。
+  - **下载策略更新**：NapCat **不再随包**（打包 117MB → 0.35MB），首次启动自动下载——官方 GitHub → `gh-proxy.com` 镜像 → 手动提示并自动关 QQ 模块；ffmpeg 同理——清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示并自动关 B站 模块。
+  - **下载全异步**：拉包/解压不再阻塞 DSH，日志带 `[HH:MM:SS]`。
