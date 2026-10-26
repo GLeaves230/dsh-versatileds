@@ -6439,8 +6439,11 @@ export function apply(ctx, config) {
   function syncMemoryDedupe() {
     try {
       if (config.isolateHostQq.get() === true) return
-      if (config.isolateHostQq.get() === true) return
-      const shared = readFileSync(sharedMemoryPath(), 'utf8')
+      // 新装机器上共享记忆还没建（sharedMemoryPath() 会回退到老路径，而老路径也不存在），
+      // 直接 readFileSync 会 ENOENT，先判一下。
+      const sharedPath = sharedMemoryPath()
+      if (!existsSync(sharedPath)) return { ok: true, changed: false, note: '共享记忆还没建，跳过' }
+      const shared = readFileSync(sharedPath, 'utf8')
       const memFile = join(versatiledsBase(), 'qq', 'memory.md')
       if (!existsSync(memFile)) return
       const before = readFileSync(memFile, 'utf8')
