@@ -1,5 +1,5 @@
 /**
- * dsh-versatileds-plugin — QQ 代理插件（NapCat / OneBot 11）。
+ * dsh-versatileds — QQ 代理插件（NapCat / OneBot 11）。
  *
  * 两件事：
  * 1. 注册 `versatileds_qq` 工具，手动收发消息、查好友/群/历史。
@@ -964,7 +964,7 @@ function agentsPersonaSection() {
 function agentsQuickstartSection() {
   return `## 这套东西怎么跑起来的（第一次用先看）
 
-- 这是 DSH 的自建插件「多功能DS插件」（包名 \`dsh-versatileds-plugin\`），给模型两个工具：\`versatileds_bili\`（B站）、\`versatileds_qq\`（QQ）。工具名带插件前缀是防跟别人的同类插件撞——DSH 里工具重名会让后注册的插件直接报错。
+- 这是 DSH 的自建插件「多功能DS插件」（包名 \`dsh-versatileds\`），给模型两个工具：\`versatileds_bili\`（B站）、\`versatileds_qq\`（QQ）。工具名带插件前缀是防跟别人的同类插件撞——DSH 里工具重名会让后注册的插件直接报错。
 - 数据都在 \`<DSH_HOME>/versatileds/\` 下：\`qq/\`（人设、笔记、聊天日志）、\`memory/\`（本目录）、\`bilibili/\`（自动刷状态）。不在老的 \`.dsh/qq\` 之类路径里。
 - **两个总开关**在设置页的插件配置里：关 QQ = 不连 NapCat、不注册 qq 工具、自动回复和主动搭话全停，但「启动登录服务」「退出登录」仍然能用；关 B站 = 不注册 bili 工具、不抓帧、不自动刷。翻转后约 2 秒生效，不用重启 DSH。
 - **QQ 第一次要扫码登录**：设置页 → QQ模块 →「连接」→「启动登录服务」，UAC 点「是」，手机 QQ 扫码并确认。不想挂着了就点「退出登录」（等于杀掉 NapCat 进程），下次点启动会快速登录。
@@ -1300,10 +1300,10 @@ function ensureOneBotConfig(config) {
     data.network = net
     mkdirSync(cfgDir, { recursive: true })
     writeFileSync(file, JSON.stringify(data, null, 2), 'utf8')
-    plog('info', '[dsh-versatileds-plugin] 已写入 NapCat OneBot 配置（HTTP', httpPort, 'WS', wsPort, '）:', file)
+    plog('info', '[dsh-versatileds] 已写入 NapCat OneBot 配置（HTTP', httpPort, 'WS', wsPort, '）:', file)
     return true
   } catch (err) {
-    plog('warn', '[dsh-versatileds-plugin] 写 OneBot 配置失败:', err?.message ?? err)
+    plog('warn', '[dsh-versatileds] 写 OneBot 配置失败:', err?.message ?? err)
     return false
   }
 }
@@ -1341,7 +1341,7 @@ async function downloadNapcatPackage() {
   // github.com 的 release 下载在国内直连超时，所以优先走 gh-proxy.com 镜像，官方地址兜底。
   const api = 'https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest'
   const psApi = `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
-    `$r = Invoke-RestMethod -Uri '${api}' -Headers @{ 'User-Agent' = 'dsh-versatileds-plugin' } -TimeoutSec 30; ` +
+    `$r = Invoke-RestMethod -Uri '${api}' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 30; ` +
     `$a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.Windows.Node.zip' } | Select-Object -First 1; ` +
     `if (-not $a) { $a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.zip' } | Select-Object -First 1 }; ` +
     `if (-not $a) { Write-Error 'no asset'; exit 2 }; ` +
@@ -1362,13 +1362,13 @@ async function downloadNapcatPackage() {
   mkdirSync(dirname(NAPCAT_VENDOR_ZIP), { recursive: true })
   let lastErr = ''
   for (const url of candidates) {
-    plog('info', `[dsh-versatileds-plugin] 下载 NapCat ${tag}：${url}`)
+    plog('info', `[dsh-versatileds] 下载 NapCat ${tag}：${url}`)
     const isOfficial = url === officialUrl
     // 官方直连：90 秒内下不完就当「太慢」换镜像；镜像给足 25 分钟
     const psTimeout = isOfficial ? 90 : 1500
     const psDl = `$ProgressPreference = 'SilentlyContinue'; ` +
       `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
-      `Invoke-WebRequest -Uri '${q(url)}' -OutFile '${q(NAPCAT_VENDOR_ZIP)}' -Headers @{ 'User-Agent' = 'dsh-versatileds-plugin' } -TimeoutSec ${psTimeout}`
+      `Invoke-WebRequest -Uri '${q(url)}' -OutFile '${q(NAPCAT_VENDOR_ZIP)}' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec ${psTimeout}`
     const r = await runPsAsync(psDl, (psTimeout + 15) * 1000)
     let size = 0
     try { size = statSync(NAPCAT_VENDOR_ZIP).size } catch { size = 0 }
@@ -1386,15 +1386,15 @@ async function downloadNapcatPackage() {
         ok = chk.status === 0
       } catch { ok = false }
       if (ok) {
-        plog('info', `[dsh-versatileds-plugin] NapCat 已存到 ${NAPCAT_VENDOR_ZIP}（${Math.round(size / 1048576)} MB）`)
+        plog('info', `[dsh-versatileds] NapCat 已存到 ${NAPCAT_VENDOR_ZIP}（${Math.round(size / 1048576)} MB）`)
         return tag
       }
       lastErr = `zip 校验失败（${Math.round(size / 1048576)} MB），可能被截断`
-      plog('info', `[dsh-versatileds-plugin] ${lastErr}，换下一个源`)
+      plog('info', `[dsh-versatileds] ${lastErr}，换下一个源`)
       continue
     }
     lastErr = `下载失败（exit ${r.status}）：${String(r.stderr || '').trim().slice(0, 160)}`
-    plog('info', `[dsh-versatileds-plugin] ${lastErr}`)
+    plog('info', `[dsh-versatileds] ${lastErr}`)
   }
   throw new Error(`NapCat 下载失败：${lastErr}`)
 }
@@ -1417,11 +1417,11 @@ async function ensureNapcatPackage(config) {
   napcatPkg.error = ''
   try {
     if (!existsSync(NAPCAT_VENDOR_ZIP)) {
-      plog('info', '[dsh-versatileds-plugin] 插件里没有 NapCat 包，去官方下最新版')
+      plog('info', '[dsh-versatileds] 插件里没有 NapCat 包，去官方下最新版')
       await downloadNapcatPackage()
     }
     mkdirSync(dir, { recursive: true })
-    plog('info', '[dsh-versatileds-plugin] 首次初始化：解压 NapCat 到', dir)
+    plog('info', '[dsh-versatileds] 首次初始化：解压 NapCat 到', dir)
     const q = (s) => String(s).replace(/'/g, "''")
     // 解压 118MB 也要一两分钟，同样别用 spawnSync 卡住事件循环
     const r = await runPsAsync(
@@ -2542,7 +2542,7 @@ function renderRulesMd(state) {
   const out = []
   out.push('# 群规记录')
   out.push('')
-  out.push(`> 由 dsh-versatileds-plugin 自动同步（_get_group_notice + get_group_detail_info）。`)
+  out.push(`> 由 dsh-versatileds 自动同步（_get_group_notice + get_group_detail_info）。`)
   out.push(`> 上次同步：${fmtStamp(state.lastSyncAt) || '—'}`)
   out.push('')
   for (const id of ids) {
@@ -3742,10 +3742,10 @@ function startStatusServer(config, napcat = null) {
             })
             recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/gpt-sovits] ${text}`, role: testRole })
           }
-          plog('info', `[dsh-versatileds-plugin] 测试语音（${target === 'private' ? '私聊' : '群'}）：${text}`)
+          plog('info', `[dsh-versatileds] 测试语音（${target === 'private' ? '私聊' : '群'}）：${text}`)
           finish(200, { ok: true, backend: 'gpt-sovits', target, text, wav })
         } catch (err) {
-          plog('warn', '[dsh-versatileds-plugin] 测试语音失败:', err?.message ?? err)
+          plog('warn', '[dsh-versatileds] 测试语音失败:', err?.message ?? err)
           finish(500, { ok: false, error: String(err?.message ?? err) })
         }
       })
@@ -4567,7 +4567,7 @@ class OneBotClient {
           }
           const retry = await this.call('send_group_msg', { group_id: Number(groupId), message })
           recordSelfSent(this.config, { ...info, selfId, messageId: retry?.message_id })
-          plog('warn', `[dsh-versatileds-plugin] 群消息发送失败后第 ${attempt + 1} 次重试成功：${err?.message ?? err}`)
+          plog('warn', `[dsh-versatileds] 群消息发送失败后第 ${attempt + 1} 次重试成功：${err?.message ?? err}`)
           return retry
         } catch (e) {
           lastErr = e
@@ -4770,18 +4770,18 @@ export function apply(ctx, config) {
   // 首次启动：没有人设文件就落一份模板，让人有个空可填
   try {
     if (ensurePersonaTemplate()) {
-      plog('info', '[dsh-versatileds-plugin] 已生成人设模板，去改成你自己的：' + personaPath())
+      plog('info', '[dsh-versatileds] 已生成人设模板，去改成你自己的：' + personaPath())
     }
     // 记忆目录先建出来，AGENTS.md 里指向它的指引才不是死链
     const memoryCreated = ensureMemoryScaffold()
     if (memoryCreated.length) {
-      plog('info', '[dsh-versatileds-plugin] 已初始化记忆目录（新增 ' + memoryCreated.join('、') + '）：' + join(versatiledsBase(), 'memory'))
+      plog('info', '[dsh-versatileds] 已初始化记忆目录（新增 ' + memoryCreated.join('、') + '）：' + join(versatiledsBase(), 'memory'))
     }
     const agentsAction = ensureAgentsTemplate()
     if (agentsAction === 'created') {
-      plog('info', '[dsh-versatileds-plugin] 已生成 AGENTS.md 模板（含记忆目录骨架）：' + join(dshHome(), 'AGENTS.md'))
+      plog('info', '[dsh-versatileds] 已生成 AGENTS.md 模板（含记忆目录骨架）：' + join(dshHome(), 'AGENTS.md'))
     } else if (agentsAction === 'upgraded') {
-      plog('info', '[dsh-versatileds-plugin] 已给旧 AGENTS.md 补上「记忆目录」一节：' + join(dshHome(), 'AGENTS.md'))
+      plog('info', '[dsh-versatileds] 已给旧 AGENTS.md 补上「记忆目录」一节：' + join(dshHome(), 'AGENTS.md'))
     }
   } catch { /* 目录不可写就跳过 */ }
   // 重载会复用模块实例：上一轮的反思静默期要清掉，不然改完配置还在「反思中」
@@ -5270,9 +5270,9 @@ export function apply(ctx, config) {
           headers: { 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/' },
         })
         if (res.ok) buf = Buffer.from(await res.arrayBuffer())
-        else plog('warn', '[dsh-versatileds-plugin] 封面下载失败:', res.status, pic)
+        else plog('warn', '[dsh-versatileds] 封面下载失败:', res.status, pic)
       } catch (err) {
-        plog('warn', '[dsh-versatileds-plugin] 封面下载异常:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 封面下载异常:', err?.message ?? err)
       }
     }
     const second = [owner, viewCount ? `${Math.round(viewCount / 10000)}万播放` : ''].filter(Boolean).join(' · ')
@@ -5324,7 +5324,7 @@ export function apply(ctx, config) {
     }
     if (delaySec > 0) {
       setTimeout(() => {
-        fire().catch((err) => plog('warn', '[dsh-versatileds-plugin] 分享视频失败:', err?.message ?? err))
+        fire().catch((err) => plog('warn', '[dsh-versatileds] 分享视频失败:', err?.message ?? err))
       }, delaySec * 1000)
       return { style }
     }
@@ -5382,7 +5382,7 @@ export function apply(ctx, config) {
           reply: `分享视频《${pick.title}》`,
         })
       } catch (err) {
-        plog('warn', '[dsh-versatileds-plugin] 自动分享失败:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 自动分享失败:', err?.message ?? err)
       }
     }
     const first = setTimeout(() => { tick().catch(() => {}) }, 60_000)
@@ -5959,7 +5959,7 @@ export function apply(ctx, config) {
       const hours = Math.max(1, Number(config.ruleSyncHours.get() ?? 6))
       if (state.lastSyncAt && Date.now() - Number(state.lastSyncAt) < hours * 3600_000) return
       syncGroupRules(false).catch((err) => {
-        plog('warn', '[dsh-versatileds-plugin] 同步群规失败:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 同步群规失败:', err?.message ?? err)
       })
     }
     // 起来后先等十几秒，别和自动回复抢着连 NapCat
@@ -6169,10 +6169,10 @@ export function apply(ctx, config) {
     try {
       const r = await ob.call('add_custom_face', { file: filePath })
       if (r && Number(r.result) === 0) return true
-      if (r && r.errMsg) plog('info', '[dsh-versatileds-plugin] 加收藏表情失败:', r.errMsg)
+      if (r && r.errMsg) plog('info', '[dsh-versatileds] 加收藏表情失败:', r.errMsg)
       return false
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 加收藏表情失败:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 加收藏表情失败:', err?.message ?? err)
       return false
     }
   }
@@ -6236,7 +6236,7 @@ export function apply(ctx, config) {
       return out.trim()
     } catch (err) {
       debug(`fail: ${err?.message ?? String(err)}`)
-      plog('warn', '[dsh-versatileds-plugin] 看图失败:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 看图失败:', err?.message ?? err)
       return ''
     }
   }
@@ -6389,7 +6389,7 @@ export function apply(ctx, config) {
     try {
       spawnSync('cmd', ['/c', 'start', '', pageUrl], { stdio: 'ignore', timeout: 10000 })
     } catch { /* 打不开就让主人手动开 */ }
-    plog('info', '[dsh-versatileds-plugin] 二维码页面:', pageUrl)
+    plog('info', '[dsh-versatileds] 二维码页面:', pageUrl)
     for (let i = 0; i < 300; i += 1) {
       await sleep(1000)
       try {
@@ -6423,7 +6423,7 @@ export function apply(ctx, config) {
     try {
       const launcher = napcatLauncherPath(config)
       if (!existsSync(launcher)) {
-        plog('warn', '[dsh-versatileds-plugin] launcher 不存在:', launcher)
+        plog('warn', '[dsh-versatileds] launcher 不存在:', launcher)
         return false
       }
       const qrPath = napcatQrPath(config)
@@ -6444,7 +6444,7 @@ export function apply(ctx, config) {
       for (let i = 0; i < 90; i += 1) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
-          plog('info', '[dsh-versatileds-plugin] NapCat 已登录，二维码缓存已清')
+          plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
           // 退出登录时 WS 已经收手了，这里让它重新连上
           const wasLoggedOut = napcatLoggedOut
           napcatLoggedOut = false
@@ -6490,12 +6490,12 @@ export function apply(ctx, config) {
           mem += '\n## 数字 / 字母\n\n以 `' + sharedMemoryPath() + '` 的「锚点」一节为准，本文件不再重复存一份。\n'
         }
         writeFileSync(memFile, mem, 'utf8')
-        plog('info', '[dsh-versatileds-plugin] 记忆同步：去掉 QQ 侧重复的锚点段')
+        plog('info', '[dsh-versatileds] 记忆同步：去掉 QQ 侧重复的锚点段')
         return { ok: true, changed: true, note: '已去掉 QQ 侧重复的锚点段' }
       }
       return { ok: true, changed: false, note: '两边没有重复，未改动' }
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 记忆同步失败：', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 记忆同步失败：', err?.message ?? err)
       return { ok: false, error: String(err?.message ?? err) }
     }
   }
@@ -6521,13 +6521,13 @@ export function apply(ctx, config) {
 
   ctx.effect(() => {
     ensureNapcatPackage(config).catch(() => {})
-  }, 'dsh-versatileds-plugin: napcat package')
+  }, 'dsh-versatileds: napcat package')
 
   // 总闸一开就把两边记忆对齐一次（幂等，不新增内容）
   ctx.effect(() => {
     const t = setTimeout(() => syncMemoryDedupe(), 3000)
     return () => clearTimeout(t)
-  }, 'dsh-versatileds-plugin: memory sync')
+  }, 'dsh-versatileds: memory sync')
 
   // autoStartNapCat=true 时，DSH 起来后自动把 NapCat 拉起来；延迟几秒等插件初始化完
   ctx.effect(() => {
@@ -6538,14 +6538,14 @@ export function apply(ctx, config) {
       ensureNapCat('startup', false, true).catch(() => {})
     }, 6000)
     return () => { stopped = true; clearTimeout(timer) }
-  }, 'dsh-versatileds-plugin: napcat autostart')
+  }, 'dsh-versatileds: napcat autostart')
 
   // DSH 退出前清理：把我们拉起来的 NapCat（QQ 进程）关掉，不留后台
   ctx.effect(() => {
     return () => {
       try { killNapCatWeStarted(config) } catch { /* ignore */ }
     }
-  }, 'dsh-versatileds-plugin: napcat exit cleanup')
+  }, 'dsh-versatileds: napcat exit cleanup')
 
   /**
    * 把最近的流水记录压成一句「最近在聊什么」，写进 topics.md。
@@ -6638,9 +6638,9 @@ export function apply(ctx, config) {
         state.lastAt = r.at
         state.sameRoom = sameRoom
         saveLiveState(state)
-        plog('info', `[dsh-versatileds-plugin] 已通过 B站 插件抓到直播帧（${sameRoom ? '同一直播间，以 B站 为准' : '用 QQ 侧地址'}）`)
+        plog('info', `[dsh-versatileds] 已通过 B站 插件抓到直播帧（${sameRoom ? '同一直播间，以 B站 为准' : '用 QQ 侧地址'}）`)
       } else {
-        plog('warn', '[dsh-versatileds-plugin] 要帧失败:', r?.reason ?? '未知')
+        plog('warn', '[dsh-versatileds] 要帧失败:', r?.reason ?? '未知')
       }
     }).catch(() => {})
   }
@@ -6687,13 +6687,13 @@ export function apply(ctx, config) {
         const pidChanged = napcatPid !== lastLoggedNapcatPid
         if (!pidChanged) return
         lastLoggedNapcatPid = napcatPid
-        plog('info', '[dsh-versatileds-plugin] 已连接 NapCat WebSocket')
+        plog('info', '[dsh-versatileds] 已连接 NapCat WebSocket')
         // 连上之后把后端地址和 PID 也打出来，出问题时不用再翻配置
         const httpBase = String(config.napcatHttp.get() || 'http://127.0.0.1:3000').replace(/\/$/, '')
         const wsBase = raw.replace(/access_token=[^&]+/, 'access_token=***').replace(/\/$/, '')
         const statusPort = Number(process.env.DSH_QQ_STATUS_PORT || 18766)
         plog('info', 
-          `[dsh-versatileds-plugin] 后端地址：HTTP ${httpBase} · WS ${wsBase} · 状态服务 http://127.0.0.1:${statusPort}`
+          `[dsh-versatileds] 后端地址：HTTP ${httpBase} · WS ${wsBase} · 状态服务 http://127.0.0.1:${statusPort}`
           + ` · DSH PID ${process.pid}`
           + (napcatPid ? ` · NapCat PID ${napcatPid}` : ' · NapCat PID 未知（launcher.pid 和 6099 都没读到）'),
         )
@@ -6708,7 +6708,7 @@ export function apply(ctx, config) {
             const token = String(wu.token || '')
             const hostForUrl = (host === '::' || host === '0.0.0.0' || !host) ? '127.0.0.1' : host
             plog('info', 
-              `[dsh-versatileds-plugin] NapCat WebUI：http://${hostForUrl}:${port}/webui/`
+              `[dsh-versatileds] NapCat WebUI：http://${hostForUrl}:${port}/webui/`
               + (token ? ` · token ${token}` : ' · 未设 token'),
             )
           }
@@ -6760,7 +6760,7 @@ export function apply(ctx, config) {
       // NapCat 没起来/没登录就别折腾，免得每次 tick 刷一条 fetch failed
       if (!(await napcatAlive())) return
       proactiveTick().catch((err) => {
-        plog('warn', '[dsh-versatileds-plugin] 主动搭话失败:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 主动搭话失败:', err?.message ?? err)
       })
     }
     const timer = setInterval(tick, 30_000)
@@ -6797,7 +6797,7 @@ export function apply(ctx, config) {
         aliveEnough = true // 填的是好友：没法查活跃，就按填的来
       }
       if (aliveEnough) return [{ type: groupSet.has(pinned) ? 'group' : 'private', id: pinned }]
-      plog('info', `[dsh-versatileds-plugin] 指定聚焦的 ${pinned} 不活跃，回退自动挑`)
+      plog('info', `[dsh-versatileds] 指定聚焦的 ${pinned} 不活跃，回退自动挑`)
     }
     const list = []
     const groups = parseIds(config.proactiveGroups.get())
@@ -6859,14 +6859,14 @@ export function apply(ctx, config) {
       const fromTarget = messages.filter((m) => String(m.sender?.user_id) === target)
       const latest = fromTarget[fromTarget.length - 1]
       if (!force && latest && Date.now() - Number(latest.time || 0) * 1000 < 3600_000) {
-        plog('info', '[dsh-versatileds-plugin] 一小时内聊过，跳过主动搭话')
+        plog('info', '[dsh-versatileds] 一小时内聊过，跳过主动搭话')
         return false
       }
       // 最近几条全是自己在说、对方一直没回：别连着刷屏，等他先开口
       const tail = messages.slice(-3)
       const mineInTail = tail.filter((m) => String(m.sender?.user_id) === me).length
       if (!force && tail.length >= 2 && mineInTail === tail.length) {
-        plog('info', '[dsh-versatileds-plugin] 对方还没回，跳过主动搭话')
+        plog('info', '[dsh-versatileds] 对方还没回，跳过主动搭话')
         return false
       }
       history = messages.slice(-6).map((m) => {
@@ -6886,11 +6886,11 @@ export function apply(ctx, config) {
     try {
       await ob.sendPrivate(target, text)
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 主动搭话失败:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 主动搭话失败:', err?.message ?? err)
       return false
     }
     appendNote({ kind: 'proactive', to: target, reply: text })
-    plog('info', `[dsh-versatileds-plugin] 已主动搭话：${text}`)
+    plog('info', `[dsh-versatileds] 已主动搭话：${text}`)
     return true
   }
 
@@ -6903,12 +6903,12 @@ export function apply(ctx, config) {
     // 像人一样先看红点：有人还没回就先回去聊，别主动搭话
     const ownerQq = ownerQQOf(config)
     if (ownerQq && await hasUnrepliedPrivate(ownerQq)) {
-      plog('info', '[dsh-versatileds-plugin] 有未回的私聊，跳过主动搭话')
+      plog('info', '[dsh-versatileds] 有未回的私聊，跳过主动搭话')
       return
     }
     for (const gid of parseIds(config.proactiveGroups.get())) {
       if (await hasUnrepliedGroup(gid)) {
-        plog('info', `[dsh-versatileds-plugin] 群 ${gid} 有未回的 @，跳过主动搭话`)
+        plog('info', `[dsh-versatileds] 群 ${gid} 有未回的 @，跳过主动搭话`)
         return
       }
     }
@@ -6963,7 +6963,7 @@ export function apply(ctx, config) {
         ? await proactiveGroupStep(target.id)
         : await proactivePrivateStep(target.id, force)
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 主动搭话出错:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 主动搭话出错:', err?.message ?? err)
     }
 
     // 群没接上（冷场 / 刚聊过）就停在原目标上重试，别滑到队列后面那个私聊：
@@ -6981,7 +6981,7 @@ export function apply(ctx, config) {
     state.nextAt = Date.now() + minGap + Math.random() * (maxGap - minGap)
     state.forceNext = false
     saveProactiveState(state)
-    plog('info', `[dsh-versatileds-plugin] 主动搭话目标 ${target.type}:${target.id} ${ok ? '已完成' : '跳过'}`)
+    plog('info', `[dsh-versatileds] 主动搭话目标 ${target.type}:${target.id} ${ok ? '已完成' : '跳过'}`)
   }
 
   /** 群接话：读最近 15 分钟的话题，接一句并 @ 最近说话的人。 */
@@ -7072,13 +7072,13 @@ export function apply(ctx, config) {
       if (inQuiet(gid)) return false
       await ob.sendGroup(gid, reply)
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 群接话失败:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 群接话失败:', err?.message ?? err)
       return false
     }
     state.groups[String(gid)] = Date.now()
     saveProactiveState(state)
     appendNote({ kind: 'group-proactive', to: gid, reply })
-    plog('info', `[dsh-versatileds-plugin] 群里接了句：${reply}`)
+    plog('info', `[dsh-versatileds] 群里接了句：${reply}`)
     return true
   }
 
@@ -7258,9 +7258,9 @@ export function apply(ctx, config) {
         to: data.group_id ? String(data.group_id) : from,
         reply: '被搓了一下，搓回去了',
       })
-      plog('info', `[dsh-versatileds-plugin] 回搓了一下：${data.group_id ? `群 ${data.group_id}` : `私聊 ${from}`}`)
+      plog('info', `[dsh-versatileds] 回搓了一下：${data.group_id ? `群 ${data.group_id}` : `私聊 ${from}`}`)
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 回搓失败:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 回搓失败:', err?.message ?? err)
     }
 
     // 搓完就盯住这个窗口：接下来对方继续说话（包括分享卡片/视频）就跟上，
@@ -7289,9 +7289,9 @@ export function apply(ctx, config) {
           to: data.group_id ? String(data.group_id) : from,
           reply: style.text,
         })
-        plog('info', `[dsh-versatileds-plugin] 搓后接话（固定话术）：${style.text}`)
+        plog('info', `[dsh-versatileds] 搓后接话（固定话术）：${style.text}`)
       } catch (err) {
-        plog('warn', '[dsh-versatileds-plugin] 搓后接话失败:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 搓后接话失败:', err?.message ?? err)
       }
       return
     }
@@ -7335,9 +7335,9 @@ export function apply(ctx, config) {
         to: data.group_id ? String(data.group_id) : from,
         reply: line,
       })
-      plog('info', `[dsh-versatileds-plugin] 搓后接话：${line}`)
+      plog('info', `[dsh-versatileds] 搓后接话：${line}`)
     } catch (err) {
-      plog('warn', '[dsh-versatileds-plugin] 搓后接话失败:', err?.message ?? err)
+      plog('warn', '[dsh-versatileds] 搓后接话失败:', err?.message ?? err)
     }
   }
 
@@ -7394,7 +7394,7 @@ export function apply(ctx, config) {
     // 稍微错开一点，像人跟着刷上去
     setTimeout(() => {
       ob.sendGroup(gid, text, '').catch((err) => {
-        plog('warn', '[dsh-versatileds-plugin] 跟接龙失败:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 跟接龙失败:', err?.message ?? err)
       })
     }, 500 + Math.random() * 1200)
   }
@@ -7446,7 +7446,7 @@ export function apply(ctx, config) {
     if (!owner && data.message_type === 'private' && sender !== self) {
       try {
         if (adoptOwner(sender, data.sender?.nickname || data.sender?.card || '')) {
-          plog('warn', '[dsh-versatileds-plugin] ownerQQ 没配，先把第一条私聊的人当主人：' + sender)
+          plog('warn', '[dsh-versatileds] ownerQQ 没配，先把第一条私聊的人当主人：' + sender)
         }
       } catch { /* ignore */ }
     }
@@ -7814,7 +7814,7 @@ export function apply(ctx, config) {
             })
             return
           } catch (err) {
-            plog('warn', '[dsh-versatileds-plugin] 发表情包失败:', err?.message ?? err)
+            plog('warn', '[dsh-versatileds] 发表情包失败:', err?.message ?? err)
           }
         }
       }
@@ -7861,7 +7861,7 @@ export function apply(ctx, config) {
             reply: `分享视频《${pick.title}》`,
           })
         } catch (err) {
-          plog('warn', '[dsh-versatileds-plugin] 按指令分享失败:', err?.message ?? err)
+          plog('warn', '[dsh-versatileds] 按指令分享失败:', err?.message ?? err)
         }
         return
       }
@@ -8232,7 +8232,7 @@ export function apply(ctx, config) {
               reply: '没找到话茬，发了张表情包',
             })
           } catch (err) {
-            plog('warn', '[dsh-versatileds-plugin] 没话茬发表情包失败:', err?.message ?? err)
+            plog('warn', '[dsh-versatileds] 没话茬发表情包失败:', err?.message ?? err)
           }
           return
         }
@@ -8356,10 +8356,10 @@ export function apply(ctx, config) {
                   extra,
                 })
                 // 和文字回复一样给一条成功日志，控制台里看得见「这次真发出去了」
-                plog('info', `[dsh-versatileds-plugin] ${isGroup ? '群里' : '私聊'}发语音：${voiceText}`)
+                plog('info', `[dsh-versatileds] ${isGroup ? '群里' : '私聊'}发语音：${voiceText}`)
                 return
               } catch (err) {
-                plog('warn', '[dsh-versatileds-plugin] 语音发送失败，回退文本:', err?.message ?? err)
+                plog('warn', '[dsh-versatileds] 语音发送失败，回退文本:', err?.message ?? err)
               }
             }
           }
@@ -8410,7 +8410,7 @@ export function apply(ctx, config) {
                     text: `[表情包] ${basename(file)}`,
                   }, config)
                 } catch (err) {
-                  plog('warn', '[dsh-versatileds-plugin] 发表情包失败:', err?.message ?? err)
+                  plog('warn', '[dsh-versatileds] 发表情包失败:', err?.message ?? err)
                 }
               }
             }
@@ -8426,7 +8426,7 @@ export function apply(ctx, config) {
           extra,
         })
       } catch (err) {
-        plog('warn', '[dsh-versatileds-plugin] 自动回复失败:', err?.message ?? err)
+        plog('warn', '[dsh-versatileds] 自动回复失败:', err?.message ?? err)
         if (err?.stack) plog('warn', String(err.stack).split('\n').slice(0, 6).join('\n'))
       }
     } finally {
@@ -8475,7 +8475,7 @@ export function apply(ctx, config) {
       try {
         await ob.sendPrivate(owner, reply)
         appendNote({ kind: 'search-result', role: 'DS', to: owner, reply })
-        plog('info', '[dsh-versatileds-plugin] 已把搜索结果发给主人')
+        plog('info', '[dsh-versatileds] 已把搜索结果发给主人')
       } catch { /* ignore */ }
     }
     const timer = setInterval(() => { tick().catch(() => {}) }, 10_000)
@@ -8529,7 +8529,7 @@ export function apply(ctx, config) {
       else stopChatBusiness()
     }, 2000)
     return () => { clearInterval(timer); stopChatBusiness() }
-  }, 'dsh-versatileds-plugin: chat automation')
+  }, 'dsh-versatileds: chat automation')
 
   ctx.on('loader/volatile-update', (paths) => {
     const hit = Array.isArray(paths) && paths.some((p) => Array.isArray(p) && p[0] === 'enabled')
@@ -8541,12 +8541,12 @@ export function apply(ctx, config) {
   ctx.effect(() => {
     const timer = setTimeout(() => { ensureNapCat('startup').catch(() => {}) }, 12_000)
     return () => clearTimeout(timer)
-  }, 'dsh-versatileds-plugin: napcat autostart')
+  }, 'dsh-versatileds: napcat autostart')
 
   ctx.effect(() => {
     const stop = startStatusServer(config, ob)
     return () => { stop?.() }
-  }, 'dsh-versatileds-plugin: cooldown status server')
+  }, 'dsh-versatileds: cooldown status server')
 
   // ---------- 工具 ----------
   // 用 function 声明（会提升）：startChatBusiness 在文件靠前处就调它

@@ -1,5 +1,5 @@
 /**
- * dsh-versatileds-plugin — 多功能DS插件。
+ * dsh-versatileds — 多功能DS插件。
  *
  * 把原来的 B站 插件与 QQ 插件合成一个插件，两套能力各自保持原来的行为，
  * 配置项与行为不变，只是挂到同一个条目下。工具名带插件前缀，避免和别的同类插件撞名：
@@ -99,7 +99,7 @@ async function downloadDep(dep) {
       const u = (j.urls || []).find((x) => /win_amd64\.whl$/.test(String(x.filename || '')))
       if (u?.url) urls.unshift(u.url)
     } catch (err) {
-      plog('warn', `[dsh-versatileds-plugin] ${dep.name} 查 wheel 地址失败：${err?.message ?? err}`)
+      plog('warn', `[dsh-versatileds] ${dep.name} 查 wheel 地址失败：${err?.message ?? err}`)
     }
   }
   if (!urls.length) return { ok: false, why: '没有下载地址' }
@@ -136,11 +136,11 @@ async function downloadDep(dep) {
           `Copy-Item $exe.FullName '${q(join(binDir, 'ffmpeg-win-x86_64-v7.1.exe'))}' -Force } else { Write-Error 'ffmpeg.exe not found' }`,
         ], { encoding: 'utf8', timeout: 1_200_000 })
         if (!existsSync(dep.probe)) {
-          plog('warn', `[dsh-versatileds-plugin] ${dep.name} zip 解压后没找到 ${dep.probe}（exit ${uz.status}）${String(uz.stderr || '').trim().slice(0, 200)}`)
+          plog('warn', `[dsh-versatileds] ${dep.name} zip 解压后没找到 ${dep.probe}（exit ${uz.status}）${String(uz.stderr || '').trim().slice(0, 200)}`)
         }
         try { unlinkSync(tmpZip) } catch { /* ignore */ }
         if (!existsSync(dep.probe)) {
-          plog('warn', `[dsh-versatileds-plugin] ${dep.name} wheel 解压后没找到 ${dep.probe}`)
+          plog('warn', `[dsh-versatileds] ${dep.name} wheel 解压后没找到 ${dep.probe}`)
         }
       } else {
         mkdirSync(dirname(dep.probe), { recursive: true })
@@ -149,7 +149,7 @@ async function downloadDep(dep) {
       if (existsSync(dep.probe)) return { ok: true, why: '' }
       throw new Error('写完还是找不到探针')
     } catch (err) {
-      plog('warn', `[dsh-versatileds-plugin] ${dep.name} 下载失败（${String(url).split('/')[2]}）：${err?.message ?? err}`)
+      plog('warn', `[dsh-versatileds] ${dep.name} 下载失败（${String(url).split('/')[2]}）：${err?.message ?? err}`)
     }
   }
   return { ok: false, why: '所有镜像都失败了' }
@@ -179,36 +179,36 @@ export function apply(ctx, config) {
   const firstBoot = globalThis.__versatiledsBootLogged !== true
   if (firstBoot) {
     globalThis.__versatiledsBootLogged = true
-    plog('info', `[dsh-versatileds-plugin] 版本 v${VERSION || 'unknown'}`)
+    plog('info', `[dsh-versatileds] 版本 v${VERSION || 'unknown'}`)
   }
 
   // 自检 + 缺失时先下载、下载不行再从自带包解压：后台跑，不挡插件启动
   for (const dep of depSpecs(home)) {
     if (existsSync(dep.probe)) {
-      if (firstBoot) plog('info', `[dsh-versatileds-plugin] 依赖就绪：${dep.name}`)
+      if (firstBoot) plog('info', `[dsh-versatileds] 依赖就绪：${dep.name}`)
       continue
     }
-    plog('info', `[dsh-versatileds-plugin] 依赖缺失：${dep.name}，后台下载中…`)
+    plog('info', `[dsh-versatileds] 依赖缺失：${dep.name}，后台下载中…`)
     setTimeout(async () => {
       try {
         const got = await downloadDep(dep)
         if (got.ok) {
-          plog('info', `[dsh-versatileds-plugin] 依赖已下载：${dep.name}`)
+          plog('info', `[dsh-versatileds] 依赖已下载：${dep.name}`)
           return
         }
-        plog('info', `[dsh-versatileds-plugin] ${dep.name} 下载不可用（${got.why}），退回自带包`)
+        plog('info', `[dsh-versatileds] ${dep.name} 下载不可用（${got.why}），退回自带包`)
         const r = extractDep(dep)
-        if (r.ok) plog('info', `[dsh-versatileds-plugin] 依赖已解压：${dep.name}`)
+        if (r.ok) plog('info', `[dsh-versatileds] 依赖已解压：${dep.name}`)
         else {
-          plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
+          plog('warn', `[dsh-versatileds] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
           // ffmpeg 起不来，B站 的抓帧/缩图全废，直接把 B站 模块关掉，别让它半残地跑
           if (dep.name === 'ffmpeg') {
             try { config.bili.enabled.set(false) } catch { /* 老框架没有 set 就算了 */ }
-            plog('warn', '[dsh-versatileds-plugin] ffmpeg 不可用，B站 模块已自动关闭（放好 ffmpeg 后重新启用即可）')
+            plog('warn', '[dsh-versatileds] ffmpeg 不可用，B站 模块已自动关闭（放好 ffmpeg 后重新启用即可）')
           }
         }
       } catch (err) {
-        plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化异常：${err?.message ?? err}`)
+        plog('warn', `[dsh-versatileds] 依赖 ${dep.name} 初始化异常：${err?.message ?? err}`)
       }
     }, 500)
   }

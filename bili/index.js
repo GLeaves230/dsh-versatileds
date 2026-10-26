@@ -1,5 +1,5 @@
 /**
- * dsh-versatileds-plugin — B站 小号代理插件。
+ * dsh-versatileds — B站 小号代理插件。
  *
  * 注册一个模型可见的 `versatileds_bili` 工具；开关与频率全部走 Config，
  * DSH 设置页会自动为这个条目生成表单。
@@ -399,7 +399,7 @@ export function apply(ctx, config) {
   ctx.effect(() => {
     const stop = startStatusServer(guard, config)
     return () => { stop?.() }
-  }, 'dsh-versatileds-plugin: cooldown status server')
+  }, 'dsh-versatileds: cooldown status server')
 
   // 看过的视频统一记到共享的 bili_log.md，不管调用方是 QQ 还是别的会话
   const logSeen = (bvid, title, owner, note) => {
@@ -723,7 +723,7 @@ export function apply(ctx, config) {
         ffmpeg: String(config.ffmpegPath.get() || ''),
         out: String(outPath || '').trim() || liveFramePath(config),
       })
-      if (r.ok) plog('info', `[dsh-versatileds-plugin] 抓到直播帧 ${room}`)
+      if (r.ok) plog('info', `[dsh-versatileds] 抓到直播帧 ${room}`)
       return r
     },
   })
@@ -748,7 +748,7 @@ export function apply(ctx, config) {
         ffmpeg: String(config.ffmpegPath.get() || ''),
         out: liveFramePath(config),
       }).catch(() => ({ ok: false, reason: '异常' }))
-      if (!r.ok) plog('warn', '[dsh-versatileds-plugin] 定时抓帧失败:', r.reason)
+      if (!r.ok) plog('warn', '[dsh-versatileds] 定时抓帧失败:', r.reason)
     }
     const first = setTimeout(() => { tick().catch(() => {}) }, 20_000)
     const timer = setInterval(() => { tick().catch(() => {}) }, 60_000)
@@ -766,7 +766,7 @@ export function apply(ctx, config) {
       const lastAt = readAutoLastRun()
       if (lastAt && Date.now() - lastAt < intervalMs) return
       const r = await autoBrowseOnce('tick').catch(() => ({ ok: false }))
-      if (r?.ok) plog('info', `[dsh-versatileds-plugin] 自动刷完成，看了 ${r.results.length} 条`)
+      if (r?.ok) plog('info', `[dsh-versatileds] 自动刷完成，看了 ${r.results.length} 条`)
     }
     const first = setTimeout(() => { tick().catch(() => {}) }, 120_000)
     const timer = setInterval(() => { tick().catch(() => {}) }, 60_000)
@@ -811,7 +811,7 @@ export function apply(ctx, config) {
       else stopBiliBusiness()
     }, 2000)
     return () => { clearInterval(timer); stopBiliBusiness() }
-  }, 'dsh-versatileds-plugin: bili automation')
+  }, 'dsh-versatileds: bili automation')
 
   ctx.on('loader/volatile-update', (paths) => {
     const hit = Array.isArray(paths) && paths.some((p) => Array.isArray(p) && p[0] === 'enabled')

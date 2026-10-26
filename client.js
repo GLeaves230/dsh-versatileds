@@ -1,5 +1,5 @@
 /**
- * dsh-versatileds-plugin 的浏览器半侧。
+ * dsh-versatileds 的浏览器半侧。
  *
  * 一个左侧栏入口「多功能DS插件」，主面板里分「B站模块」「QQ模块」两个选项页，
  * 每个模块页就是原来各自插件设置页的样子（内部还保留自己的分类标签）。
@@ -10,7 +10,7 @@
  */
 
 window.__ModuleLoader__.load({
-  id: 'dsh-versatileds-plugin',
+  id: 'dsh-versatileds',
   factory: (require) => {
     var module = { exports: {} }
     var exports = module.exports
@@ -2355,7 +2355,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       ctx.effect(() => {
         const style = document.createElement('style')
-        style.setAttribute('data-dsh-versatileds-plugin', 'number-input')
+        style.setAttribute('data-dsh-versatileds', 'number-input')
         style.textContent = [
           'input.versatileds-num::-webkit-inner-spin-button,',
           'input.versatileds-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }',
@@ -2364,17 +2364,17 @@ window.__ModuleLoader__.load({
         ].join('\n')
         document.head.appendChild(style)
         return () => style.remove()
-      }, 'dsh-versatileds-plugin: number input spinners')
+      }, 'dsh-versatileds: number input spinners')
 
       let form
       try {
         form = ctx.configForms.get('versatileds')
       } catch (err) {
-        console.error('[dsh-versatileds-plugin] 读取配置表单失败:', err)
+        console.error('[dsh-versatileds] 读取配置表单失败:', err)
         return
       }
       if (!form) {
-        console.error('[dsh-versatileds-plugin] 配置表单为空，namespace 可能不匹配')
+        console.error('[dsh-versatileds] 配置表单为空，namespace 可能不匹配')
         return
       }
       const Panel = createPanel(form)
@@ -2383,7 +2383,7 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('plugins.row.config', () =>
         ctx.slots.register(
-          { name: 'plugins.row.config', key: 'dsh-versatileds-plugin#versatileds' },
+          { name: 'plugins.row.config', key: 'dsh-versatileds#versatileds' },
           RowPanel,
         ),
       )
