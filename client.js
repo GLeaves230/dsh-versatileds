@@ -2260,7 +2260,7 @@ window.__ModuleLoader__.load({
               React.createElement('img', {
                 src: COVER_URL,
                 alt: '大肥鱼',
-                style: { width: '44px', height: '44px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 },
+                style: { width: '44px', height: '44px', minWidth: '44px', maxWidth: '44px', maxHeight: '44px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0, display: 'block' },
               }),
               React.createElement(
                 'div',

@@ -30,13 +30,13 @@
     },
     "client": {
       "platform": "web"
-    },
-    "icon": "./assets/icon.jpg"
+    }
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/schemastery": "*"
   },
   "license": "SEE LICENSE IN LICENSE.txt",
-  "author": "黑木钟 - GLeaves"
+  "author": "黑木钟 - GLeaves",
+  "icon": "assets/icon.jpg"
 }
