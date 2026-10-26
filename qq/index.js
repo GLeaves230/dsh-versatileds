@@ -1351,27 +1351,26 @@ function runPsAsync(command, timeoutMs) {
 
 /**
  * 启动后异步自检：查 GitHub 最新 release tag（官方 API → gh-proxy 镜像），
- * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新。失败一律静默。
+ * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新；顺便告诉用户「哪个源通」。
  */
-/** 远端 tag 是否比本地新（v0.3.10 > v0.3.9）；本地领先时不提示。 */
-function tagNewer(remote, local) {
-  const norm = (s) => String(s).replace(/^v/i, '').split('.').map((x) => Number(x) || 0)
-  const a = norm(remote)
-  const b = norm(local)
-  for (let i = 0; i < 3; i++) {
-    if ((a[i] || 0) > (b[i] || 0)) return true
-    if ((a[i] || 0) < (b[i] || 0)) return false
-  }
-  return false
-}
-
 async function checkUpdate() {
   const api = 'https://api.github.com/repos/GLeaves230/dsh-versatileds/releases/latest'
-  const urls = [api, 'https://gh-proxy.com/' + api]
-  for (const u of urls) {
+  const sources = [
+    {
+      name: 'GitHub 官方',
+      api,
+      download: 'https://github.com/GLeaves230/dsh-versatileds/releases',
+    },
+    {
+      name: 'gh-proxy 镜像',
+      api: 'https://gh-proxy.com/' + api,
+      download: 'https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases',
+    },
+  ]
+  for (const s of sources) {
     try {
       const r = await runPsAsync(
-        `try { $r = Invoke-RestMethod -Uri '${u}' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 15; ` +
+        `try { $r = Invoke-RestMethod -Uri '${s.api}' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 15; ` +
         `if ($r.tag_name) { Write-Output $r.tag_name } } catch { }`,
         25000,
       )
@@ -1382,6 +1381,8 @@ async function checkUpdate() {
       } else {
         plog('info', `[dsh-versatileds] 已是最新版本 ${CURRENT_TAG}（远端 ${tag}）`)
       }
+      // 哪个源自检通了就推荐从哪儿下（国内直连 GitHub 常常超时）
+      plog('info', `[dsh-versatileds] 推荐从${s.name}下载：${s.download}`)
       return
     } catch { /* 换下一个源 */ }
   }
