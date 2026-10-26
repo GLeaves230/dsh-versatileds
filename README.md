@@ -305,12 +305,6 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 - 反馈时请带上：DSH 版本、插件版本（以 release tag 为准）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
 - 先在本文档「常见问题」里找一眼，能自己解决就不用等回复
 
-## 合并时修掉的问题
-
-- QQ 设置页在 2026-10-24 20:07 被写坏（UTF-8 双重编码 + 引号丢失，`node --check` 直接报语法错误）。本包的 QQ 模块页按 14:56 的完好版本重建，并补回之后新增的 `relayEnabled`、`shareCardWatch`、`neighborBots`、`neighborNameKeywords`、`videoShare*` 等字段。
-- 旧设置页有一批字段名跟 Host schema 对不上（写了不生效）：`proactiveMinGapMin` / `proactiveMaxGapMin` / `proactiveGroupMinGapMin` / `liveMaxAgeMin` / `liveRequestCooldownMin` / `stickerSendMinGapMin` / `swearBanMinutes` / `videoShareIntervalMin`。已全部按 Host 的秒制字段名对齐（`...GapSec` / `liveMaxAgeSec` / `liveRequestCooldownSec` / `stickerSendMinGapSec` / `swearBanSec` / `videoShareIntervalSec`），并补上漏掉的 `videoShareEnabled` 开关。
-- 字段一致性已脚本校验：B站 28 个、QQ 99 个 Host 字段全部有对应设置项，客户端没有多余字段。
-
 ## 许可
 
 **受限再分发许可**：
