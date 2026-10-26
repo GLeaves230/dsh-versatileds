@@ -3383,8 +3383,9 @@ function startStatusServer(config, napcat = null) {
     }
     if (url.pathname === '/balance_check') {
       const r = balanceHook.check ? await balanceHook.check() : { ok: false, error: '插件还没就绪' }
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify(r))
+      // 顺手把当前阈值带上：顶部余额条要用它判断要不要标红
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ...r, threshold: Number(config.balanceWarnThreshold.get() ?? 10) }))
       return
     }
     if (url.pathname === '/memory_sync') {

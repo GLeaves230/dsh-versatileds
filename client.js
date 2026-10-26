@@ -2225,15 +2225,49 @@ window.__ModuleLoader__.load({
       const CommonPage = createQqPage(qqForm, ['memory', 'balance'])
       return function VersatiledsPanel() {
         const [mod, setMod] = React.useState('bili')
+        // 顶部常驻的 DeepSeek 余额：所有页面都能看到，5 分钟自动刷一次
+        const [balance, setBalance] = React.useState(null)
+        React.useEffect(() => {
+          let stop = false
+          const load = async () => {
+            try {
+              const r = await fetch(`${QQ_STATUS_URL}/balance_check`, { cache: 'no-store' })
+              const j = await r.json()
+              if (!stop && j?.ok) setBalance(j)
+            } catch { /* 拿不到就不显示 */ }
+          }
+          load()
+          const timer = setInterval(load, 5 * 60_000)
+          return () => { stop = true; clearInterval(timer) }
+        }, [])
         const children = []
 
         if (header) {
           children.push(React.createElement(
             'div',
-            { key: 'head', style: { marginBottom: '12px' } },
-            React.createElement('div', { style: { fontSize: '15px', fontWeight: 600 } }, '多功能DS插件'),
-            React.createElement('div', { style: { ...hintStyle, marginTop: '2px' } },
-              'B站 与 QQ 合成了一个插件：上面切模块，下面就是原来那套设置，改完立即生效。'),
+            {
+              key: 'head',
+              style: {
+                marginBottom: '12px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'flex-start', gap: '12px',
+              },
+            },
+            React.createElement(
+              'div',
+              {},
+              React.createElement('div', { style: { fontSize: '15px', fontWeight: 600 } }, '多功能DS插件'),
+              React.createElement('div', { style: { ...hintStyle, marginTop: '2px' } },
+                'B站 与 QQ 合成了一个插件：上面切模块，下面就是原来那套设置，改完立即生效。'),
+            ),
+            React.createElement('div', {
+              style: {
+                ...hintStyle, whiteSpace: 'nowrap', paddingTop: '2px',
+                fontSize: '13px', fontWeight: 600,
+                color: balance && Number(balance.total) < Number(balance.threshold ?? 10) ? '#d33' : undefined,
+              },
+            }, balance
+              ? `DeepSeek 余额：¥${Number(balance.total).toFixed(2)} ${balance.currency || 'CNY'}`
+              : '余额：读取中…'),
           ))
         }
 
