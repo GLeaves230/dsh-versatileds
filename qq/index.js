@@ -1353,6 +1353,18 @@ function runPsAsync(command, timeoutMs) {
  * 启动后异步自检：查 GitHub 最新 release tag（官方 API → gh-proxy 镜像），
  * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新。失败一律静默。
  */
+/** 远端 tag 是否比本地新（v0.3.10 > v0.3.9）；本地领先时不提示。 */
+function tagNewer(remote, local) {
+  const norm = (s) => String(s).replace(/^v/i, '').split('.').map((x) => Number(x) || 0)
+  const a = norm(remote)
+  const b = norm(local)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return true
+    if ((a[i] || 0) < (b[i] || 0)) return false
+  }
+  return false
+}
+
 async function checkUpdate() {
   const api = 'https://api.github.com/repos/GLeaves230/dsh-versatileds/releases/latest'
   const urls = [api, 'https://gh-proxy.com/' + api]
@@ -1365,10 +1377,10 @@ async function checkUpdate() {
       )
       const tag = String(r?.stdout || '').trim().split(/\s+/).pop() || ''
       if (!tag) continue
-      if (tag !== CURRENT_TAG) {
+      if (tagNewer(tag, CURRENT_TAG)) {
         plog('info', `[dsh-versatileds] 发现新版本 ${tag}（当前 ${CURRENT_TAG}），去 https://github.com/GLeaves230/dsh-versatileds/releases 看看`)
       } else {
-        plog('info', `[dsh-versatileds] 已是最新版本 ${CURRENT_TAG}`)
+        plog('info', `[dsh-versatileds] 已是最新版本 ${CURRENT_TAG}（远端 ${tag}）`)
       }
       return
     } catch { /* 换下一个源 */ }
