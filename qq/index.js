@@ -5730,6 +5730,8 @@ export function apply(ctx, config) {
         message.push({ type: 'text', data: { text: `${share.buf ? '\n' : ''}${share.text}` } })
         logText = share.text
       }
+      // 反思期不往群里分享（2026-10-26 排查所有出口：share 漏了 inQuiet）
+      if (groupId && inQuiet(groupId)) return { skipped: 'quiet' }
       const r = groupId
         ? await ob.call('send_group_msg', { group_id: Number(groupId), message })
         : await ob.call('send_private_msg', { user_id: Number(userId), message })
@@ -7795,6 +7797,8 @@ export function apply(ctx, config) {
     // 搓回去以后要不要再说一句、说什么，交给模型自己判断；
     // 不写死句子池——说「搓我干嘛」还是干脆不理，让它在上下文里想（2026-10-25 主人要求）
     if (config.pokeReplyEnabled.get() !== true) return
+    // 反思期不接搓一搓（2026-10-26 排查所有出口：poke 漏了 inQuiet）
+    if (data.group_id && inQuiet(data.group_id)) return
     // 说不说话：先看几率，再看抽到的方案是不是「模型思考」
     const pokeChance = Math.max(0, Math.min(100, Number(config.pokeReplyChance.get() ?? 55)))
     if (Math.random() * 100 >= pokeChance) return
@@ -8389,6 +8393,8 @@ export function apply(ctx, config) {
             if (data.message_id) segments.push({ type: 'reply', data: { id: String(data.message_id) } })
             segments.push({ type: 'image', data: { file: 'base64://' + buf.toString('base64') } })
             const params = { message: segments }
+            // 反思期不发（哪怕是被要求发表情）：2026-10-26 排查所有出口
+            if (isGroup && inQuiet(data.group_id)) return
             if (isGroup) {
               params.group_id = Number(data.group_id)
               await ob.call('send_group_msg', params)
