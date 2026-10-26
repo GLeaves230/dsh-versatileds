@@ -1183,9 +1183,9 @@ function napcatQrPath(config) {
 }
 
 /** 从注册表拿 QQ.exe 的路径（NapCat 注入器需要它）。 */
-function qqExePath() {
+async function qqExePath() {
   try {
-    const r = spawnSync('reg', ['query', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ', '/v', 'UninstallString'], { encoding: 'utf8', timeout: 8000 })
+    const r = await runAsync('reg', ['query', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ', '/v', 'UninstallString'], { encoding: 'utf8', timeout: 8000 })
     const m = String(r.stdout || '').match(/UninstallString\s+REG_SZ\s+(.+)/)
     if (!m) return ''
     const uninstall = m[1].trim().replace(/^"|"$/g, '')
@@ -3152,12 +3152,12 @@ let napcatPidCache = { pid: 0, at: 0 }
 const NAPCAT_PID_TTL = 60_000
 
 /** 这个 PID 现在还是 QQ.exe 吗（防止 PID 复用后误杀别人的进程）。 */
-function isQqProcess(pid) {
+async function isQqProcess(pid) {
   const n = Number(pid)
   if (!n || n < 100) return false
   try {
     // tasklist 从 DSH 进程跑是通的（沙箱里手动跑才会 EPERM）
-    const r = spawnSync('tasklist', ['/FI', `PID eq ${n}`, '/FO', 'CSV', '/NH'],
+    const r = await runAsync('tasklist', ['/FI', `PID eq ${n}`, '/FO', 'CSV', '/NH'],
       { timeout: 3000, windowsHide: true })
     const out = r.stdout?.toString() || ''
     if (out.trim()) return /qq\.exe/i.test(out)
@@ -3170,9 +3170,9 @@ function isQqProcess(pid) {
 }
 
 /** 端口持有者 PID（解析 netstat，比 PowerShell 的 Get-NetTCPConnection 兼容性好）。 */
-function portOwnerPid(port) {
+async function portOwnerPid(port) {
   try {
-    const r = spawnSync('netstat', ['-ano'], { timeout: 3000, windowsHide: true })
+    const r = await runAsync('netstat', ['-ano'], 3000)
     const out = r.stdout?.toString() || ''
     const re = new RegExp(`:${Number(port)}\\s+\\S+\\s+LISTENING\\s+(\\d+)`)
     const m = out.match(re)
@@ -3187,18 +3187,18 @@ function portOwnerPid(port) {
  * 没有就用 launcher.pid（里面是注入的 QQ 进程，要验证还是 QQ）。
  * 结果缓存 60 秒，进程没了就清缓存重查。
  */
-function resolveNapcatPid(home = dshHome()) {
+async function resolveNapcatPid(home = dshHome()) {
   const now = Date.now()
   if (napcatPidCache.pid && now - napcatPidCache.at < NAPCAT_PID_TTL) {
     return napcatPidCache.pid
   }
-  let pid = portOwnerPid(6099) || portOwnerPid(3000)
+  let pid = (await portOwnerPid(6099)) || (await portOwnerPid(3000))
   if (!pid) {
     try {
       const f = join(home, 'napcat', 'napcat', 'launcher.pid')
       if (existsSync(f)) {
         const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-        if (v > 100 && isQqProcess(v)) pid = v
+        if (v > 100 && await isQqProcess(v)) pid = v
       }
     } catch { /* ignore */ }
   }
@@ -3232,7 +3232,7 @@ function killNapCatWeStarted(config) {
     }
   } catch { /* ignore */ }
   // 2) 没有就杀 NapCat 服务进程（6099 持有者）
-  if (!pid) pid = resolveNapcatPid(home)
+  // 退出清理是同步路径，不调 async 的 resolveNapcatPid（只杀 launcher.pid 里验明过的 QQ）
   if (!pid) return false
   try {
     // 异步、不等待：就算要关也不能挡住进程退出
@@ -3271,7 +3271,7 @@ function isProcessAlive(pid) {
  * 端口持有者是第一优先（6099 WebUI + OneBot HTTP）——它就是注入 NapCat 的那个 QQ 进程；
  * 端口都读不到时才退回 launcher.pid，而且必须验明还是 QQ.exe，防 PID 复用误杀别的大号。
  */
-function napcatPidCandidates(config, home = dshHome()) {
+async function napcatPidCandidates(config, home = dshHome()) {
   const pids = []
   const ports = new Set([6099])
   try {
@@ -3279,7 +3279,7 @@ function napcatPidCandidates(config, home = dshHome()) {
     if (u.port) ports.add(Number(u.port))
   } catch { /* 配置不是合法 URL 就只用 6099 */ }
   for (const port of ports) {
-    const pid = portOwnerPid(port)
+    const pid = await portOwnerPid(port)
     if (pid > 100 && !pids.includes(pid)) pids.push(pid)
   }
   if (!pids.length) {
@@ -3287,7 +3287,7 @@ function napcatPidCandidates(config, home = dshHome()) {
       const f = join(home, 'napcat', 'napcat', 'launcher.pid')
       if (existsSync(f)) {
         const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-        if (v > 100 && isQqProcess(v)) pids.push(v)
+        if (v > 100 && await isQqProcess(v)) pids.push(v)
       }
     } catch { /* ignore */ }
   }
@@ -3295,7 +3295,7 @@ function napcatPidCandidates(config, home = dshHome()) {
 }
 
 /** 杀一棵进程树：先试普通权限，杀不动（QQ 是提权进程）再提权；提权是异步的，要等它真的消失。 */
-function taskkillTree(pid, elevated) {
+async function taskkillTree(pid, elevated) {
   try {
     if (elevated) {
       const ps = `Start-Process -FilePath 'taskkill.exe' -ArgumentList '/F','/T','/PID','${pid}' -Verb RunAs -WindowStyle Hidden`
@@ -3304,7 +3304,7 @@ function taskkillTree(pid, elevated) {
       child.unref()
       return true
     }
-    const r = spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { timeout: 5000, windowsHide: true })
+    const r = await runAsync('taskkill', ['/F', '/T', '/PID', String(pid)], 5000)
     return r.status === 0
   } catch {
     return false
@@ -3317,15 +3317,15 @@ function taskkillTree(pid, elevated) {
  * 杀完把 napcatLoggedOut 置上，之后不再自动拉起、WS 也不再重连。
  */
 async function logoutNapCat(config) {
-  const pids = napcatPidCandidates(config)
+  const pids = await napcatPidCandidates(config)
   if (!pids.length) {
     napcatLoggedOut = true
     return { ok: false, error: '没找到 NapCat 进程（可能本来就没登录）', pids }
   }
   const attempts = []
   for (const pid of pids) {
-    const plain = taskkillTree(pid, false)
-    const elevated = !plain && taskkillTree(pid, true)
+    const plain = await taskkillTree(pid, false)
+    const elevated = !plain && await taskkillTree(pid, true)
     attempts.push({ pid, plain, elevated })
   }
   // 提权是异步的（要等 UAC 点「是」），最多等 10 秒看进程真的没了
@@ -3621,7 +3621,7 @@ function startStatusServer(config, napcat = null) {
         loggedIn,
         loggedOut: napcatLoggedOut,
         // 退出登录要杀的进程：设置页顺手显示出来，出问题时不用再翻日志
-        pid: loggedIn ? resolveNapcatPid() : 0,
+        pid: loggedIn ? await resolveNapcatPid() : 0,
         hasQr,
         qrAt,
         pkgReady: napcatInstalled(napcatRoot(config)),
@@ -3833,7 +3833,7 @@ function startStatusServer(config, napcat = null) {
       const ok = existsSync(dir)
       if (ok) {
         try {
-          spawnSync('explorer', [dir], { stdio: 'ignore', timeout: 5000 })
+          await runAsync('explorer', [dir], 5000)
         } catch { /* explorer 打不开就算了 */ }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -6422,7 +6422,7 @@ export function apply(ctx, config) {
       const loadPath = join(napcatDir, 'loadNapCat.js')
       const mainPath = join(napcatDir, 'napcat.mjs')
       const patchPath = join(napcatDir, 'qqnt.json')
-      const qq = qqExePath()
+      const qq = await qqExePath()
       noise(`boot qq=${qq} boot=${existsSync(boot)} hook=${existsSync(hook)} qqOk=${Boolean(qq) && existsSync(qq)}`)
       if (existsSync(boot) && existsSync(hook) && existsSync(loadPath) && existsSync(mainPath) && qq && existsSync(qq)) {
         const q = (s) => String(s).replace(/'/g, "''")
@@ -6467,7 +6467,7 @@ export function apply(ctx, config) {
     try { unlinkSync(result) } catch { /* ignore */ }
     const pageUrl = `http://127.0.0.1:${STATUS_PORT}/qr`
     try {
-      spawnSync('cmd', ['/c', 'start', '', pageUrl], { stdio: 'ignore', timeout: 10000 })
+      await runAsync('cmd', ['/c', 'start', '', pageUrl], 10000)
     } catch { /* 打不开就让主人手动开 */ }
     plog('info', '[dsh-versatileds] 二维码页面:', pageUrl)
     for (let i = 0; i < 300; i += 1) {
@@ -6759,10 +6759,10 @@ export function apply(ctx, config) {
       } catch {
         return
       }
-      socket.addEventListener('open', () => {
+      socket.addEventListener('open', async () => {
         log('open')
         // NapCat 真实 PID：走缓存解析（launcher.pid 要验明是 QQ，否则用 6099 端口持有者）
-        const napcatPid = resolveNapcatPid()
+        const napcatPid = await resolveNapcatPid()
         // 只有「第一次连上」或「NapCat 换了个 PID（重启过）」才刷这一屏；普通重连只写文件日志
         const pidChanged = napcatPid !== lastLoggedNapcatPid
         if (!pidChanged) return
