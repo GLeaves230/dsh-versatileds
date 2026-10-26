@@ -7977,6 +7977,8 @@ export function apply(ctx, config) {
             reply = reply.split(token).join('').trim()
             if (!atUid) atUid = ownerQQOf(config)
           }
+          // 已经 @ 了主人，正文开头再写「主人」就重复了（「@黑木钟 主人就是 啊」→「@黑木钟 就是 啊」）
+          if (atUid) reply = reply.replace(/^主人[，,、\s]*/, '').trim() || reply
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
           const wantVoice = config.voiceEnabled.get() === true && reply.includes('[语音]')
