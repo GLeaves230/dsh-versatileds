@@ -146,17 +146,55 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 
 ## 本机状态接口
 
-状态服务只监听 `127.0.0.1`（QQ 模块 `18766`、B站 模块 `18765`），给设置页和排查用：
+状态服务只监听 `127.0.0.1`（QQ 模块 `18766`、B站 模块 `18765`），给设置页和排查用。全部接口：
+
+**登录（NapCat）**
 
 | 接口 | 用途 |
 |---|---|
 | `GET /login` | 登录态、二维码是否就绪、NapCat PID、是否已主动退出登录 |
 | `POST /login/start` / `POST /login/stop` | 启动登录服务 / 退出登录（杀 NapCat 进程） |
-| `GET /flags` | 当前 QQ 模块总开关的值（排查热切换） |
+| `GET /login/open` | 在资源管理器里打开 NapCat 目录 |
+| `GET /qr` / `GET /qr/png` / `POST /qr/done` | 二维码页 / 二维码图片 / 扫码完成后清理缓存 |
+
+**语音（GPT-SoVITS）**
+
+| 接口 | 用途 |
+|---|---|
+| `GET /voice_status` | 当前语音方案、版本、API 是否在线（`apiUp`）、环境是否就绪 |
+| `GET /voice_deps` | 8 项依赖自检（Python / 代码 / 模型 / 参考音频）+ 最近一次部署进度 |
+| `GET /voice_deploy` | 一键部署（后台跑 `qq/deploy-gsv.mjs`，已装的跳过） |
+| `GET /voice_switch?version=v2\|v4` | 切 GPT-SoVITS 版本并自动重启 API（约 40 秒） |
+| `POST /voice_test` | 测试语音：`{text, target: private\|group}`，按当前参数合成并发出去 |
+
+**记忆 / 人设 / 日志**
+
+| 接口 | 用途 |
+|---|---|
 | `POST /memory_scaffold` | 补记忆目录骨架（缺什么补什么） |
+| `POST /memory_sync` | 记忆同步（一键同步到各模式） |
 | `GET /agents` / `POST /agents` | 看 / 生成 `AGENTS.md` 模板 |
 | `POST /persona` | 生成人设模板（已存在不覆盖） |
+| `GET /logs` / `GET /logs/view` | 日志列表 / 看某份日志 |
+| `GET /chat_paths` / `POST /open_folder` | 聊天记录路径 / 打开所在文件夹 |
+| `POST /clear_cache` | 清理缓存 |
+
+**表情包**
+
+| 接口 | 用途 |
+|---|---|
+| `GET /stickers` | 表情包列表 |
+| `POST /sticker_add` / `POST /sticker_del` / `POST /sticker_fav` | 上传 / 删除 / 收藏 |
+| `GET /sticker_img` | 取某张表情包图片 |
+
+**其他**
+
+| 接口 | 用途 |
+|---|---|
+| `GET /flags` | 当前 QQ 模块总开关的值（排查热切换） |
 | `GET /cooldowns` | 各项冷却倒计时 |
+| `GET /skip` / `POST /set_used` | 跳过主动搭话倒计时 / 改今日已用次数 |
+| `GET /balance_check` | 查 DeepSeek 余额 |
 
 ## 配置分块
 
