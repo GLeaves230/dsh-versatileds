@@ -146,7 +146,14 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 
 ## 本机状态接口
 
-状态服务只监听 `127.0.0.1`（QQ 模块 `18766`、B站 模块 `18765`），给设置页和排查用。全部接口：
+状态服务只监听 `127.0.0.1`，给设置页和排查用：
+
+- **QQ 模块** `18766`（登录、语音、记忆、表情包、日志等）
+- **B站 模块** `18765`（冷却状态）
+
+全部接口按模块列出：
+
+## QQ 模块（18766）
 
 **登录（NapCat）**
 
@@ -196,6 +203,13 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 | `GET /skip` / `POST /set_used` | 跳过主动搭话倒计时 / 改今日已用次数 |
 | `GET /balance_check` | 查 DeepSeek 余额 |
 
+## B站 模块（18765）
+
+| 接口 | 用途 |
+|---|---|
+| `GET /cooldowns` | B站 各项操作（点赞/投币/评论等）的冷却倒计时 |
+| `GET /skip` | 跳过当前冷却（调试用） |
+
 ## 配置分块
 
 - `config.bili`：写操作开关与间隔、cookie、主人 UID、直播抓帧、视频抓帧、观看历史上报等。字段见 `bili/index.js` 的 `Config`。
@@ -240,7 +254,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 ## 新用户上手
 
 1. 装好插件（`link:` 或 `install_bundle`），DSH 启动时会自动：
-   - 解压 `vendor/napcat.zip`、`vendor/ffmpeg.zip`；
+   - 解压 `vendor/napcat.zip`；ffmpeg 缺失时从清华 PyPI 自动下载（**不随包带**）；
    - 生成 `AGENTS.md` 模板（开头一节「这套东西怎么跑起来的」就是前置常识）；
    - 生成 `<DSH_HOME>/versatileds/memory/` 骨架：`README.md` 索引、`lock.mjs`、`lock.py`、`memwrite.mjs`；
    - 生成 `qq/persona.md` 人设模板（一份完整可用的默认人设，直接改）。
