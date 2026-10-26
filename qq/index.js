@@ -2574,6 +2574,23 @@ async function trimVoiceSilence(wavPath) {
 }
 
 /**
+ * 念之前把文本收拾成人话：
+ * - 去掉 QQ 表情（[白眼] 念出来就是「白眼」两个字）
+ * - 拆字梗还原并拉长：「彳亍」→「行～」（念着像拖长一点，不是 chì chù）
+ * - 多余的波浪号/空格压一压，太长截断（念长文很怪）
+ */
+function prepareVoiceText(raw) {
+  let t = String(raw || '')
+    .replace(/\[[^\]]{1,10}\]/g, '')
+    .replace(/彳亍/g, '行～')
+    .replace(/[~～]{2,}/g, '～')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  if (t.length > 60) t = t.slice(0, 60)
+  return t
+}
+
+/**
  * 调本地 GPT-SoVITS（api_v2.py 的 /tts）合成一段 wav，返回文件路径。
  * 参考音频决定音色和情绪；speech 里带表情符号会被去掉（念出来很怪）。
  */
@@ -2584,7 +2601,7 @@ async function gsvSynthesize(text, config) {
   if (!refAudio) throw new Error('还没配参考音频（gsvRefAudio）')
   if (!refText) throw new Error('还没配参考音频对应的文本（gsvRefText）')
   const q = new URLSearchParams({
-    text: String(text || '').trim(),
+    text: prepareVoiceText(text),
     text_lang: String(config?.gsvTextLang?.get?.() || 'zh'),
     ref_audio_path: refAudio,
     prompt_text: refText,
@@ -3161,7 +3178,7 @@ function resolveLogPath(config, id) {
 }
 
 /** 给设置页轮询主动搭话倒计时用的小接口，只监听本机。 */
-function startStatusServer(config) {
+function startStatusServer(config, napcat = null) {
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
@@ -3394,6 +3411,64 @@ function startStatusServer(config) {
       const info = restartGsvApi(config, version)
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true, ...info, note: 'API 正在重启，约 40 秒后可用' }))
+      return
+    }
+    if (url.pathname === '/voice_test') {
+      // 设置页「测试语音」按钮：按当前参数把一段文本念出来，先发私聊、也能发群
+      let body = ''
+      req.on('data', (chunk) => {
+        body += chunk
+        if (body.length > 200_000) req.destroy()
+      })
+      req.on('end', async () => {
+        const finish = (code, payload) => {
+          try {
+            res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify(payload))
+          } catch { /* 连接已经断了 */ }
+        }
+        try {
+          const payload = JSON.parse(body || '{}')
+          const target = payload.target === 'group' ? 'group' : 'private'
+          const text = prepareVoiceText(payload.text)
+          if (!text) throw new Error('先写要念的文本')
+          const backend = String(config.voiceBackend.get() || 'qq')
+          if (backend !== 'gpt-sovits') {
+            // 官方语音只能发群；私聊那条 NapCat 发不出去
+            if (target === 'private') throw new Error('私聊只能用 GPT-SoVITS；先把语音方案切成 GPT-SoVITS')
+            const gid = parseIds(config.proactiveGroups.get())[0]
+            if (!gid) throw new Error('没配群号（proactiveGroups），不知道发哪个群')
+            await napcat?.call('send_group_ai_record', {
+              character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
+              text,
+              group_id: Number(gid),
+            })
+            recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音] ${text}` })
+            finish(200, { ok: true, backend: 'qq', target: 'group', text })
+            return
+          }
+          const wav = await gsvSynthesize(text, config)
+          if (target === 'private') {
+            const ownerQq = ownerQQOf(config)
+            if (!ownerQq) throw new Error('没配主人 QQ 号')
+            await napcat?.call('send_private_msg', {
+              user_id: Number(ownerQq),
+              message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+            })
+          } else {
+            const gid = parseIds(config.proactiveGroups.get())[0]
+            if (!gid) throw new Error('没配群号（proactiveGroups），不知道发哪个群')
+            await napcat?.call('send_group_msg', {
+              group_id: Number(gid),
+              message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+            })
+            recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/gpt-sovits] ${text}` })
+          }
+          finish(200, { ok: true, backend: 'gpt-sovits', target, text, wav })
+        } catch (err) {
+          finish(500, { ok: false, error: String(err?.message ?? err) })
+        }
+      })
       return
     }
     if (url.pathname === '/login/open') {
@@ -8133,7 +8208,7 @@ export function apply(ctx, config) {
   }, 'dsh-versatileds-plugin: napcat autostart')
 
   ctx.effect(() => {
-    const stop = startStatusServer(config)
+    const stop = startStatusServer(config, ob)
     return () => { stop?.() }
   }, 'dsh-versatileds-plugin: cooldown status server')
 

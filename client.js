@@ -260,6 +260,66 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 测试语音：按当前参数念一段文本，先发私聊、也能发群。 */
+    function VoiceTestRow(props) {
+      const [text, setText] = React.useState('')
+      const [busy, setBusy] = React.useState('')
+      const [note, setNote] = React.useState('')
+      const send = async (target) => {
+        if (!String(text).trim()) {
+          setNote('先写要念的内容')
+          return
+        }
+        setBusy(target)
+        setNote('')
+        try {
+          const r = await fetch(`${QQ_STATUS_URL}/voice_test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, target }),
+          })
+          const j = await r.json()
+          if (j?.ok) setNote(`已发（${target === 'private' ? '私聊' : '群里'}）：${j.text}`)
+          else setNote('失败：' + (j?.error || '未知错误'))
+        } catch (e) {
+          setNote('失败：' + (e?.message ?? e))
+        } finally {
+          setBusy('')
+        }
+      }
+      return React.createElement(
+        'div',
+        { style: { ...rowStyle, alignItems: 'flex-start' } },
+        React.createElement('span', { style: { ...labelStyle, paddingTop: '6px' } }, '测试语音'),
+        React.createElement(
+          'div',
+          { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' } },
+          React.createElement('input', {
+            type: 'text',
+            value: text,
+            onChange: (e) => setText(e.target.value),
+            placeholder: '写一句要念的话（表情会被去掉，「彳亍」会念成「行～」）',
+            style: inputStyle,
+          }),
+          React.createElement(
+            'div',
+            { style: { display: 'flex', gap: '8px' } },
+            React.createElement('button', {
+              disabled: Boolean(busy),
+              onClick: () => send('private'),
+              style: { padding: '4px 14px', cursor: 'pointer' },
+            }, busy === 'private' ? '发送中…' : '发私聊测试'),
+            React.createElement('button', {
+              disabled: Boolean(busy),
+              onClick: () => send('group'),
+              style: { padding: '4px 14px', cursor: 'pointer' },
+            }, busy === 'group' ? '发送中…' : '发群里测试'),
+          ),
+          note ? React.createElement('span', { style: hintStyle }, note) : null,
+        ),
+      )
+    }
+
     /** GPT-SoVITS 版本下拉：换版本会重启 API（v4 慢但稳，v2 快但略飘）。 */
     const VOICE_VERSION_OPTIONS = [
       ['v4', 'v4（音色稳，20-40 秒/句）'],
@@ -1655,6 +1715,8 @@ window.__ModuleLoader__.load({
                 disabled: !snap.writable,
               }),
             )
+            // 测试按钮放最后：改完参数直接听效果，不用去群里发
+            children.push(React.createElement(VoiceTestRow, { key: 'voice-test' }))
           } else {
             children.push(
               React.createElement(VoiceRow, {
