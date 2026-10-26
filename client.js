@@ -279,6 +279,18 @@ window.__ModuleLoader__.load({
           const r = await fetch(`${QQ_STATUS_URL}/voice_switch?version=${encodeURIComponent(next)}`)
           const j = await r.json()
           setNote(j?.note || '已发起重启')
+          // 轮询等 API 起来：起来就把提示换成「启动完成」，别一直挂着「正在重启」
+          for (let i = 0; i < 45; i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+            try {
+              const s = await fetch(`${QQ_STATUS_URL}/voice_status`, { cache: 'no-store' })
+              const sj = await s.json()
+              if (sj?.apiUp) {
+                setNote(`启动完成（${j?.version || next}）`)
+                break
+              }
+            } catch { /* 还没起来，继续等 */ }
+          }
         } catch (e) {
           setNote('重启失败：' + (e?.message ?? e))
         } finally {

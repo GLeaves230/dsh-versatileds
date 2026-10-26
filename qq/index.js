@@ -3371,12 +3371,19 @@ function startStatusServer(config) {
       return
     }
     if (url.pathname === '/voice_status') {
-      // 设置页用：这个方案能不能跑、跑不动的原因
+      // 设置页用：这个方案能不能跑、跑不动的原因；顺手探一下 API 活着没（切版本后轮询用）
       const gsv = gsvStatus(config)
+      let apiUp = false
+      try {
+        const base = String(config.gsvApiUrl.get() || 'http://127.0.0.1:9880').replace(/\/+$/, '')
+        await fetch(base, { signal: AbortSignal.timeout(1500) })
+        apiUp = true
+      } catch { /* 连不上＝没起来 */ }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({
         backend: String(config.voiceBackend.get() || 'qq'),
         version: String(config.gsvVersion.get() || 'v4'),
+        apiUp,
         gsv,
       }))
       return
