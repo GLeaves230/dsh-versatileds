@@ -9062,6 +9062,12 @@ export function apply(ctx, config) {
 
       await new Promise((resolve) => setTimeout(resolve, humanDelay(config)))
 
+      // 私聊没回的时候要能查：到底生成空了、还是发送失败（2026-10-26 主人：「怎么私聊不回了」）
+      if (!String(reply || '').trim()) {
+        plog('warn', `[dsh-versatileds] 回复为空（${data.message_type}，` +
+          `${data.group_id || sender}）：${String(text).slice(0, 40)}`)
+      }
+
       try {
         // 别把上下文里的占位符当话引出来：它看见「[表情 #334]」会写成「[表情] 咋还只发表情不说话」
         let outReply = String(reply || '')
