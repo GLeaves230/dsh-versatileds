@@ -1955,12 +1955,23 @@ async function forwardToText(seg, ob) {
     } catch { /* 拉不到就空着 */ }
   }
   if (!Array.isArray(nodes) || !nodes.length) return '[合并转发的聊天记录（没拉到内容）]'
-  const lines = nodes.slice(0, 12).map((n) => {
+  const depth = Number(seg?.data?.__depth || 0)
+  const lines = (await Promise.all(nodes.slice(0, 12).map(async (n) => {
     const who = String(n.sender?.nickname || n.sender?.card || n.nickname || n.uin || '某人')
     const segs = n.message || n.content || []
-    const body = plainText(segs) || (Array.isArray(segs) && segs.some((s) => s?.type === 'image') ? '[图片]' : '')
+    let body = plainText(segs)
+    if (!body && Array.isArray(segs)) {
+      // 嵌套转发（聊天记录里又转发聊天记录）：再拉一层，最多 2 层，防死循环
+      const inner = segs.find((s) => s && s.type === 'forward')
+      if (inner && depth < 2) {
+        inner.data = { ...(inner.data || {}), __depth: depth + 1 }
+        body = await forwardToText(inner, ob)
+      } else if (segs.some((s) => s && s.type === 'image')) {
+        body = '[图片]'
+      }
+    }
     return `${who}：${body || '[空]'}`
-  })
+  }))).join('\n')
   const more = nodes.length > 12 ? `\n…（还有 ${nodes.length - 12} 条）` : ''
   return `[合并转发]\n${lines.join('\n')}${more}`
 }
@@ -8108,8 +8119,13 @@ export function apply(ctx, config) {
     // 乱码先还原（UTF-8 被当 Latin-1 读的那种），还原不出来再按原文走
     const rawText = plainText(data.message)
     const fixedText = tryFixGarbled(rawText)
-    let text = (fixedText !== rawText ? fixedText : rawText)
-      || forwardText
+    // 合并转发的内容要**追加**，不能因为前面还有一句「看看」就被丢掉
+    // （2026-10-26：@它 + 合并转发 + 一句「看看」，它只看到「看看」，回「没图也没链接」）
+    const baseText = (fixedText !== rawText ? fixedText : rawText)
+    let text = forwardText
+      ? (baseText ? `${baseText}\n${forwardText}` : forwardText)
+      : baseText
+    text = text
       || (imageFiles.length ? '[图片]' : '')
       || faceText
       || ((data.message || []).some((s) => s && s.type === 'record') ? '[语音]' : '')
