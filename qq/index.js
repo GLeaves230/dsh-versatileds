@@ -8509,19 +8509,9 @@ export function apply(ctx, config) {
               try {
                 if (useGsv) {
                   const wav = await gsvSynthesize(voiceText, config)
-                  // QQ 语音只认 AMR/Silk：WAV 发出去客户端会显示时长但播不出声（群友反馈「语音听不了」）
-                  let sendFile = wav
-                  try {
-                    const amr = wav.replace(/\.wav$/i, '.amr')
-                    const ff = bundledFfmpegCandidates().find((p) => existsSync(p))
-                    if (ff) {
-                      await runAsync(ff, ['-y', '-i', wav, '-ar', '8000', '-ac', '1', '-c:a', 'libopencore_amrnb', '-b:a', '12.2k', amr], 30000)
-                      if (existsSync(amr)) sendFile = amr
-                    }
-                  } catch { /* 转码失败就退回 WAV，至少别整条哑掉 */ }
                   await ob.call(isGroup ? 'send_group_msg' : 'send_private_msg', {
                     ...(isGroup ? { group_id: Number(data.group_id) } : { user_id: Number(sender) }),
-                    message: [{ type: 'record', data: { file: `file:///${sendFile}` } }],
+                    message: [{ type: 'record', data: { file: `file:///${wav}` } }],
                   })
                 } else {
                   await ob.call('send_group_ai_record', {
