@@ -3305,6 +3305,8 @@ function looksLikeSeriousTopic(text) {
 const repeatGuard = { inKey: '', inAt: 0, outKey: '', outAt: 0 }
 /** 超短应声（彳亍/行/嗯…）的限流：同群 2 分钟最多一次（2026-10-26 小鲸鱼连发图它一直「彳亍」）。 */
 const ackClock = new Map()
+/** 反思期里群友 @ 它的次数：多次 @ 且真是在找它聊，就让模型判断要不要结束反思（2026-10-26 主人）。 */
+const quietKnock = new Map()
 
 /** 这个群是不是在反思静默期（发言总闸）。 */
 function inQuiet(groupId) {
@@ -7021,6 +7023,34 @@ export function apply(ctx, config) {
   }
 
   /**
+   * 反思期里群友多次 @ 它：让 flash 判断气氛是不是到位、可以恢复聊天（2026-10-26 主人）。
+   * 只回 resume / stay，成本很低。
+   */
+  async function judgeResumeChat(gid, text) {
+    try {
+      let out = ''
+      for await (const chunk of llm.stream({
+        provider: String(config.imageProvider.get() || 'deepseek-account'),
+        model: 'deepseek-flash',
+        messages: [{
+          role: 'user',
+          content: [{
+            type: 'text',
+            text: `群里有人 @ 了它，内容是：「${String(text || '').slice(0, 200)}」。判断这是不是在找它聊天、气氛适合让它恢复说话（不是骂它、不是让它闭嘴、不是正事）。只回一个词：resume 或 stay。`,
+          }],
+        }],
+        maxTokens: 8,
+        temperature: 0,
+        signal: AbortSignal.timeout(10000),
+      })) {
+        if (chunk?.type === 'text-delta' && chunk.text) out += chunk.text
+        else if (chunk?.type === 'block-end' && chunk.block?.type === 'text' && !out && chunk.block.text) out = chunk.block.text
+      }
+      return /resume/i.test(out)
+    } catch { return false }
+  }
+
+  /**
    * 主动聊天状态里，每 2.5 分钟让模型自己看一次群气氛：最近几条是不是在聊正事。
    * 是正事就退出主动聊天（2026-10-26 主人选：不要关键词硬判，让模型主观判断）。
    */
@@ -8127,11 +8157,33 @@ export function apply(ctx, config) {
           : /(大肥鱼|肥鱼|鲸鱼娘|本鲸)/.test(plainText(data.message))
         // 反思期：被动回复按「@ 或点名」豁免（豁免不收紧）；
         // 主动输出（分享、表情包、拍一拍、主动搭话）由各自的出口用 inQuiet() 挡。
-        const quietNow = inQuiet(data.group_id)
         // 反思期：**只有主人本人说话（含 @ 它）才放行**；别人 @ 它不算，除非主人明确让它说。
-        // （2026-10-26 主人定：被我 @ 出来才豁免，其他除非我让他说话才能继续）
+        // 但群友@它多次、真是在找它聊，气氛到位就让模型判断结束反思（2026-10-26 主人）。
         const ownerSpokeNow = Boolean(owner) && String(sender) === String(owner)
-        if (quietNow && !ownerSpokeNow) return
+        let quietNow = inQuiet(data.group_id)
+        if (quietNow && !ownerSpokeNow) {
+          if (atMe) {
+            const k = String(data.group_id)
+            const now = Date.now()
+            const rec = quietKnock.get(k) || { count: 0, at: 0 }
+            if (now - rec.at > 10 * 60_000) rec.count = 0
+            rec.at = now
+            rec.count += 1
+            quietKnock.set(k, rec)
+            if (rec.count >= 2) {
+              try {
+                if (await judgeResumeChat(k, plainText(data.message))) {
+                  quietState.delete(k)
+                  saveQuietState()
+                  quietKnock.delete(k)
+                  quietNow = false
+                  plog('info', `[dsh-versatileds] 群 ${k} 反思期被群友多次 @，恢复聊天`)
+                }
+              } catch { /* 判断失败保持安静 */ }
+            }
+          }
+          if (quietNow) return
+        }
         // 群级免打扰：这个群单独设了时段（groupProfiles），时段内只要不是主人说话就静默
         // 跟全局 proactiveQuiet 取交集：任一生效就静默（2026-10-26 主人）
         if (inGroupQuiet(config, data.group_id) && !ownerSpokeNow) return
