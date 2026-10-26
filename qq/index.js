@@ -8862,6 +8862,10 @@ export function apply(ctx, config) {
                 plog('info', `[dsh-versatileds] ${isGroup ? '群里' : '私聊'}发语音：${voiceText}`)
                 return
               } catch (err) {
+                // 语音没发出去就回退文字：先把 [语音] 标记剥掉，别让群里看到字面的「[语音] xxx」
+                // （2026-10-26 实测：GPT-SoVITS 服务挂了，回退后发出「[语音] 行啊主人…」文字）
+                reply = String(reply).replace(/\[语音[^\]]*\]/g, '').trim()
+                if (!reply) reply = '嗯'
                 plog('warn', '[dsh-versatileds] 语音发送失败，回退文本:', err?.message ?? err)
               }
             }
