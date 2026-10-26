@@ -3582,8 +3582,10 @@ function startStatusServer(config, napcat = null) {
             })
             recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/gpt-sovits] ${text}`, role: testRole })
           }
+          console.info(`[dsh-versatileds-plugin] 测试语音（${target === 'private' ? '私聊' : '群'}）：${text}`)
           finish(200, { ok: true, backend: 'gpt-sovits', target, text, wav })
         } catch (err) {
+          console.warn('[dsh-versatileds-plugin] 测试语音失败:', err?.message ?? err)
           finish(500, { ok: false, error: String(err?.message ?? err) })
         }
       })
@@ -7075,6 +7077,7 @@ export function apply(ctx, config) {
         to: data.group_id ? String(data.group_id) : from,
         reply: '被搓了一下，搓回去了',
       })
+      console.info(`[dsh-versatileds-plugin] 回搓了一下：${data.group_id ? `群 ${data.group_id}` : `私聊 ${from}`}`)
     } catch (err) {
       console.warn('[dsh-versatileds-plugin] 回搓失败:', err?.message ?? err)
     }
@@ -7105,6 +7108,7 @@ export function apply(ctx, config) {
           to: data.group_id ? String(data.group_id) : from,
           reply: style.text,
         })
+        console.info(`[dsh-versatileds-plugin] 搓后接话（固定话术）：${style.text}`)
       } catch (err) {
         console.warn('[dsh-versatileds-plugin] 搓后接话失败:', err?.message ?? err)
       }
@@ -7150,6 +7154,7 @@ export function apply(ctx, config) {
         to: data.group_id ? String(data.group_id) : from,
         reply: line,
       })
+      console.info(`[dsh-versatileds-plugin] 搓后接话：${line}`)
     } catch (err) {
       console.warn('[dsh-versatileds-plugin] 搓后接话失败:', err?.message ?? err)
     }
