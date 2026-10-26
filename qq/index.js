@@ -3339,6 +3339,8 @@ function looksLikeShutUp(text) {
   // 主人说完它又连回 15 条）
   if (/(让|叫).{0,8}(大肥鱼|肥鱼|你).{0,8}(别|不要|不用|先不|不).{0,6}(聊|说|出声|讲话)/.test(t)) return true
   if (/^(你)?(先)?(别|不要|不用).{0,4}(聊|说|出声|讲话)/.test(t)) return true
+  // 含「请」的客套版也一样：「请不要再说话了」「不用再说了」（2026-10-26 星星眼说「请不要再说话了」没触发）
+  if (/(不要|别|不用|别在|请不).{0,3}(再)?.{0,2}(说话|出声|说了|聊了)/.test(t)) return true
   // 主人单说「反思」「去反思一下」= 让它进反思期安静下来
   // （2026-10-26：主人发「反思」，它反问「反思啥呀，我刚才说错什么了吗」，压根没进反思）
   if (/^(你)?(先)?(去)?反思(一下|会儿|去吧)?[！!。.…~\s]*$/.test(t)) return true
@@ -8133,6 +8135,10 @@ export function apply(ctx, config) {
 
     const lowMode = isLowBalanceMode()
     if (data.message_type === 'private') {
+      try {
+        appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+          `[${new Date().toLocaleString('zh-CN', { hour12: false })}] recv from=${sender} quiet=${inQuiet(`p:${sender}`)} text=${plainText(data.message).slice(0, 30)}\n`, 'utf8')
+      } catch { /* ignore */ }
       if (!config.autoReplyEnabled.get()) return
       // 低余额时私聊也只回主人
       if (lowMode && owner && sender !== owner) return
@@ -9069,6 +9075,10 @@ export function apply(ctx, config) {
       await new Promise((resolve) => setTimeout(resolve, humanDelay(config)))
 
       // 私聊没回的时候要能查：到底生成空了、还是发送失败（2026-10-26 主人：「怎么私聊不回了」）
+      try {
+        appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+          `[${new Date().toLocaleString('zh-CN', { hour12: false })}] reply len=${String(reply || '').length} type=${data.message_type}\n`, 'utf8')
+      } catch { /* ignore */ }
       if (!String(reply || '').trim()) {
         plog('warn', `[dsh-versatileds] 回复为空（${data.message_type}，` +
           `${data.group_id || sender}）：${String(text).slice(0, 40)}`)
@@ -9293,6 +9303,10 @@ export function apply(ctx, config) {
           plog('info', `[dsh-versatileds] 自动回复：${atPart}${outReply}（${targetLabel}，回复：${senderName}）`)
         } catch { /* 日志失败不影响回复 */ }
       } catch (err) {
+        try {
+          appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+            `[${new Date().toLocaleString('zh-CN', { hour12: false })}] error: ${err?.message ?? err}\n`, 'utf8')
+        } catch { /* ignore */ }
         plog('warn', '[dsh-versatileds] 自动回复失败:', err?.message ?? err)
         if (err?.stack) plog('warn', String(err.stack).split('\n').slice(0, 6).join('\n'))
       }
