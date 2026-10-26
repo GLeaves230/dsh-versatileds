@@ -381,9 +381,6 @@ export const Config = Schema.object({
     .description('QQ 官方 AI 语音的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
   voiceChance: Schema.number().default(5).volatile()
     .description('闲聊时主动用语音回复的概率（0-100），0 表示只在被要求时才发语音；长回复不转语音'),
-  /** 群里哪些成员是 AI（昵称或 QQ 号，逗号分隔）：跟它们说话只打字，不发语音。 */
-  aiGroupMembers: Schema.string().default('').volatile()
-    .description('AI 群友名单（昵称/QQ 号，逗号分隔），对这些对象不发语音'),
   gsvApiUrl: Schema.string().default('http://127.0.0.1:9880').volatile()
     .description('GPT-SoVITS API 地址（api_v2.py，默认 9880 端口）'),
   gsvDir: Schema.string().default('').volatile()
@@ -8497,12 +8494,11 @@ export function apply(ctx, config) {
           const plainVoiceText = stripBrackets(reply)
           const voiceChance = Math.max(0, Math.min(100, Number(config.voiceChance.get() ?? 0)))
           // 对方是 AI 群友就只打字：不是所有 AI 都能听语音，别拿语音去烦人家
-          // 手动名单（可选）+ 自动识别：第 7810 行 observeSpeaker 每来一条群消息就打分，
-          // 强证据（自称 AI / 系统提示词泄漏）或累计分够高就 confirmed
-          const aiNames = new Set(String(config.aiGroupMembers.get() || '')
-            .split(/[，,]/).map((s) => s.trim()).filter(Boolean))
+          // 对方是 AI 就不发语音：
+          //   1) 群聊页「隔壁家的 AI QQ 号」名单（neighborBots）里登记的邻居
+          //   2) observeSpeaker 自动识别出来的疑似 AI（强证据或累计分够高）
           const aiRec = aiSuspects.get(String(sender || ''))
-          const replyIsAI = aiNames.has(String(senderName || '')) || aiNames.has(String(sender || ''))
+          const replyIsAI = Boolean(neighborLabelOf(sender, config, self))
             || Boolean(aiRec && aiRec.confirmed)
           const casualVoice = !replyIsAI && !wantVoice && config.voiceEnabled.get() === true && isGroup
             && plainVoiceText && plainVoiceText.length <= 60
