@@ -333,7 +333,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
   - **文档**：README / package.json 补「仅供学习、个人使用、商用需完整授权、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
 
-- **0.3.7（2026-10-26）**：
+- **0.3.8（2026-10-26）**：
   - **改名**：包名 / 插件名 / 日志前缀统一为 `dsh-versatileds`（原 `dsh-versatileds-plugin`）；`cordis.patch.yml` 的 `name`、profile 依赖键、bundles 四处同步改，缺一处配置就失效。
   - **下载策略更新**：NapCat **不再随包**（打包 117MB → 0.35MB），首次启动自动下载——官方 GitHub → `gh-proxy.com` 镜像 → 手动提示并自动关 QQ 模块；ffmpeg 同理——清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示并自动关 B站 模块。npm 包和 GitHub Release 的 zip 都**不再含 vendor**。
   - **下载全异步**：拉包/解压不再阻塞 DSH，日志带 `[HH:MM:SS]`。
