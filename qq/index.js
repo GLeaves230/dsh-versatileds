@@ -3132,6 +3132,38 @@ const FOCUS_MS = 5 * 60_000
 const quietState = new Map()
 
 /**
+ * 反思期落盘：热重载/重启会让模块级 quietState 清空，倒计时不该跟着没了
+ * （2026-10-26 主人发现：热重载后它又在反思期里接话）。
+ */
+function quietFilePath() {
+  return join(versatiledsBase(), 'qq', 'quiet.json')
+}
+
+function loadQuietState() {
+  try {
+    const raw = JSON.parse(readFileSync(quietFilePath(), 'utf8'))
+    const now = Date.now()
+    for (const [k, v] of Object.entries(raw || {})) {
+      if (Number(v) > now) quietState.set(String(k), Number(v))
+    }
+  } catch { /* 没有文件就空着 */ }
+}
+
+function saveQuietState() {
+  try {
+    mkdirSync(join(versatiledsBase(), 'qq'), { recursive: true })
+    const now = Date.now()
+    const obj = {}
+    for (const [k, v] of quietState) {
+      if (Number(v) > now) obj[k] = Number(v)
+    }
+    writeFileSync(quietFilePath(), JSON.stringify(obj), 'utf8')
+  } catch { /* 落盘失败不影响内存判断 */ }
+}
+
+loadQuietState()
+
+/**
  * 防复读：同一个人 30 秒内连发同一句（三条「闭嘴」那种）只处理一次；
  * 同一个群 60 秒内不重复发同一句话。
  */
@@ -4993,8 +5025,9 @@ export function apply(ctx, config) {
   }, 0)
   // 启动完成后（8 秒）异步查一下有没有新版本，别拖慢启动
   setTimeout(() => { checkUpdate(config).catch(() => {}) }, 8000)
-  // 重载会复用模块实例：上一轮的反思静默期要清掉，不然改完配置还在「反思中」
-  quietState.clear()
+  // 重载后保留反思静默期：quiet.json 里落盘，热重载/重启都不该把「被嫌吵」后的安静弄丢
+  // （2026-10-26 主人发现：热重载后它又在反思期里接话。以前这里 clear() 就是原因）
+  loadQuietState()
   // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
   shutdownLock.on = false
   shutdownLock.at = 0
@@ -7805,7 +7838,9 @@ export function apply(ctx, config) {
         // 反思期：被动回复按「@ 或点名」豁免（豁免不收紧）；
         // 主动输出（分享、表情包、拍一拍、主动搭话）由各自的出口用 inQuiet() 挡。
         const quietNow = inQuiet(data.group_id)
-        if (quietNow && !atMe && !calledByName) return
+        // 反思期只认「被 @」和「主人本人说话」：名字里带「肥鱼」的还有隔壁家，宽正则会把
+        // 别人聊另一条鱼当成在叫它（2026-10-26 主人：反思时是人要求它不说话，别自己找补）
+        if (quietNow && !atMe && !(Boolean(owner) && String(sender) === String(owner))) return
         // 被 @ 或点名之后也盯住这个窗口 5 分钟（跟搓一搓一样）：
         // 主人问「@ 他之后聚焦聊天有没有在跑」——之前只有搓一搓和分享会设 focus，@ 完只回那一条。
         if (atMe || calledByName) {
@@ -7832,6 +7867,7 @@ export function apply(ctx, config) {
       const sec = Number(config.quietAfterComplaintSec.get() ?? 180)
       if (sec > 0) {
         quietState.set(String(data.group_id), Date.now() + sec * 1000)
+        saveQuietState()
         appendNote({
           kind: 'quiet',
           role: 'DS',
@@ -8470,24 +8506,25 @@ export function apply(ctx, config) {
                 group_id: Number(data.group_id),
                 message: [{ type: 'image', data: { file: 'base64://' + buf.toString('base64') } }],
               })
-            }
-            markStickerSent(file)
-            stState[data.group_id] = Date.now()
-            saveJsonFile(stickerStatePath(), stState)
+              // 真发出去了才记日志；反思期被挡掉的不记，别让人以为它又冒头了（2026-10-26）
+              markStickerSent(file)
+              stState[data.group_id] = Date.now()
+              saveJsonFile(stickerStatePath(), stState)
               rememberSent({ kind: 'sticker-send', groupId: isGroup ? String(data.group_id) : '', peer: isGroup ? '' : String(sender), imageName: basename(file) })
-            logChat({
-              kind: 'sticker-send',
-              role: String(config.selfLabel.get() || 'DS'),
-              from: self,
-              groupId: String(data.group_id),
-              text: `[表情包] ${basename(file)}`,
-            }, config)
-            appendNote({
-              kind: 'sticker-send',
-              role: 'DS',
-              to: String(data.group_id),
-              reply: '没找到话茬，发了张表情包',
-            })
+              logChat({
+                kind: 'sticker-send',
+                role: String(config.selfLabel.get() || 'DS'),
+                from: self,
+                groupId: String(data.group_id),
+                text: `[表情包] ${basename(file)}`,
+              }, config)
+              appendNote({
+                kind: 'sticker-send',
+                role: 'DS',
+                to: String(data.group_id),
+                reply: '没找到话茬，发了张表情包',
+              })
+            }
           } catch (err) {
             plog('warn', '[dsh-versatileds] 没话茬发表情包失败:', err?.message ?? err)
           }
