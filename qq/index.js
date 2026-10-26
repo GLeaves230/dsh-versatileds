@@ -1962,21 +1962,30 @@ async function forwardToText(seg, ob, depth = 0, seen = null) {
     } catch { /* 拉不到就空着 */ }
   }
   if (!Array.isArray(nodes) || !nodes.length) return '[合并转发的聊天记录（没拉到内容）]'
-  const lines = (await Promise.all(nodes.slice(0, 20).map(async (n) => {
-    const who = String(n.sender?.nickname || n.sender?.card || n.nickname || n.uin || '某人')
-    const segs = n.message || n.content || []
-    let body = plainText(segs)
-    if (!body && Array.isArray(segs)) {
-      // 嵌套转发（聊天记录里又转发聊天记录）：套到底，用 seen 防重复
-      const inner = segs.find((s) => s && s.type === 'forward')
-      if (inner) {
-        body = await forwardToText(inner, ob, depth + 1, seen)
-      } else if (segs.some((s) => s && s.type === 'image')) {
-        body = '[图片]'
+  // 逐条串行解析，单条失败只影响它自己——以前用 Promise.all，一个嵌套节点拉失败
+  // 整段就 reject、调用方 catch 掉，结果整份转发变空（2026-10-26 引用聊天记录看不到内容）
+  const lines = []
+  for (const n of nodes.slice(0, 20)) {
+    let line = ''
+    try {
+      const who = String(n.sender?.nickname || n.sender?.card || n.nickname || n.uin || '某人')
+      const segs = n.message || n.content || []
+      let body = plainText(segs)
+      if (!body && Array.isArray(segs)) {
+        // 嵌套转发（聊天记录里又转发聊天记录）：套到底，用 seen 防重复
+        const inner = segs.find((s) => s && s.type === 'forward')
+        if (inner) {
+          body = await forwardToText(inner, ob, depth + 1, seen)
+        } else if (segs.some((s) => s && s.type === 'image')) {
+          body = '[图片]'
+        }
       }
+      line = `${who}：${body || '[空]'}`
+    } catch {
+      line = '[这条没解析出来]'
     }
-    return `${who}：${body || '[空]'}`
-  }))).join('\n')
+    lines.push(line)
+  }
   const more = nodes.length > 20 ? `\n…（还有 ${nodes.length - 20} 条）` : ''
   return `[合并转发]\n${lines.join('\n')}${more}`
 }
