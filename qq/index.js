@@ -1305,6 +1305,29 @@ function ensureOneBotConfig(config) {
  * 从 NapCat 官方 GitHub 下最新的 Windows Node 包，存到 vendor/napcat.zip。
  * npm 包不带这个 118MB 的大文件（超 npm 的 100MB 限制），所以第一次用时现拉。
  */
+/** 异步跑 PowerShell：spawnSync 会卡住事件循环，118MB 下载期间整个 DSH 都没反应。 */
+function runPsAsync(command, timeoutMs) {
+  return new Promise((resolve) => {
+    let child
+    try {
+      child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true })
+    } catch (err) {
+      resolve({ status: -2, stdout: '', stderr: String(err?.message ?? err) })
+      return
+    }
+    let out = ''
+    let err = ''
+    const timer = setTimeout(() => {
+      try { child.kill() } catch { /* ignore */ }
+      resolve({ status: -1, stdout: out, stderr: err + ' timeout' })
+    }, timeoutMs)
+    child.stdout?.on('data', (d) => { out += d })
+    child.stderr?.on('data', (d) => { err += d })
+    child.on('close', (code) => { clearTimeout(timer); resolve({ status: code, stdout: out, stderr: err }) })
+    child.on('error', (e) => { clearTimeout(timer); resolve({ status: -2, stdout: out, stderr: String(e?.message ?? e) }) })
+  })
+}
+
 async function downloadNapcatPackage() {
   const q = (s) => String(s).replace(/'/g, "''")
   // DSH 里的 fetch 拉外网会 "fetch failed"（同一个 node 在交互式 shell 又能连），下载交给 PowerShell。
@@ -1339,9 +1362,7 @@ async function downloadNapcatPackage() {
     const psDl = `$ProgressPreference = 'SilentlyContinue'; ` +
       `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
       `Invoke-WebRequest -Uri '${q(url)}' -OutFile '${q(NAPCAT_VENDOR_ZIP)}' -Headers @{ 'User-Agent' = 'dsh-versatileds-plugin' } -TimeoutSec ${psTimeout}`
-    const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psDl], {
-      encoding: 'utf8', timeout: (psTimeout + 15) * 1000, windowsHide: true,
-    })
+    const r = await runPsAsync(psDl, (psTimeout + 15) * 1000)
     let size = 0
     try { size = statSync(NAPCAT_VENDOR_ZIP).size } catch { size = 0 }
     if (r.status === 0 && size > 5 * 1024 * 1024) {
@@ -1395,10 +1416,11 @@ async function ensureNapcatPackage(config) {
     mkdirSync(dir, { recursive: true })
     console.info('[dsh-versatileds-plugin] 首次初始化：解压 NapCat 到', dir)
     const q = (s) => String(s).replace(/'/g, "''")
-    const r = spawnSync('powershell', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+    // 解压 118MB 也要一两分钟，同样别用 spawnSync 卡住事件循环
+    const r = await runPsAsync(
       `Expand-Archive -LiteralPath '${q(NAPCAT_VENDOR_ZIP)}' -DestinationPath '${q(dir)}' -Force`,
-    ], { stdio: 'ignore', timeout: 600000 })
+      600000,
+    )
     napcatPkg.ready = napcatInstalled(dir)
     if (napcatPkg.ready) ensureOneBotConfig(config)
     if (!napcatPkg.ready) napcatPkg.error = `解压后关键文件仍不完整（exit ${r.status}）`
