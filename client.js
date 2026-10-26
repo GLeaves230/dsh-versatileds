@@ -1135,6 +1135,7 @@ window.__ModuleLoader__.load({
       webSearch: '联网搜索',
       ruleSync: '群规同步',
       balance: '余额检查',
+      updateCheck: '更新自检',
       replyGap: '回复间隔',
       quiet: '反思中',
       poke: '搓一搓',

@@ -1412,7 +1412,10 @@ async function checkUpdate(config) {
         25000,
       )
       const tag = String(r?.stdout || '').trim().split(/\s+/).pop() || ''
-      if (!tag) continue
+      if (!tag) {
+        plog('info', `[dsh-versatileds] 源 ${s.name} 无返回：status=${r?.status} stderr=${String(r?.stderr || '').slice(0, 160)}`)
+        continue
+      }
       if (tagNewer(tag, CURRENT_TAG)) {
         plog('info', `[dsh-versatileds] 发现新版本 ${tag}（当前 ${CURRENT_TAG}），去 https://github.com/GLeaves230/dsh-versatileds/releases 看看`)
       } else {
@@ -3542,6 +3545,9 @@ function startStatusServer(config, napcat = null) {
       } else if (action === 'poke') {
         pokeClock.lastAt = 0
         pokeClock.byUser.clear()
+      } else if (action === 'updateCheck') {
+        // 跳过 = 清掉上次自检时间，下次启动马上重查
+        saveJsonFile(join(versatiledsBase(), 'qq', 'update-check.json'), { lastAt: 0 })
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true }))
