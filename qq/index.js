@@ -1426,9 +1426,7 @@ async function downloadNapcatPackage() {
     `if (-not $a) { $a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.zip' } | Select-Object -First 1 }; ` +
     `if (-not $a) { Write-Error 'no asset'; exit 2 }; ` +
     `Write-Output ($r.tag_name + '|' + $a.name + '|' + $a.browser_download_url)`
-  const meta = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psApi], {
-    encoding: 'utf8', timeout: 60000, windowsHide: true,
-  })
+  const meta = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psApi], 60000)
   if (meta.status !== 0) throw new Error(`查 NapCat 最新版本失败（PowerShell）：${String(meta.stderr || '').trim().slice(0, 200)}`)
   const line = String(meta.stdout || '').trim().split('\n').pop().trim()
   const [tag, assetName, officialUrl] = line.split('|')
@@ -1457,12 +1455,10 @@ async function downloadNapcatPackage() {
       let ok = false
       try {
         const q2 = (s) => String(s).replace(/'/g, "''")
-        const chk = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+        const chk = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
           `$ProgressPreference = 'SilentlyContinue'; ` +
           `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
-          `try { $z = [System.IO.Compression.ZipFile]::OpenRead('${q2(NAPCAT_VENDOR_ZIP)}'); $n = $z.Entries.Count; $z.Dispose(); if ($n -gt 100) { exit 0 } else { exit 3 } } catch { exit 4 }`], {
-          timeout: 60000, windowsHide: true,
-        })
+          `try { $z = [System.IO.Compression.ZipFile]::OpenRead('${q2(NAPCAT_VENDOR_ZIP)}'); $n = $z.Entries.Count; $z.Dispose(); if ($n -gt 100) { exit 0 } else { exit 3 } } catch { exit 4 }`], 60000)
         ok = chk.status === 0
       } catch { ok = false }
       if (ok) {
@@ -6355,7 +6351,7 @@ export function apply(ctx, config) {
   const NAPCAT_TASK = 'NapCatLauncher'
 
   /** 优先走「最高权限」计划任务，绕过 UAC；没建任务就退回直接启动。 */
-  function startNapCat(launcher) {
+  async function startNapCat(launcher) {
     const quick = String(config.napcatQuickLogin.get() || '').trim()
     const noise = (m) => {
       try {
@@ -6380,8 +6376,7 @@ export function apply(ctx, config) {
         const vbs = writeHiddenLauncher(napcatDir, launcher, quick, pidFile)
         const q = (s) => String(s).replace(/'/g, "''")
         const ps = `Start-Process -FilePath 'wscript.exe' -ArgumentList '${q(vbs)}' -Verb RunAs`
-        const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-          { stdio: 'ignore', timeout: 30000 })
+        const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
         noise(`vbs status=${r.status} error=${r.error?.message ?? ''} vbs=${vbs}`)
         if (r.status === 0) {
           // VBS 等 QQ 起来后会把它自己的 PID 写进 launcher.pid；这里轮询着读
@@ -6415,8 +6410,7 @@ export function apply(ctx, config) {
       const q = (s) => String(s).replace(/'/g, "''")
       const argList = quick ? ` -ArgumentList '${q(quick)}'` : ''
       const ps = `Start-Process -FilePath '${q(launcher)}'${argList} -Verb RunAs`
-      const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-        { stdio: 'ignore', timeout: 30000 })
+      const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
       noise(`ps-admin status=${r.status} error=${r.error?.message ?? ''}`)
       if (r.status === 0) return 'ps-admin'
     } catch (err) { noise(`ps-admin err=${err?.message ?? err}`) }
@@ -6441,8 +6435,7 @@ export function apply(ctx, config) {
           `$env:NAPCAT_INJECT_PATH='${q(hook)}'`,
           `Start-Process -FilePath '${q(boot)}' -ArgumentList ${list.join(',')} -WorkingDirectory '${q(napcatDir)}' -Verb RunAs`,
         ].join('; ')
-        const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
-          { stdio: 'ignore', timeout: 30000 })
+        const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
         noise(`boot ps status=${r.status} error=${r.error?.message ?? ''} stderr=${String(r.stderr || '').slice(0, 200)}`)
         if (r.status === 0) return 'boot-admin'
       }
@@ -6451,7 +6444,7 @@ export function apply(ctx, config) {
       // launcher.bat 后面的参数会传给 NapCat：传 QQ 号就是快速登录，不传就扫码
       const args = ['/c', 'start', '', launcher]
       if (quick) args.push(quick)
-      const r = spawnSync('cmd', args, { stdio: 'ignore', timeout: 20000 })
+      const r = await runAsync('cmd', args, 20000)
       noise(`cmd-start status=${r.status} error=${r.error?.message ?? ''}`)
     } catch (err) { noise(`cmd-start err=${err?.message ?? err}`) }
     return quick ? 'direct-quick' : 'direct'
@@ -6520,7 +6513,7 @@ export function apply(ctx, config) {
         appendFileSync(join(versatiledsBase(), 'qq', 'napcat_start.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ensure launcher=${launcher} reason=${reason}\n`, 'utf8')
       } catch { /* ignore */ }
-      startNapCat(launcher)
+      await startNapCat(launcher)
       const gotQr = await waitForQr(qrPath, since)
       if (!gotQr) return false
       const choice = openPage ? await openQrPage() : 'done'
