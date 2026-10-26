@@ -3305,8 +3305,6 @@ function looksLikeSeriousTopic(text) {
 const repeatGuard = { inKey: '', inAt: 0, outKey: '', outAt: 0 }
 /** 超短应声（彳亍/行/嗯…）的限流：同群 2 分钟最多一次（2026-10-26 小鲸鱼连发图它一直「彳亍」）。 */
 const ackClock = new Map()
-/** 跟隔壁 AI 对刷屏的限流：同一个邻居 10 分钟最多接 3 条（2026-10-26 它跟小鲸鱼你来我往 15+ 条）。 */
-const neighborReplyClock = new Map()
 
 /** 这个群是不是在反思静默期（发言总闸）。 */
 function inQuiet(groupId) {
@@ -8071,17 +8069,6 @@ export function apply(ctx, config) {
         }
       }
       if (neighborLabelOf(data.sender, config, self) && looksLikeAgentError(plainText(data.message))) return
-      // 跟隔壁 AI 对刷屏：同一个邻居 10 分钟内最多接 3 条，超了就不接（被 @ 除外）
-      // （2026-10-26 22:05：跟小鲸鱼「意念端杯」你来我往 15+ 条，群友视角就是两条 AI 在刷屏）
-      if (!atMe && neighborLabelOf(data.sender, config, self)) {
-        const nk = `g:${data.group_id}:${data.sender?.user_id || ''}`
-        const now = Date.now()
-        const rec = neighborReplyClock.get(nk) || { at: 0, count: 0 }
-        if (now - rec.at > 10 * 60_000) { rec.at = now; rec.count = 0 }
-        if (rec.count >= 3) return
-        rec.count += 1
-        neighborReplyClock.set(nk, rec)
-      }
       if (!atMe && neighborLabelOf(data.sender, config, self) && Date.now() > neighborChatUntil) {
         const neighborQqs = String(config.neighborBots.get?.() || '').split(/[,，\s]+/).filter(Boolean)
         const atThem = (data.message || []).some(
