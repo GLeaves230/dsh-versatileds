@@ -1307,7 +1307,6 @@ window.__ModuleLoader__.load({
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
       ['stickerChance', '群里发表情包概率（0-100）', '回完话后附一张的概率'],
       ['voiceChance', '主动发语音概率（0-100）', '闲聊时把这条文字换成语音的概率；0＝只在被要求时发，长回复仍走文字'],
-      ['aiGroupMembers', 'AI 群友名单', '昵称或 QQ 号，逗号分隔；对这些对象只打字不发语音'],
       ['stickerSendMinGapSec', '同群两次表情包最短间隔（秒）', ''],
       ['stickerMax', '表情包库最多保留张数', '超了删最旧的'],
       ['stickerResizeMaxPx', '发表情包缩到几像素', '默认 240，接近 QQ 表情尺寸；0 不缩'],
@@ -1325,6 +1324,7 @@ window.__ModuleLoader__.load({
       ['proactiveGroups', '主动接话的群号列表', '留空不在群里说话'],
       ['ruleGroups', '要记群规的群号', '留空表示所有群'],
       ['neighborBots', '隔壁家的 AI QQ 号', '这些号显示成「隔壁家的<名字>」，不跟它的人设'],
+      ['aiGroupMembers', 'AI 群友名单', '这些成员只打字不发语音；昵称或 QQ 号都可以'],
       ['neighborNameKeywords', '按名字认隔壁家（可选）', '留空就别按名字猜，昵称带「肥鱼」的真人不少'],
       ['sharedMemoryGroups', '读共享记忆的群号', '* 全部，none 都不读'],
     ]
