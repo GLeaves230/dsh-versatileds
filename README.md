@@ -341,3 +341,18 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - **ffmpeg 解压根因**：wheel 临时文件必须存成 `.zip`（`Expand-Archive` 不认 `.whl`），之前一直卡在「写完还是找不到探针」。
   - **npm**：包绑定 GitHub 仓库（repository / homepage / bugs / keywords），首版发布用 Granular token（Bypass 2FA）。
 
+## 许可
+
+**受限再分发许可**：
+
+- ✅ 个人使用、运行、学习、自用修改
+- ✅ 原样再分发（须附带完整许可证文本、注明来源与版权）
+- ⚠️ 商用必须获得**所有版权方**的商用授权；未获授权不得出售、付费托管、盈利性集成、随商业产品捆绑
+- ❌ 未经作者许可，不得修改后再公开分发
+- NapCat / ffmpeg 各自遵循其原许可证，不适用本许可（两者都已改成按需下载，不再随包；memorix 已停用）
+
+> **注意**：商用版权需要自行取得以下各方的授权——**本插件作者（黑木钟 - GLeaves）、NapCat 作者（NapNeko / Mlikiowa）、FFmpeg 项目、GPT-SoVITS 作者（RVC-Boss）、语音 / 声优版权方（如可莉 CV 花玲、派蒙 CV 多多poi 及相关作品公司）、参考音频来源作者（B站 UP 主）**；获得插件作者的**源码修改再公开**授权后，也不得用于非法盈利 / 侵害利益 / 版权侵权等非法途径，请自行解决律师相关问题。
+>
+> **即便获得完整商用授权，也请尽量奉行 DSH 的即插即用、开放公开的插件精神。**
+
+完整条款见 [`LICENSE-GLeaves.txt`](./LICENSE-GLeaves.txt)。
