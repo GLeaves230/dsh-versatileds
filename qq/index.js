@@ -2593,10 +2593,11 @@ async function gsvSynthesize(text, config) {
     media_type: 'wav',
     streaming_mode: 'false',
     speed_factor: String(config?.gsvSpeed?.get?.() ?? 1),
-    // 采样参数压稳一点：temperature 低、top_k 小，音色波动小
-    temperature: String(config?.gsvTemperature?.get?.() ?? 0.5),
-    top_k: '5',
-    top_p: '0.9',
+    // 采样参数：**temperature 必须留 1.0**——压到 0.5 时模型会陷入重复，
+    // 一句 20 字能生成 25-33 秒（听着就是「没声音/拖着不说话」，2026-10-26 踩过）
+    temperature: String(config?.gsvTemperature?.get?.() ?? 1),
+    top_k: '15',
+    top_p: '1',
   })
   const res = await fetch(`${base}/tts?${q}`, { signal: AbortSignal.timeout(90_000) })
   if (!res.ok) {
