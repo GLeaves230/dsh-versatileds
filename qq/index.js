@@ -379,7 +379,7 @@ export const Config = Schema.object({
     .description('GPT-SoVITS 版本：v4＝音色更稳但慢（20-40 秒/句）；v2＝快（6-17 秒/句）。切换会自动重启 API'),
   gsvPitch: Schema.number().default(0).volatile()
     .description('音调（半音）：正数更幼更「夹」，负数更成熟；默认 0 保持原声'),
-  gsvSplit: Schema.string().default('cut0').volatile()
+  gsvSplit: Schema.string().default('cut5').volatile()
     .description('文本切分：cut0＝整句一次生成（音色最稳）；cut5＝按标点切段（长句更自然，但音色会飘）'),
   gsvTemperature: Schema.number().default(0.5).volatile()
     .description('采样温度：越低音色越稳，越高越有变化；默认 0.5'),
@@ -2681,7 +2681,7 @@ async function gsvSynthesize(text, config) {
     prompt_text: refText,
     prompt_lang: String(config?.gsvRefLang?.get?.() || 'zh'),
     // cut0＝不切分，整句一次生成：切段的话每段独立采样，音色会飘（2026-10-26 主人：声音不错但不稳）
-    text_split_method: String(config?.gsvSplit?.get?.() || 'cut0'),
+    text_split_method: String(config?.gsvSplit?.get?.() || 'cut5'),
     batch_size: '1',
     media_type: 'wav',
     streaming_mode: 'false',
@@ -3407,9 +3407,22 @@ function startStatusServer(config, napcat = null) {
     }
     if (url.pathname === '/login' || url.pathname === '/napcat') {
       // 「登录」子页面用：登录态 + 二维码是否就绪；登录成功后顺手删掉二维码缓存
+      // 注意：NapCat 进程活着 ≠ QQ 在线。退出登录后进程还在，得再问一次 get_login_info 才算真登录。
       let loggedIn = false
       try {
-        loggedIn = napcatControl.alive ? await napcatControl.alive() : false
+        const procAlive = napcatControl.alive ? await napcatControl.alive() : false
+        if (procAlive) {
+          try {
+            const base = String(config.napcatHttp.get() || 'http://127.0.0.1:3000').replace(/\/$/, '')
+            const token = String(config.onebotToken.get() || '')
+            const r = await fetch(`${base}/get_login_info`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+              signal: AbortSignal.timeout(3000),
+            })
+            const j = await r.json()
+            loggedIn = j?.status === 'ok' && Number(j?.data?.user_id || 0) > 0
+          } catch { loggedIn = false }
+        }
       } catch { loggedIn = false }
       const qrFile = napcatQrPath(config)
       let hasQr = Boolean(qrFile) && existsSync(qrFile)
