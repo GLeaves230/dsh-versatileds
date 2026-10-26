@@ -3453,6 +3453,10 @@ function listLogFiles(config) {
     add('聊天记录', files.slice(0, 50))
   }
 
+  // 0 字节的日志（NapCat 偶尔会建空文件）列表里不显示，点开也是空的
+  for (const g of groups) {
+    g.files = g.files.filter((f) => Number(f.size) > 0)
+  }
   return { groups }
 }
 
@@ -3929,6 +3933,33 @@ button{margin:8px;padding:10px 30px;font-size:16px;border-radius:8px;border:0;cu
     if (url.pathname === '/logs') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify(listLogFiles(config)))
+      return
+    }
+    if (url.pathname === '/logs/clean') {
+      // 清理超过 N 天的日志（默认 7 天）；聊天记录不动，那是主人要留的证据
+      const days = Math.max(1, Math.min(365, Number(url.searchParams.get('days') || 7)))
+      const cutoff = Date.now() - days * 24 * 3600_000
+      let removed = 0
+      let freed = 0
+      const cleanDir = (dir, exts) => {
+        let names = []
+        try { names = readdirSync(dir) } catch { return }
+        for (const name of names) {
+          if (exts && !exts.some((e) => name.endsWith(e))) continue
+          const p = join(dir, name)
+          try {
+            const st = statSync(p)
+            if (!st.isFile() || st.mtimeMs >= cutoff) continue
+            freed += st.size
+            unlinkSync(p)
+            removed += 1
+          } catch { /* 单个失败不影响别的 */ }
+        }
+      }
+      cleanDir(join(versatiledsBase(), 'qq'), ['.log'])
+      cleanDir(join(versatiledsBase(), 'qq', 'napcat', 'napcat', 'logs'), ['.log'])
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, days, removed, freed }))
       return
     }
     if (url.pathname === '/logs/view') {

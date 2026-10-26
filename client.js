@@ -237,7 +237,7 @@ window.__ModuleLoader__.load({
     }
 
     function TextRow(props) {
-      const { form, field, label, hint, value, disabled } = props
+      const { form, field, label, hint, value, disabled, secret } = props
       const [draft, setDraft] = React.useState(String(value ?? ''))
       React.useEffect(() => { setDraft(String(value ?? '')) }, [value])
       const commit = () => {
@@ -249,7 +249,8 @@ window.__ModuleLoader__.load({
         { style: rowStyle },
         React.createElement('span', { style: labelStyle }, label),
         React.createElement('input', {
-          type: 'text',
+          type: secret ? 'password' : 'text',
+          autoComplete: secret ? 'new-password' : 'off',
           value: draft,
           disabled,
           onChange: (e) => setDraft(e.target.value),
@@ -802,6 +803,8 @@ window.__ModuleLoader__.load({
               key: field, form, field, label, hint,
               value: v[field] ?? '',
               disabled: !snap.writable,
+              // 敏感字段（token / cookie / key）用密码框，避免录屏截屏直接泄露
+              secret: /(token|cookie|key|password|secret)/i.test(field),
             }),
           )
         }
@@ -813,6 +816,8 @@ window.__ModuleLoader__.load({
               key: field, form, field, label, hint,
               value: v[field] ?? '',
               disabled: !snap.writable,
+              // 敏感字段（token / cookie / key）用密码框，避免录屏截屏直接泄露
+              secret: /(token|cookie|key|password|secret)/i.test(field),
             }),
           )
         }
@@ -824,6 +829,8 @@ window.__ModuleLoader__.load({
               key: field, form, field, label, hint,
               value: v[field] ?? '',
               disabled: !snap.writable,
+              // 敏感字段（token / cookie / key）用密码框，避免录屏截屏直接泄露
+              secret: /(token|cookie|key|password|secret)/i.test(field),
             }),
           )
         }
@@ -938,6 +945,34 @@ window.__ModuleLoader__.load({
               opacity: busy ? 0.6 : 1,
             },
           }, busy ? '刷新中…' : '刷新'),
+          React.createElement('button', {
+            type: 'button',
+            onClick: async () => {
+              if (!window.confirm('清理 7 天前的日志？（聊天记录不会删）')) return
+              setBusy(true)
+              try {
+                const r = await fetch(`${QQ_STATUS_URL}/logs/clean?days=7`, { method: 'POST' })
+                const d = await r.json()
+                setView({ text: '', error: '', note: '' })
+                await loadList()
+                window.alert(`清理了 ${d.removed || 0} 个文件，释放 ${((d.freed || 0) / 1024 / 1024).toFixed(1)}MB`)
+              } catch {
+                window.alert('清理失败，看控制台')
+              } finally {
+                setBusy(false)
+              }
+            },
+            disabled: busy,
+            style: {
+              padding: '5px 14px',
+              borderRadius: '6px',
+              border: '1px solid rgba(128,128,128,0.3)',
+              background: 'transparent',
+              color: 'inherit',
+              cursor: busy ? 'default' : 'pointer',
+              opacity: busy ? 0.6 : 1,
+            },
+          }, '清理旧日志'),
           lastAt
             ? React.createElement('span', { style: { fontSize: '12px', opacity: 0.55 } },
                 `上次刷新 ${lastAt.toLocaleTimeString('zh-CN', { hour12: false })}`)
@@ -1754,6 +1789,8 @@ window.__ModuleLoader__.load({
               key: field, form, field, label, hint,
               value: v[field] ?? '',
               disabled: !snap.writable,
+              // 敏感字段（token / cookie / key）用密码框，避免录屏截屏直接泄露
+              secret: /(token|cookie|key|password|secret)/i.test(field),
             }),
           )
         }
@@ -1765,6 +1802,8 @@ window.__ModuleLoader__.load({
               key: field, form, field, label, hint,
               value: v[field] ?? '',
               disabled: !snap.writable,
+              // 敏感字段（token / cookie / key）用密码框，避免录屏截屏直接泄露
+              secret: /(token|cookie|key|password|secret)/i.test(field),
             }),
           )
           // 「聚焦聊天」下面挂一行实时状态：当前实际聚焦的是谁（手动 or 自动挑的），可一键填
