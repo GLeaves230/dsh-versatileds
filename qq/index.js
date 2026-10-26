@@ -4902,10 +4902,11 @@ class OneBotClient {
       }
       return { split: parts.length }
     }
-    // 防复读：同一个群 60 秒内同一句话只发一次（2026-10-25 三条「闭嘴」回了三遍同一句）
-    const outKey = `${groupId}:${atUid || ''}:${text}`
+    // 防复读：同一个群 3 分钟内同一句话只发一次
+    // （2026-10-25 三条「闭嘴」回了三遍；2026-10-26 小鲸鱼连发图，它回了三次「彳亍」）
+    const outKey = `${groupId}:${text}`
     const outNow = Date.now()
-    if (outKey === repeatGuard.outKey && outNow - repeatGuard.outAt < 60_000) {
+    if (outKey === repeatGuard.outKey && outNow - repeatGuard.outAt < 180_000) {
       return { message_id: 'dedupe-skipped', deduped: true }
     }
     repeatGuard.outKey = outKey
