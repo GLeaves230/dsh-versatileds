@@ -9188,6 +9188,9 @@ export function apply(ctx, config) {
             }
           }
           // 分段发：一句长话拆成两三条短消息，像人一段一段打
+          // 发之前再查一次反思：这条回复可能是「生成期间才进入反思」的（2026-10-26 竞态，
+          // 主人刚说完「反思」，它还是把对群友的回复发出去了）
+          if (inQuiet(`g:${data.group_id}`) && !ownerBreakQuiet) return
           const segments = config.groupSplitReply.get() !== false
             ? splitReply(reply, 4, Number(config.shortReplySplitChance.get() ?? 30))
             : [reply]
