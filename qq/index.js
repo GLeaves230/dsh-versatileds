@@ -3433,10 +3433,15 @@ function startStatusServer(config, napcat = null) {
           const text = prepareVoiceText(payload.text)
           if (!text) throw new Error('先写要念的文本')
           const backend = String(config.voiceBackend.get() || 'qq')
+          // parseIds 在 apply 作用域里，这个接口看不到；这里内联解析第一个群号
+          const firstGroupId = String(config.proactiveGroups.get() || '')
+            .split(/[,，\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean)[0]
           if (backend !== 'gpt-sovits') {
             // 官方语音只能发群；私聊那条 NapCat 发不出去
             if (target === 'private') throw new Error('私聊只能用 GPT-SoVITS；先把语音方案切成 GPT-SoVITS')
-            const gid = parseIds(config.proactiveGroups.get())[0]
+            const gid = firstGroupId
             if (!gid) throw new Error('没配群号（proactiveGroups），不知道发哪个群')
             await napcat?.call('send_group_ai_record', {
               character: String(config.voiceCharacter.get() || 'lucy-voice-female1'),
@@ -3456,7 +3461,7 @@ function startStatusServer(config, napcat = null) {
               message: [{ type: 'record', data: { file: `file:///${wav}` } }],
             })
           } else {
-            const gid = parseIds(config.proactiveGroups.get())[0]
+            const gid = firstGroupId
             if (!gid) throw new Error('没配群号（proactiveGroups），不知道发哪个群')
             await napcat?.call('send_group_msg', {
               group_id: Number(gid),
