@@ -1,5 +1,5 @@
-dsh-versatileds-plugin 许可协议（受限再分发许可）
-Limited Redistribution License for dsh-versatileds-plugin
+dsh-versatileds 许可协议（受限再分发许可）
+Limited Redistribution License for dsh-versatileds
 
 版权所有 (c) 2026 黑木钟 - GLeaves
 Copyright (c) 2026 黑木钟 - GLeaves
