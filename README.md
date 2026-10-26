@@ -79,7 +79,9 @@ QQ 模块的「登录」子页是我们自己的登录入口：状态检测、�
 | 登录控制（`qq/index.js` 的 `napcatControl`） | 检测登录态、拉起、等二维码就绪、登录成功后删二维码缓存 |
 | 后端 | 默认 NapCat；换后端只改控制层，页面和交互不用重写 |
 
-## 第三方组件声明：NapCat
+## 第三方组件声明
+
+### NapCat（QQ 协议端）
 
 QQ 模块依赖本机安装的 [NapCat](https://github.com/NapNeko/NapCatQQ)（基于 NTQQ 的协议侧框架）完成与 QQ 的连接。**本插件不包含 NapCat 的源码**，但**随包附带它的官方发布版压缩包** `vendor/napcat.zip`（首次启动时自动解压到 `<DSH_HOME>/versatileds/qq/napcat`）。需要源码请自行到[NapCat 官方 GitHub](https://github.com/NapNeko/NapCatQQ) 下载。插件只在运行时启动它、读取它生成的登录二维码，不改它任何代码。
 
@@ -99,6 +101,33 @@ QQ 模块依赖本机安装的 [NapCat](https://github.com/NapNeko/NapCatQQ)（�
 - 软件按原样提供，不附带任何担保
 
 QQ 模块的「NapCat」子页就是这套流程的入口：看状态、拉起 NapCat、扫码、登录后自动清理二维码。
+
+### FFmpeg（媒体处理）
+
+| 项 | 内容 |
+|---|---|
+| 项目 | https://ffmpeg.org/ |
+| 许可证 | LGPL 2.1+ / GPL（看具体构建；本项目下载的是 gyan.dev「essentials」构建，含 GPL 组件） |
+| 用法 | 首次启动从清华 PyPI 镜像下载 `imageio-ffmpeg` wheel（内含 ffmpeg 二进制），解压到 `<DSH_HOME>/versatileds/ffmpeg`；只用来抓直播帧、缩表情包、语音前后处理（剪静音 / 变调） |
+| 备注 | ffmpeg 是独立可执行程序，插件只通过命令行调用它，不改其源码 |
+
+### GPT-SoVITS（本地语音，可选）
+
+| 项 | 内容 |
+|---|---|
+| 项目 | https://github.com/RVC-Boss/GPT-SoVITS |
+| 作者 | RVC-Boss 及社区贡献者 |
+| 许可证 | MIT License |
+| 用法 | 用户按需部署（设置页「语音」的「一键部署」会下载代码和模型）；插件通过 `api_v2.py` 的 HTTP 接口调用，不改其源码 |
+| 模型 | 预训练权重来自 HuggingFace `lj1995/GPT-SoVITS`（hf-mirror 镜像下载） |
+| 参考音频 | 版权见 `<DSH_HOME>/versatileds/models/gpt-sovits/ref/README.md`（来源、CV、免责） |
+
+### 其他外部服务
+
+| 项 | 说明 |
+|---|---|
+| DeepSeek API | QQ 自动回复的模型推理走 DeepSeek，需自己的 key；按 DeepSeek 的服务条款使用 |
+| B站 公开接口 | B站 模块用公开接口读视频 / 直播信息，写操作（点赞/投币/评论）走你自己账号的 cookie |
 
 ## 安装
 
