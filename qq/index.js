@@ -3465,7 +3465,8 @@ function resolveLogPath(config, id) {
     file = join(base, id)
     if (!file.startsWith(base)) return ''
   } else if (id.startsWith('napcat/')) {
-    file = join(napcatBase, id.slice('napcat/'.length))
+    // NapCat 装在 <napcatRoot>/napcat/ 下，logs 也在那一层
+    file = join(napcatBase, 'napcat', id.slice('napcat/'.length))
     if (!file.startsWith(napcatBase)) return ''
   } else {
     return ''
