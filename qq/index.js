@@ -7475,6 +7475,8 @@ export function apply(ctx, config) {
     }
     const text = await generateProactive(history)
     if (!text) return false
+    // 私聊反思期（p:key）不主动搭话，别的会话各管各的（2026-10-26 主人要求）
+    if (inQuiet(`p:${target}`)) return false
     try {
       await ob.sendPrivate(target, text)
     } catch (err) {
@@ -7825,8 +7827,12 @@ export function apply(ctx, config) {
 
   /** 搓一搓：别人搓我，我搓回去。 */
   async function handleNotice(data) {
-    // 反思期是发言总闸：连拍回去都停
-    if (data.group_id && inQuiet(data.group_id)) return
+    // 反思期是发言总闸：连拍回去都停（群用 g:key、私聊用 p:key，各管各的）
+    if (data.group_id) {
+      if (inQuiet(data.group_id)) return
+    } else if (inQuiet(`p:${String(data.user_id ?? '')}`)) {
+      return
+    }
     const noticeType = String(data.notice_type || '')
     const subType = String(data.sub_type || '')
     const poke = noticeType === 'notify' && subType === 'poke'
