@@ -112,7 +112,8 @@ async function downloadDep(dep) {
       if (dep.wheel) {
         // wheel 就是个 zip：解到 target，ffmpeg 会落在 imageio_ffmpeg/binaries/ 下
         mkdirSync(dep.target, { recursive: true })
-        const tmpZip = join(dep.target, '_download.whl')
+        // Expand-Archive 只认 .zip 后缀，wheel 内容其实就是 zip，存成 .zip 才能解
+        const tmpZip = join(dep.target, '_download.zip')
         writeFileSync(tmpZip, buf)
         const q = (s) => String(s).replace(/'/g, "''")
         spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
@@ -128,12 +129,15 @@ async function downloadDep(dep) {
         const tmpDir = join(dep.target, '_dep_unzip')
         writeFileSync(tmpZip, buf)
         const q = (s) => String(s).replace(/'/g, "''")
-        spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+        const uz = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
           `Expand-Archive -LiteralPath '${q(tmpZip)}' -DestinationPath '${q(tmpDir)}' -Force; ` +
           `$exe = Get-ChildItem -LiteralPath '${q(tmpDir)}' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1; ` +
           `if ($exe) { New-Item -ItemType Directory -Force -Path '${q(binDir)}' | Out-Null; ` +
-          `Copy-Item $exe.FullName '${q(join(binDir, 'ffmpeg-win-x86_64-v7.1.exe'))}' -Force }`,
-        ], { stdio: 'ignore', timeout: 300_000 })
+          `Copy-Item $exe.FullName '${q(join(binDir, 'ffmpeg-win-x86_64-v7.1.exe'))}' -Force } else { Write-Error 'ffmpeg.exe not found' }`,
+        ], { encoding: 'utf8', timeout: 1_200_000 })
+        if (!existsSync(dep.probe)) {
+          plog('warn', `[dsh-versatileds-plugin] ${dep.name} zip 解压后没找到 ${dep.probe}（exit ${uz.status}）${String(uz.stderr || '').trim().slice(0, 200)}`)
+        }
         try { unlinkSync(tmpZip) } catch { /* ignore */ }
         if (!existsSync(dep.probe)) {
           plog('warn', `[dsh-versatileds-plugin] ${dep.name} wheel 解压后没找到 ${dep.probe}`)
@@ -195,7 +199,14 @@ export function apply(ctx, config) {
         plog('info', `[dsh-versatileds-plugin] ${dep.name} 下载不可用（${got.why}），退回自带包`)
         const r = extractDep(dep)
         if (r.ok) plog('info', `[dsh-versatileds-plugin] 依赖已解压：${dep.name}`)
-        else plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
+        else {
+          plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化失败：${r.why}（${dep.hint}）`)
+          // ffmpeg 起不来，B站 的抓帧/缩图全废，直接把 B站 模块关掉，别让它半残地跑
+          if (dep.name === 'ffmpeg') {
+            try { config.bili.enabled.set(false) } catch { /* 老框架没有 set 就算了 */ }
+            plog('warn', '[dsh-versatileds-plugin] ffmpeg 不可用，B站 模块已自动关闭（放好 ffmpeg 后重新启用即可）')
+          }
+        }
       } catch (err) {
         plog('warn', `[dsh-versatileds-plugin] 依赖 ${dep.name} 初始化异常：${err?.message ?? err}`)
       }
