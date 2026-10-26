@@ -7686,8 +7686,13 @@ export function apply(ctx, config) {
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
           const wantVoice = config.voiceEnabled.get() === true && reply.includes('[语音]')
-          // 念出来的东西不能带 QQ 表情（[白眼][偷笑][表情 #32] 这些念出来就是「白眼」两个字）
-          const stripBrackets = (s) => String(s || '').replace(/\[[^\]]{1,10}\]/g, '').replace(/\s{2,}/g, ' ').trim()
+          // 念出来的东西不能带 QQ 表情（[白眼][偷笑][表情 #32] 这些念出来就是「白眼」两个字）；
+          // 拆字梗也得还原——「彳亍」念出来是 chì chù，得念「行」（2026-10-26 主人要求）
+          const stripBrackets = (s) => String(s || '')
+            .replace(/\[[^\]]{1,10}\]/g, '')
+            .replace(/彳亍/g, '行')
+            .replace(/\s{2,}/g, ' ')
+            .trim()
           // 偶尔主动用声音说：像人聊着聊着突然来一句语音；长回复还是文字（念长文很怪）
           const plainVoiceText = stripBrackets(reply)
           const voiceChance = Math.max(0, Math.min(100, Number(config.voiceChance.get() ?? 0)))
