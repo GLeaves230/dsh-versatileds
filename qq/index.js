@@ -2503,8 +2503,9 @@ function transcribeVoice(wavPath) {
 }
 
 /**
- * GPT-SoVITS 能不能跑：目录（api_v2.py）、Python 3.11、torch+CUDA 都得在。
- * 结果缓存 60 秒，别每次设置页刷新都去 spawn 一次 python。
+ * GPT-SoVITS 能不能跑：查目录（api_v2.py）和 Python 在不在。
+ * **不要在这里 spawnSync 跑 python**：import torch 要 5-10 秒，同步执行会把整个插件事件循环堵死，
+ * 设置页读配置直接卡在「正在读取配置…」（2026-10-26 踩过）。CUDA 能不能用，等 API 起来自然就知道了。
  */
 let gsvStatusCache = { at: 0, ok: false, reasons: [] }
 
@@ -2514,21 +2515,8 @@ function gsvStatus(config) {
   const reasons = []
   const dir = String(config?.gsvDir?.get?.() || '').trim() || join(versatiledsBase(), 'models', 'gpt-sovits', 'app')
   const py = String(config?.gsvPython?.get?.() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
-  if (!dir) reasons.push('没填 GPT-SoVITS 目录')
-  else if (!existsSync(join(dir, 'api_v2.py'))) reasons.push(`目录里找不到 api_v2.py：${dir}`)
-  if (!existsSync(py)) {
-    reasons.push(`找不到 Python 3.11：${py}`)
-  } else {
-    try {
-      const r = spawnSync(py, ['-c', 'import torch;print(1 if torch.cuda.is_available() else 0)'], {
-        encoding: 'utf8',
-        timeout: 90_000,
-      })
-      if (!String(r.stdout || '').trim().startsWith('1')) reasons.push('torch 用不了 CUDA（没装 torch 或没有 N 卡）')
-    } catch {
-      reasons.push('Python/torch 检测失败')
-    }
-  }
+  if (!existsSync(join(dir, 'api_v2.py'))) reasons.push(`目录里找不到 api_v2.py：${dir}`)
+  if (!existsSync(py)) reasons.push(`找不到 Python 3.11：${py}`)
   gsvStatusCache = { at: now, ok: reasons.length === 0, reasons }
   return gsvStatusCache
 }
