@@ -1377,6 +1377,18 @@ function runAsync(exe, args, timeoutMs) {
 }
 
 
+/** 远端 tag 是否比本地新（v0.3.10 > v0.3.9）；本地领先时不提示。 */
+function tagNewer(remote, local) {
+  const norm = (s) => String(s).replace(/^v/i, '').split('.').map((x) => Number(x) || 0)
+  const a = norm(remote)
+  const b = norm(local)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return true
+    if ((a[i] || 0) < (b[i] || 0)) return false
+  }
+  return false
+}
+
 /**
  * 启动后异步自检：查 GitHub 最新 release tag（官方 API → gh-proxy 镜像），
  * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新；顺便告诉用户「哪个源通」。
@@ -1425,7 +1437,9 @@ async function checkUpdate(config) {
       plog('info', `[dsh-versatileds] 推荐从${s.name}下载：${s.download}`)
       try { writeFileSync(stateFile, JSON.stringify({ lastAt: Date.now() }), 'utf8') } catch { /* ignore */ }
       return
-    } catch { /* 换下一个源 */ }
+    } catch (err) {
+      plog('warn', `[dsh-versatileds] 源 ${s.name} 异常：${err?.message ?? err}`)
+    }
   }
   // 无论成功失败都记一笔，避免短时间内反复查
   try { writeFileSync(stateFile, JSON.stringify({ lastAt: Date.now() }), 'utf8') } catch { /* ignore */ }
