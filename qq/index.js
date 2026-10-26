@@ -4615,7 +4615,7 @@ class OneBotClient {
     if (parts.length > 1) {
       for (let i = 0; i < parts.length; i += 1) {
         await this.sendGroup(groupId, parts[i], i === 0 ? atUid : '', i === 0 ? replyId : '')
-        if (i < parts.length - 1) await sleep(500 + Math.random() * 700)
+        if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 500 + Math.random() * 700))
       }
       return { split: parts.length }
     }
