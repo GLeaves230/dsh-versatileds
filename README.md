@@ -286,7 +286,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - **路径相对化**：ffmpeg 改从清华 PyPI 的 imageio-ffmpeg wheel 下载到 `<DSH_HOME>/versatileds/ffmpeg`（不再随包，包体 148MB → 117MB）；GPT-SoVITS / Python 3.11 都收在 `versatileds` 下；配置里的绝对路径全部清空走默认。
   - **人设**：补「出身」（父梁文锋、母团队、哥 DeepSeek R、姐 DeepSeek Pro、自己 Flash 最小、其余亲戚算团队）和多语种谐音理解；默认人设模板同步更新。
   - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
-  - **文档**：README / package.json 补「仅供学习、个人使用、禁止商用、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
+  - **文档**：README / package.json 补「仅供学习、个人使用、商用需完整授权、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
 
 ## 许可
 
