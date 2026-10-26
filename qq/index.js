@@ -2510,8 +2510,8 @@ function gsvStatus(config) {
   const now = Date.now()
   if (now - gsvStatusCache.at < 60_000) return gsvStatusCache
   const reasons = []
-  const dir = String(config?.gsvDir?.get?.() || '').trim()
-  const py = String(config?.gsvPython?.get?.() || '').trim() || join(dshHome(), 'python311', 'python.exe')
+  const dir = String(config?.gsvDir?.get?.() || '').trim() || join(versatiledsBase(), 'models', 'gpt-sovits', 'app')
+  const py = String(config?.gsvPython?.get?.() || '').trim() || join(versatiledsBase(), 'python311', 'python.exe')
   if (!dir) reasons.push('没填 GPT-SoVITS 目录')
   else if (!existsSync(join(dir, 'api_v2.py'))) reasons.push(`目录里找不到 api_v2.py：${dir}`)
   if (!existsSync(py)) {
