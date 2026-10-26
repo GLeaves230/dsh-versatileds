@@ -63,9 +63,9 @@ function depSpecs(home) {
     {
       name: 'ffmpeg',
       zip: join(VENDOR, 'ffmpeg.zip'),
-      // 包里是 imageio_ffmpeg/binaries/...，解到 .dsh/tmp/live/ffmpeg（和 bundledFfmpegCandidates 找的位置一致）
-      target: join(home, 'tmp', 'live', 'ffmpeg'),
-      probe: join(home, 'tmp', 'live', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
+      // 包里是 imageio_ffmpeg/binaries/...，落到 <DSH_HOME>/versatileds/ffmpeg（2026-10-26 主人要求）
+      target: join(home, 'versatileds', 'ffmpeg'),
+      probe: join(home, 'versatileds', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
       hint: 'B站 抓帧和表情包缩图要用',
       // 优先走 PyPI 镜像的 imageio-ffmpeg wheel（里面就是同一个 exe），下载失败才用 vendor 自带包
       wheel: true,

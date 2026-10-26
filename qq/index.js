@@ -1817,8 +1817,8 @@ function runQuiet(exe, args, timeoutMs = 15000) {
 /** 随环境附带的 ffmpeg 候选路径：按 DSH_HOME 反推（.dsh 的 ../.. 是工作区根），换电脑不用改代码。 */
 function bundledFfmpegCandidates() {
   return [
-    // 和 index.js 里 depSpecs 的落地位置保持一致：<DSH_HOME>/tmp/live/ffmpeg
-    join(dshHome(), 'tmp', 'live', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
+    // 和 index.js 里 depSpecs 的落地位置保持一致：<DSH_HOME>/versatileds/ffmpeg
+    join(dshHome(), 'versatileds', 'ffmpeg', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
   ]
 }
 
