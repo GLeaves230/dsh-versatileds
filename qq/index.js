@@ -4929,9 +4929,12 @@ class OneBotClient {
     if (outKey === repeatGuard.outKey && outNow - repeatGuard.outAt < 180_000) {
       return { message_id: 'dedupe-skipped', deduped: true }
     }
-    // 超短应声（彳亍/行/好/嗯/啊…）单独限流：同群 2 分钟最多一次，别连发刷屏
+    // 超短应声（彳亍/行/好/嗯/啊…）和「闭嘴应声」（行 我闭嘴）单独限流：同群 2 分钟最多一次
+    // （2026-10-26：机器管家连喊四次「闭嘴」，它回了「行 我闭嘴」「彳亍」「行」「行 我闭嘴」四遍）
     const ackText = String(text || '').trim()
-    if (ackText.length <= 3 && /^(彳亍|行|好|嗯|哦|啊+|？|啊？|哈+)[！!。.~～\s]*$/.test(ackText)) {
+    const isAck = (ackText.length <= 3 && /^(彳亍|行|好|嗯|哦|啊+|？|啊？|哈+)[！!。.~～\s]*$/.test(ackText))
+      || /^(行|好|嗯|彳亍)?[，, ]*(我)?(先|就)?闭嘴[！!。.~～\s]*$/.test(ackText)
+    if (isAck) {
       const ackLast = Number(ackClock.get(`g:${groupId}`) || 0)
       if (outNow - ackLast < 120_000) {
         return { message_id: 'ack-skipped', deduped: true }
