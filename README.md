@@ -295,7 +295,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 
 - **GitHub Issues（推荐）**：https://github.com/GLeaves230/dsh-versatileds-plugin/issues
 - **PR / 讨论**：https://github.com/GLeaves230/dsh-versatileds-plugin/pulls
-- 反馈时请带上：DSH 版本、插件版本（当前 0.2.8）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
+- 反馈时请带上：DSH 版本、插件版本（当前 0.3.6）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
 - 先在本文档「常见问题」里找一眼，能自己解决就不用等回复
 
 ## 合并时修掉的问题
@@ -332,6 +332,13 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - **人设**：补「出身」（父梁文锋、母团队、哥 DeepSeek R、姐 DeepSeek Pro、自己 Flash 最小、其余亲戚算团队）和多语种谐音理解；默认人设模板同步更新。
   - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
   - **文档**：README / package.json 补「仅供学习、个人使用、商用需完整授权、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
+
+- **0.3.6（2026-10-26）**：
+  - **新机器首启修复**：`writeFileSync` 没导入导致 ffmpeg 下载报错；共享记忆未建时 `ENOENT`；NapCat 下载/解压从同步改异步，不再卡住 DSH；插件日志全部加 `[HH:MM:SS]` 时间戳。
+  - **依赖下载**：NapCat 官方 GitHub → `gh-proxy.com` 镜像 → 手动提示（失败自动关 QQ 模块）；ffmpeg 清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示（失败自动关 B站 模块）。
+  - **ffmpeg 解压根因**：wheel 临时文件必须存成 `.zip`（`Expand-Archive` 不认 `.whl`），之前一直卡在「写完还是找不到探针」。
+  - **npm**：包绑定 GitHub 仓库（repository / homepage / bugs / keywords），首版发布用 Granular token（Bypass 2FA）。
+  - **注意**：npm 包**不含 vendor**（NapCat 118MB 超 npm 限制），首次启动自动下载；GitHub Release 的 zip 才带完整 vendor。
 
 ## 许可
 
