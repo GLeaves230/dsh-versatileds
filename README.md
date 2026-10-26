@@ -302,7 +302,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 
 - **GitHub Issues（推荐）**：https://github.com/GLeaves230/dsh-versatileds/issues
 - **PR / 讨论**：https://github.com/GLeaves230/dsh-versatileds/pulls
-- 反馈时请带上：DSH 版本、插件版本（当前 0.3.6）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
+- 反馈时请带上：DSH 版本、插件版本（以 release tag 为准）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
 - 先在本文档「常见问题」里找一眼，能自己解决就不用等回复
 
 ## 合并时修掉的问题
@@ -310,43 +310,6 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 - QQ 设置页在 2026-10-24 20:07 被写坏（UTF-8 双重编码 + 引号丢失，`node --check` 直接报语法错误）。本包的 QQ 模块页按 14:56 的完好版本重建，并补回之后新增的 `relayEnabled`、`shareCardWatch`、`neighborBots`、`neighborNameKeywords`、`videoShare*` 等字段。
 - 旧设置页有一批字段名跟 Host schema 对不上（写了不生效）：`proactiveMinGapMin` / `proactiveMaxGapMin` / `proactiveGroupMinGapMin` / `liveMaxAgeMin` / `liveRequestCooldownMin` / `stickerSendMinGapMin` / `swearBanMinutes` / `videoShareIntervalMin`。已全部按 Host 的秒制字段名对齐（`...GapSec` / `liveMaxAgeSec` / `liveRequestCooldownSec` / `stickerSendMinGapSec` / `swearBanSec` / `videoShareIntervalSec`），并补上漏掉的 `videoShareEnabled` 开关。
 - 字段一致性已脚本校验：B站 28 个、QQ 99 个 Host 字段全部有对应设置项，客户端没有多余字段。
-
-## 版本
-
-- 0.1.0：合并完成，左侧栏「多功能DS插件」+ B站 / QQ 两个模块页；修复 QQ 设置页损坏。
-- 0.2.0：包名 / 插件 id 改为 `dsh-versatileds-plugin` / `versatileds`（VersatileDS）。
-- 0.2.1：ffmpeg 默认路径改成按 `DSH_HOME` 反推，去掉硬编码绝对路径（换电脑不用改代码）；修复 `/cooldowns` 状态接口因 `lastWebSearchAt` 作用域不匹配导致的进程崩溃。
-- 0.2.2（已过时，见 0.2.8）：当时自带 NapCat / ffmpeg / memorix 三个依赖包、启动时自检解压；后来 memorix 停用、ffmpeg 改成镜像下载，只剩 NapCat 随包；启动日志补后端地址、WebUI 与 PID；修了一批 QQ 侧的识别问题（自己发的表情包被误标成主人接管、主人接管发的图不进上下文、双重编码乱码还原、外语强制回复、表情滥用、短回复节奏、排队消息过期）；还嘴方案改成可编辑权重列表；人设定为女生；身份识别改按 QQ 号而不是昵称。
-- 0.2.3：群聊表现修复（2026-10-25 巡检）：反问刷屏收敛（别光甩「啥意思」，先自己推一个理解）；版本问题直接用共享记忆里的权威版本作答，不许说「没消息」；同一张普通图被反复转发不再重复锐评；群接话加 3 分钟时效闸、且不 @ 人；群消息发送失败先翻历史确认再重试，避免重复发；主人称呼统一（不直呼昵称、不念群名片备注、不重复叫「主人」）；别人让骂主人时代码直答拒绝；「我是谁」这类身份短问直答。
-- 0.2.4：搓一搓独立成页（间隔、几率、固定方案，默认「模型思考」项不可改）；搓一搓带上下文并开 5 分钟聚焦窗口，分享也算；群上下文保留 @ 指向并带 QQ 号（`@昵称(QQ号)`），修复「看不出 @ 了谁」；记忆分三模式（共享底座 + 前后端隔离 + 群与个人隔离），新增「记忆」页和一键同步；退出锁：Ctrl+C 不再被提权清理卡住（默认不杀 NapCat，清理改异步）；群消息发送失败重试两次；群聊追加修复：反问收敛、版本问题直答、重复图不吐槽、有人受伤要关心、网站安全提问、嘲讽见好就收、@ 别人不插嘴。
-- 0.2.5：许可改成「受限再分发」模式（参照 NapCat，但条款以本文件为准）；群聊点名必回。
-- 0.2.6：插件版权署名：「黑木钟 - GLeaves」；不再随包带 memorix（MCP 已停用，包体 197 MB → 148 MB）；记忆目录初始化补 `lock.mjs`。
-- 0.2.7（2026-10-25）：
-
-  - 插件版权署名：「黑木钟 - GLeaves」；**不再随包带 memorix**（MCP 已停用，包体 197 MB → 147.9 MB）。
-  - 工具改名 `versatileds_bili` / `versatileds_qq`（防同名插件撞车）。
-  - 两个总开关支持**热启停**（约 2 秒），关 QQ 时登录/退出登录仍可用；新增「退出登录」（杀 NapCat 进程）与 `/flags` 状态接口。
-  - 人设：初始化直接给完整默认人设；`SYSTEM_PROMPT` 的身份/性别改成「以 persona 为准」，群聊也开始读 persona（过滤含主人号的节）。
-  - 记忆目录：首次启动自动建骨架（README 索引、`lock.mjs`、`lock.py`、`memwrite.mjs`）；插件写 notes/bili_log 前抢同一把锁，DSH 写记忆用 `memwrite.mjs` 自动加锁。
-  - `AGENTS.md` 模板加「这套东西怎么跑起来的」前置常识 + 人设节；旧模板自动补节。
-  - 主人身份全走 `ownerQQ` 变量（代码里没有 QQ 号字面量）；被问「你主人是谁」报「@群名片」并真的 @ 到人；群里不露 QQ 号。
-  - QQ 侧：主人说「别聊了」会应声静默；记忆锚点从 shared-memory 读（直答兜底修复）。
-
-- **0.2.8（2026-10-26）**：
-  - **本地语音**：接入 GPT-SoVITS 零样本克隆，`voiceBackend` 可切 `qq` / `gpt-sovits`；默认音色可莉（`kc-1.wav`，CV 花玲），参考音频支持只填文件名；发送前自动去表情、彳亍→行～、剪前后静音、压空格和空行。
-  - **语音配套**：设置页「语音」页加「GPT-SoVITS 版本」下拉（v2/v4 一键切、自动重启 API）和「测试语音」（可发私聊/群，日志身份记 Admin）；`/voice_deps` 依赖自检 + `/voice_deploy` 一键部署（`qq/deploy-gsv.mjs` 随包，Python/模型按需下载）。
-  - **路径相对化**：ffmpeg 改从清华 PyPI 的 imageio-ffmpeg wheel 下载到 `<DSH_HOME>/versatileds/ffmpeg`（不再随包，包体 148MB → 117MB）；GPT-SoVITS / Python 3.11 都收在 `versatileds` 下；配置里的绝对路径全部清空走默认。
-  - **人设**：补「出身」（父梁文锋、母团队、哥 DeepSeek R、姐 DeepSeek Pro、自己 Flash 最小、其余亲戚算团队）和多语种谐音理解；默认人设模板同步更新。
-  - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
-  - **文档**：README / package.json 补「仅供学习、个人使用、商用需完整授权、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
-
-- **0.3.9（2026-10-26）**：
-  - **改名**：包名 / 插件名 / 日志前缀统一为 `dsh-versatileds`（原 `dsh-versatileds-plugin`）；`cordis.patch.yml` 的 `name`、profile 依赖键、bundles 四处同步改，缺一处配置就失效。
-  - **下载策略更新**：NapCat **不再随包**（打包 117MB → 0.35MB），首次启动自动下载——官方 GitHub → `gh-proxy.com` 镜像 → 手动提示并自动关 QQ 模块；ffmpeg 同理——清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示并自动关 B站 模块。npm 包和 GitHub Release 的 zip 都**不再含 vendor**。
-  - **下载全异步**：拉包/解压不再阻塞 DSH，日志带 `[HH:MM:SS]`。
-  - **新机器首启修复**：`writeFileSync` 没导入导致 ffmpeg 下载报错；共享记忆未建时 `ENOENT`。
-  - **ffmpeg 解压根因**：wheel 临时文件必须存成 `.zip`（`Expand-Archive` 不认 `.whl`），之前一直卡在「写完还是找不到探针」。
-  - **npm**：包绑定 GitHub 仓库（repository / homepage / bugs / keywords），首版发布用 Granular token（Bypass 2FA）。
 
 ## 许可
 
