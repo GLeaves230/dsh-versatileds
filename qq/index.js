@@ -193,7 +193,7 @@ const GROUP_SYSTEM_PROMPT = [
   '群里说「拍」「拍你」「拍上瘾了」指的是**拍一拍**（双击头像搓一下那个动作），不是拍照、不是相机；别理解成「拿相机拍照片」（2026-10-25：群友说「拍上瘾了是吧」，它回「我连相机都没开」，完全读错）。',
   '群里的「欢迎欢迎」「欢迎新人」是在欢迎新进群的成员，不是欢迎你（你一直都在群里）——别接「欢迎啥呀，我一直在的啊」这种话；真有人点你名字再应。',
   '群里说话像打字：一次一两句，别憋一大段；要说的事多就分 2-3 条发，每条之间用单独一行 --- 隔开（系统会拆成几条依次发）。',
-  '有人点歌、问「会不会唱 XX」时按实际来：能直接发的只有曲库里那几首（当前：朋友的酒、叹云兮、云原神之歌），别的歌就说「这首没收录，唱不了」，别答应「会唱」、别自己挑一首糊弄；问的是哪首就答哪首，别答「你想听啥」。（2026-10-26：问「会唱青花瓷吗」，它说「会啊」，转头又反问「想听啥」。）',
+  '你**不会唱歌**，只会说话（语音）。有人点歌、问「会不会唱 XX」、让你唱一段时，直接说「我不会唱歌，只会说话」，别答应、别编歌名、别拿念白充唱歌，也别反问「你想听啥」。（2026-10-26 主人定：唱歌功能全关，只留说话。）',
 ].join('')
 
 /** 别人让你骂主人时的固定回绝：不给模型自由发挥的机会（2026-10-25）。 */
@@ -3987,12 +3987,14 @@ function startStatusServer(config, napcat = null) {
             return
           }
           const wav = await gsvSynthesize(text, config)
+          // 测试语音也得转 AMR：QQ 收到 WAV 会报 rich media transfer failed（2026-10-26 主人实测）
+          const sendFile = await toAmrVoice(wav)
           if (target === 'private') {
             const ownerQq = ownerQQOf(config)
             if (!ownerQq) throw new Error('没配主人 QQ 号')
             await napcat?.call('send_private_msg', {
               user_id: Number(ownerQq),
-              message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+              message: [{ type: 'record', data: { file: `file:///${sendFile}` } }],
             })
             recordSelfSent(config, { kind: 'sent-voice', peer: String(ownerQq), text: `[语音/gpt-sovits] ${text}`, role: testRole })
           } else {
@@ -4000,12 +4002,12 @@ function startStatusServer(config, napcat = null) {
             if (!gid) throw new Error('没配群号（proactiveGroups），不知道发哪个群')
             await napcat?.call('send_group_msg', {
               group_id: Number(gid),
-              message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+              message: [{ type: 'record', data: { file: `file:///${sendFile}` } }],
             })
             recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/gpt-sovits] ${text}`, role: testRole })
           }
           plog('info', `[dsh-versatileds] 测试语音（${target === 'private' ? '私聊' : '群'}）：${text}`)
-          finish(200, { ok: true, backend: 'gpt-sovits', target, text, wav })
+          finish(200, { ok: true, backend: 'gpt-sovits', target, text, wav: sendFile })
         } catch (err) {
           plog('warn', '[dsh-versatileds] 测试语音失败:', err?.message ?? err)
           finish(500, { ok: false, error: String(err?.message ?? err) })
@@ -4342,6 +4344,21 @@ function chatKeyOf(entry) {
 
 function chatFilePath(key) {
   return join(chatDir(), `${key}.log`)
+}
+
+/** 读某个群最近几条聊天文字，给「这条是不是正事」的模型判断用（2026-10-26）。 */
+function recentGroupChatLines(gid, limit = 6) {
+  try {
+    const f = chatFilePath(`group-${gid}`)
+    if (!existsSync(f)) return []
+    const lines = readFileSync(f, 'utf8').split(/\r?\n/).filter(Boolean).slice(-limit)
+    return lines.map((l) => {
+      try {
+        const o = JSON.parse(l)
+        return `${o.role || ''}：${String(o.text || '').slice(0, 80)}`
+      } catch { return '' }
+    }).filter(Boolean)
+  } catch { return [] }
 }
 
 function loadChatIndex() {
@@ -6898,6 +6915,54 @@ export function apply(ctx, config) {
     return () => { stopped = true; clearTimeout(first); clearInterval(timer) }
   }
 
+  /**
+   * 主动聊天状态里，每 2.5 分钟让模型自己看一次群气氛：最近几条是不是在聊正事。
+   * 是正事就退出主动聊天（2026-10-26 主人选：不要关键词硬判，让模型主观判断）。
+   */
+  function startTopicJudge() {
+    let stopped = false
+    let busy = false
+    const judge = async () => {
+      if (stopped || busy) return
+      busy = true
+      try {
+        const gids = [...activeChatUntil.keys()].filter((g) => Number(activeChatUntil.get(g)) > Date.now())
+        for (const gid of gids) {
+          if (stopped) break
+          if (quietState.has(String(gid))) continue
+          const lines = recentGroupChatLines(String(gid), 6)
+          if (lines.length < 2) continue
+          let out = ''
+          for await (const chunk of llm.stream({
+            provider: String(config.imageProvider.get() || 'deepseek-account'),
+            model: 'deepseek-flash',
+            messages: [{
+              role: 'user',
+              content: [{
+                type: 'text',
+                text: `下面是 QQ 群最近几条聊天。判断他们是在聊正事（工作/学习/任务/技术求助/正经讨论），还是闲聊。只回一个词：serious 或 casual。\n\n${lines.join('\n')}`,
+              }],
+            }],
+            maxTokens: 16,
+            temperature: 0,
+            signal: AbortSignal.timeout(15000),
+          })) {
+            if (chunk?.type === 'text-delta' && chunk.text) out += chunk.text
+            else if (chunk?.type === 'block-end' && chunk.block?.type === 'text' && !out && chunk.block.text) out = chunk.block.text
+          }
+          if (stopped) break
+          if (/serious/i.test(out)) {
+            activeChatUntil.delete(String(gid))
+            plog('info', `[dsh-versatileds] 群 ${gid} 聊正事了，退出主动聊天`)
+          }
+        }
+      } catch { /* 判断失败就当没发生 */ }
+      finally { busy = false }
+    }
+    const timer = setInterval(() => { judge().catch(() => {}) }, 150_000)
+    return () => { stopped = true; clearInterval(timer) }
+  }
+
   // 设置页的「登录」子页面通过这两个钩子直接驱动（手动点按钮，强制拉起）
   napcatControl.alive = () => napcatAlive()
   napcatControl.start = (reason) => ensureNapCat(reason, false, true)
@@ -8962,6 +9027,7 @@ export function apply(ctx, config) {
       startSearchResultWatcher(),
       startBalanceWatch(),
       startTopicSummary(),
+      startTopicJudge(),
     ].filter((stop) => typeof stop === 'function')
     if (!qqToolDisposer) qqToolDisposer = registerQqTool()
   }
