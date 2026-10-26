@@ -947,7 +947,27 @@ window.__ModuleLoader__.load({
             ? data.groups.map((g) => React.createElement('div', { key: g.name, style: { marginBottom: '6px' } },
                 React.createElement('div', { style: { fontSize: '12px', fontWeight: 600, opacity: 0.75, marginBottom: '4px' } },
                   `${g.name}（${g.files.length}）`),
-                React.createElement('div', null, g.files.map((f) => btn(f.label, () => setSel(f.id), sel === f.id))),
+                // 聊天记录用下拉：会话越多列表越长，最活跃（文件最大）的排第一
+                g.name === '聊天记录'
+                  ? React.createElement('select', {
+                      value: sel && g.files.some((f) => f.id === sel) ? sel : '',
+                      onChange: (e) => { if (e.target.value) setSel(e.target.value) },
+                      style: {
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        background: 'transparent',
+                        color: 'inherit',
+                        border: '1px solid rgba(128,128,128,0.3)',
+                        fontSize: '12px',
+                        minWidth: '260px',
+                        maxWidth: '100%',
+                      },
+                    },
+                    React.createElement('option', { value: '' }, '选择聊天记录…'),
+                    g.files.map((f) => React.createElement('option', { key: f.id, value: f.id },
+                      `${f.label}　${(f.size / 1024).toFixed(0)}KB`)),
+                  )
+                  : React.createElement('div', null, g.files.map((f) => btn(f.label, () => setSel(f.id), sel === f.id))),
               ))
             : React.createElement('div', { style: { fontSize: '12px', opacity: 0.6 } },
                 '还没找到日志。NapCat 的日志要它自己写过（logs 目录），插件日志要触发过对应动作。'),

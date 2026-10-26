@@ -3448,8 +3448,9 @@ function listLogFiles(config) {
       const f = pack(`qq/chat/${name}`, name, join(dir, name))
       if (f) files.push(f)
     }
-    files.sort((a, b) => b.mtime - a.mtime)
-    add('聊天记录', files.slice(0, 20))
+    // 聊天记录按大小降序：消息越多越活跃，排在最前面
+    files.sort((a, b) => b.size - a.size)
+    add('聊天记录', files.slice(0, 50))
   }
 
   return { groups }
