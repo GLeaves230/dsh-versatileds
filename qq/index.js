@@ -3308,9 +3308,16 @@ const ackClock = new Map()
 /** 反思期里群友 @ 它的次数：多次 @ 且真是在找它聊，就让模型判断要不要结束反思（2026-10-26 主人）。 */
 const quietKnock = new Map()
 
-/** 这个群是不是在反思静默期（发言总闸）。 */
-function inQuiet(groupId) {
-  return Number(quietState.get(String(groupId || '')) || 0) > Date.now()
+/**
+ * 这个会话是不是在反思静默期（发言总闸）。
+ * key 支持 'g:<群号>'（群）和 'p:<QQ>'（私聊）；传纯群号也兼容（旧数据/旧调用当群处理）。
+ */
+function inQuiet(key) {
+  const k = String(key || '')
+  if (!k) return false
+  // 兼容三种写法：'g:123' / 'p:456' / 纯 '123'（纯数字按群算）
+  const v = quietState.get(k) ?? quietState.get(`g:${k}`) ?? quietState.get(k.replace(/^[gp]:/, ''))
+  return Number(v || 0) > Date.now()
 }
 
 /**
@@ -5233,8 +5240,9 @@ export function apply(ctx, config) {
   // QQ 总开关关掉时不提供：不然 B站 还能绕着开关往 QQ 发消息。
   const provideQqAgent = () => ctx.provide('qqAgent', {
     ownerQQ: () => ownerQQOf(config),
-    sendPrivate: (userId, text) => ob.sendPrivate(String(userId), String(text)),
-    sendGroup: (groupId, text) => ob.sendGroup(String(groupId), String(text)),
+    // 反思期（禁言）不往这个会话发（2026-10-26 主人：反思相当于禁言，B站汇报也挡住）
+    sendPrivate: (userId, text) => (inQuiet(`p:${userId}`) ? { skipped: 'quiet' } : ob.sendPrivate(String(userId), String(text))),
+    sendGroup: (groupId, text) => (inQuiet(`g:${groupId}`) ? { skipped: 'quiet' } : ob.sendGroup(String(groupId), String(text))),
     /** 发一条 B站 视频分享（跟自动分享同一个样式；不受 videoShareEnabled 影响）。 */
     shareVideo: (bvid, opts = {}) => sendBiliCard({
       bvid: String(bvid || ''),
@@ -7060,16 +7068,20 @@ export function apply(ctx, config) {
    * 统一解除反思（2026-10-26 主人要求）：清状态 + 清计数 + 记一笔 + 群里说一声。
    * 到期、群友多次 @ 恢复，都走这里；跳过（skip）直接清倒计时，不走这里。
    */
-  async function endQuiet(gid, reason = '') {
-    const k = String(gid)
+  async function endQuiet(key, reason = '') {
+    const k = String(key || '')
+    if (!k) return false
     if (!quietState.has(k) && !quietKnock.has(k)) return false
+    const isPrivate = k.startsWith('p:')
+    const targetId = k.replace(/^[gp]:/, '')
     quietState.delete(k)
     saveQuietState()
     quietKnock.delete(k)
-    appendNote({ kind: 'quiet-end', role: 'DS', to: k, reply: `反思结束（${reason || '到期'}）` })
-    plog('info', `[dsh-versatileds] 反思结束（${reason || '到期'}）：群 ${k}`)
+    appendNote({ kind: 'quiet-end', role: 'DS', to: targetId, reply: `反思结束（${reason || '到期'}）` })
+    plog('info', `[dsh-versatileds] 反思结束（${reason || '到期'}）：${isPrivate ? '私聊' : '群'} ${targetId}`)
     try {
-      await ob.sendGroup(k, '我回来了，刚才安静了一会儿')
+      if (isPrivate) await ob.sendPrivate(targetId, '我回来了')
+      else await ob.sendGroup(targetId, '我回来了，刚才安静了一会儿')
     } catch { /* 发不出去就算了 */ }
     return true
   }
@@ -8097,6 +8109,9 @@ export function apply(ctx, config) {
       if (!config.autoReplyEnabled.get()) return
       // 低余额时私聊也只回主人
       if (lowMode && owner && sender !== owner) return
+      // 私聊也有自己的反思倒计时（2026-10-26 主人要求）：反思期只回主人明确让说话
+      if (inQuiet(`p:${sender}`) && !(Boolean(owner) && sender === owner
+        && /(继续|可以说话|说话吧|出来吧|好了|行了|醒醒|醒来)/.test(plainText(data.message)))) return
     } else if (data.message_type === 'group') {
       if (!config.autoReplyEnabled.get()) return
       // 低余额时群里完全不说话
@@ -8207,7 +8222,7 @@ export function apply(ctx, config) {
         let quietNow = inQuiet(data.group_id)
         if (quietNow && !ownerBreakQuiet) {
           if (atMe) {
-            const k = String(data.group_id)
+            const k = `g:${data.group_id}`
             const now = Date.now()
             const rec = quietKnock.get(k) || { count: 0, at: 0 }
             if (now - rec.at > 10 * 60_000) rec.count = 0
@@ -8216,7 +8231,7 @@ export function apply(ctx, config) {
             quietKnock.set(k, rec)
             if (rec.count >= 2) {
               try {
-                if (await judgeResumeChat(k, plainText(data.message))) {
+                if (await judgeResumeChat(String(data.group_id), plainText(data.message))) {
                   quietNow = false
                   await endQuiet(k, '群友多次@想聊')
                 }
@@ -8263,7 +8278,8 @@ export function apply(ctx, config) {
     if (data.message_type === 'group' && !atOthersQuiet && looksLikeComplaint(plainText(data.message))) {
       const sec = Number(config.quietAfterComplaintSec.get() ?? 180)
       if (sec > 0) {
-        quietState.set(String(data.group_id), Date.now() + sec * 1000)
+        // 群和私聊各有自己的反思倒计时（2026-10-26 主人：反思按会话独立）
+        quietState.set(`g:${data.group_id}`, Date.now() + sec * 1000)
         saveQuietState()
         appendNote({
           kind: 'quiet',
@@ -8271,6 +8287,15 @@ export function apply(ctx, config) {
           to: String(data.group_id),
           reply: `被嫌吵，安静 ${sec} 秒`,
         })
+      }
+    }
+    // 私聊也能进反思：私聊里被要求闭嘴/别说了，单独计时（2026-10-26 主人要求）
+    if (data.message_type === 'private' && looksLikeComplaint(plainText(data.message))) {
+      const sec = Number(config.quietAfterComplaintSec.get() ?? 180)
+      if (sec > 0) {
+        quietState.set(`p:${sender}`, Date.now() + sec * 1000)
+        saveQuietState()
+        appendNote({ kind: 'quiet', role: 'DS', to: String(sender), reply: `私聊被要求安静 ${sec} 秒` })
       }
     }
     // 群里顺手观察这个人像不像 AI：只打分标注，不改配置、不直接当邻居
@@ -9536,6 +9561,7 @@ export function apply(ctx, config) {
             if (!args.live) {
               return JSON.stringify({ 动作: 'send_private', 目标: args.user_id, 文本: args.text, 预览: true }, null, 2)
             }
+            if (inQuiet(`p:${args.user_id}`)) return '已拦截：这个私聊正在反思期（禁言）'
             if (!allowed('send')) return '已拦截：每小时发送次数到顶'
             const r = await ob.sendPrivate(args.user_id, args.text ?? '')
             return JSON.stringify({ 已发送: r }, null, 2)
@@ -9547,6 +9573,7 @@ export function apply(ctx, config) {
                 at: args.at_qq || '不 @', 文本: args.text, 预览: true,
               }, null, 2)
             }
+            if (inQuiet(`g:${args.group_id}`)) return '已拦截：这个群正在反思期（禁言）'
             if (!allowed('send')) return '已拦截：每小时发送次数到顶'
             const r = await ob.sendGroup(args.group_id, args.text ?? '', args.at_qq)
             return JSON.stringify({ 已发送: r }, null, 2)
