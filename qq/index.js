@@ -8272,7 +8272,10 @@ export function apply(ctx, config) {
               } catch { /* 判断失败保持安静 */ }
             }
           }
-          if (quietNow) return
+          if (quietNow) {
+            plog('info', `[dsh-versatileds] 反思静默：群 ${data.group_id}（${plainText(data.message).slice(0, 24)}）`)
+            return
+          }
         }
         // 群级免打扰：这个群单独设了时段（groupProfiles），时段内只要不是主人说话就静默
         // 跟全局 proactiveQuiet 取交集：任一生效就静默（2026-10-26 主人）
