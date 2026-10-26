@@ -37,7 +37,7 @@ dsh-versatileds/
 │   └── share-card.js   # QQ 分享卡片解析
 ├── cordis.patch.yml    # 插入 id: versatileds 的条目
 ├── qq/deploy-gsv.mjs   # GPT-SoVITS 一键部署脚本（随包，小文件）
-├── vendor/             # 随包依赖：napcat.zip（首次启动解压；ffmpeg 改成从 PyPI 镜像下载）
+├── vendor/             # 空目录占位：NapCat 改成首次启动自动下载（官方 → gh-proxy），不再随包
 └── package.json
 ```
 
@@ -92,19 +92,19 @@ QQ 模块的「登录」子页是我们自己的登录入口：状态检测、�
 
 ### NapCat（QQ 协议端）
 
-QQ 模块依赖本机安装的 [NapCat](https://github.com/NapNeko/NapCatQQ)（基于 NTQQ 的协议侧框架）完成与 QQ 的连接。**本插件不包含 NapCat 的源码**，但**随包附带它的官方发布版压缩包** `vendor/napcat.zip`（首次启动时自动解压到 `<DSH_HOME>/versatileds/qq/napcat`）。需要源码请自行到[NapCat 官方 GitHub](https://github.com/NapNeko/NapCatQQ) 下载。插件只在运行时启动它、读取它生成的登录二维码，不改它任何代码。
+QQ 模块依赖本机安装的 [NapCat](https://github.com/NapNeko/NapCatQQ)（基于 NTQQ 的协议侧框架）完成与 QQ 的连接。**本插件不包含 NapCat 的源码，也不再随包附带**；首次启动自动从它官方 GitHub（或 gh-proxy 镜像）下载官方发布版压缩包 `vendor/napcat.zip`（首次启动时自动解压到 `<DSH_HOME>/versatileds/qq/napcat`）。需要源码请自行到[NapCat 官方 GitHub](https://github.com/NapNeko/NapCatQQ) 下载。插件只在运行时启动它、读取它生成的登录二维码，不改它任何代码。
 
 | 项 | 内容 |
 |---|---|
 | 项目 | https://github.com/NapNeko/NapCatQQ |
 | 版权 | Copyright © 2024 Mlikiowa |
 | 许可证 | Limited Redistribution License for NapCat（受限再分发许可） |
-| 本插件用法 | 随包携带官方发布版 `vendor/napcat.zip`，首次启动解压到 `<DSH_HOME>/versatileds/qq/napcat`；通过 `launcher.bat` 启动它；读 `<NapCat>/cache/qrcode.png` 在设置页显示登录二维码；登录成功后删除该缓存；不改 NapCat 任何代码 |
+| 本插件用法 | 首次启动自动下载官方发布版（官方 GitHub → gh-proxy 镜像，失败会提示手动放 `vendor/napcat.zip`），解压到 `<DSH_HOME>/versatileds/qq/napcat`；通过 `launcher.bat` 启动它；读 `<NapCat>/cache/qrcode.png` 在设置页显示登录二维码；登录成功后删除该缓存；不改 NapCat 任何代码 |
 
 许可证要点（详见 NapCat 仓库 `LICENSE`）：
 
 - 再分发必须附带完整许可证文本，并注明来源与版权
-- 再分发本插件时，`vendor/napcat.zip` 必须原样保留，且一并附上 NapCat 的许可证文本
+- 再分发本插件时，若你自行放了 `vendor/napcat.zip`，请原样保留并附上 NapCat 的许可证文本；官方安装包已不再随附该文件
 - 禁止商业用途
 - 未经作者许可不得修改后再公开分发
 - 软件按原样提供，不附带任何担保
@@ -263,7 +263,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 ## 新用户上手
 
 1. 装好插件（`link:` 或 `install_bundle`），DSH 启动时会自动：
-   - 解压 `vendor/napcat.zip`；ffmpeg 缺失时从清华 PyPI 自动下载（**不随包带**）；
+   - 首次启动自动下载 NapCat（官方 GitHub → gh-proxy 镜像）和 ffmpeg（清华 PyPI）；**都不随包带**；
    - 生成 `AGENTS.md` 模板（开头一节「这套东西怎么跑起来的」就是前置常识）；
    - 生成 `<DSH_HOME>/versatileds/memory/` 骨架：`README.md` 索引、`lock.mjs`、`lock.py`、`memwrite.mjs`；
    - 生成 `qq/persona.md` 人设模板（一份完整可用的默认人设，直接改）。
@@ -281,7 +281,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 | 现象 | 原因 / 处理 |
 |---|---|
 | NapCat 起不来 | UAC 弹窗要点「是」；`launcher.bat` 在 `<DSH_HOME>/versatileds/qq/napcat/`；WS 连不上先看 3000 / 3011 端口 |
-| 首次启动卡住 | 正在解压 `vendor/napcat.zip`，约 1-2 分钟；日志里等「依赖已解压」 |
+| 首次启动卡住 | 正在下载/解压 NapCat（约 118MB），日志里等「首次初始化：解压 NapCat」；下载走 gh-proxy 一般一两分钟 |
 | ffmpeg 下载慢或失败 | 走清华 PyPI，约 22MB；实在不行手动放到 `<DSH_HOME>/versatileds/ffmpeg/imageio_ffmpeg/binaries/` |
 | 设置页一直「正在读取配置…」 | `cordis.patch.yml` 的 YAML 语法坏了（缩进/引号），用 pyyaml 校验；改这个文件**别用 PowerShell 字符串替换** |
 | 语音没声音 / 像没在说话 | 看 `/voice_status` 的 `apiUp`；本地语音要等 API 起 40 秒左右；`temperature` 别低于 1.0（会循环生成 30 秒噪声） |
@@ -333,30 +333,11 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   - **群聊小修**：@ / 点名 / 主人接管后挂 5 分钟聚焦；主动搭话按群活跃度排序；回复开头的 `[表情]` / `[图片]` / `[语音]` 占位符不再抄出来；`@主人` 转成真 at。
   - **文档**：README / package.json 补「仅供学习、个人使用、商用需完整授权、版权自行解决」声明；包内依赖审计（只剩 `vendor/napcat.zip` 走本地）。
 
-- **0.3.6（2026-10-26）**：
-  - **新机器首启修复**：`writeFileSync` 没导入导致 ffmpeg 下载报错；共享记忆未建时 `ENOENT`；NapCat 下载/解压从同步改异步，不再卡住 DSH；插件日志全部加 `[HH:MM:SS]` 时间戳。
-  - **依赖下载**：NapCat 官方 GitHub → `gh-proxy.com` 镜像 → 手动提示（失败自动关 QQ 模块）；ffmpeg 清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示（失败自动关 B站 模块）。
-  - **ffmpeg 解压根因**：wheel 临时文件必须存成 `.zip`（`Expand-Archive` 不认 `.whl`），之前一直卡在「写完还是找不到探针」。
-  - **npm**：包绑定 GitHub 仓库（repository / homepage / bugs / keywords），首版发布用 Granular token（Bypass 2FA）。
-  - **注意**：npm 包**不含 vendor**（NapCat 118MB 超 npm 限制），首次启动自动下载；当时 GitHub Release 的 zip 还带完整 vendor，**0.3.7 起 Release 也改成不含 vendor**。
-
-## 许可
-
-**受限再分发许可**：
-
-- ✅ 个人使用、运行、学习、自用修改
-- ✅ 原样再分发（须附带完整许可证文本、注明来源与版权）
-- ⚠️ 商用必须获得**所有版权方**的商用授权；未获授权不得出售、付费托管、盈利性集成、随商业产品捆绑
-- ❌ 未经作者许可，不得修改后再公开分发
-- 随包携带的 NapCat / ffmpeg 各自遵循其原许可证，不适用本许可（memorix 已停用、不再随包分发）
-
-> **注意**：商用版权需要自行取得以下各方的授权——**本插件作者（黑木钟 - GLeaves）、NapCat 作者（NapNeko / Mlikiowa）、FFmpeg 项目、GPT-SoVITS 作者（RVC-Boss）、语音 / 声优版权方（如可莉 CV 花玲、派蒙 CV 多多poi 及相关作品公司）、参考音频来源作者（B站 UP 主）**；获得插件作者的**源码修改再公开**授权后，也不得用于非法盈利 / 侵害利益 / 版权侵权等非法途径，请自行解决律师相关问题。
->
-> **即便获得完整商用授权，也请尽量奉行 DSH 的即插即用、开放公开的插件精神。**
-
-完整条款见 [`LICENSE-GLeaves.txt`](./LICENSE-GLeaves.txt)。
-
 - **0.3.7（2026-10-26）**：
   - **改名**：包名 / 插件名 / 日志前缀统一为 `dsh-versatileds`（原 `dsh-versatileds-plugin`）；`cordis.patch.yml` 的 `name`、profile 依赖键、bundles 四处同步改，缺一处配置就失效。
-  - **下载策略更新**：NapCat **不再随包**（打包 117MB → 0.35MB），首次启动自动下载——官方 GitHub → `gh-proxy.com` 镜像 → 手动提示并自动关 QQ 模块；ffmpeg 同理——清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示并自动关 B站 模块。
+  - **下载策略更新**：NapCat **不再随包**（打包 117MB → 0.35MB），首次启动自动下载——官方 GitHub → `gh-proxy.com` 镜像 → 手动提示并自动关 QQ 模块；ffmpeg 同理——清华 PyPI wheel → `gh-proxy` 的 BtbN/FFmpeg-Builds → 手动提示并自动关 B站 模块。npm 包和 GitHub Release 的 zip 都**不再含 vendor**。
   - **下载全异步**：拉包/解压不再阻塞 DSH，日志带 `[HH:MM:SS]`。
+  - **新机器首启修复**：`writeFileSync` 没导入导致 ffmpeg 下载报错；共享记忆未建时 `ENOENT`。
+  - **ffmpeg 解压根因**：wheel 临时文件必须存成 `.zip`（`Expand-Archive` 不认 `.whl`），之前一直卡在「写完还是找不到探针」。
+  - **npm**：包绑定 GitHub 仓库（repository / homepage / bugs / keywords），首版发布用 Granular token（Bypass 2FA）。
+
