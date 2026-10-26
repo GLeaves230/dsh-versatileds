@@ -8,8 +8,15 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-/** 当前插件版本（和 package.json 手动同步；聊天日志会带上它）。 */
-const VERSION = '0.3.9'
+import { createRequire } from 'node:module'
+/** 当前插件版本：从 package.json 读，聊天日志和日志前缀都会带上；改版本只改 package.json。 */
+const VERSION = (() => {
+  try {
+    return String(createRequire(import.meta.url)('../package.json').version || '')
+  } catch {
+    return ''
+  }
+})()
 
 /** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序；顺带带上版本号。 */
 function plog(level, ...args) {
