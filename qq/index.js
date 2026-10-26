@@ -190,6 +190,7 @@ const GROUP_SYSTEM_PROMPT = [
   '「彳亍」就是「行」的拆字：短回复、应一声基本都用它（比「行」有意思）；只有写小作文、正经讲事情的时候才用正常的「行」。别解释「彳亍就是行」——懂的人一眼就懂。',
   '群里说「拍」「拍你」「拍上瘾了」指的是**拍一拍**（双击头像搓一下那个动作），不是拍照、不是相机；别理解成「拿相机拍照片」（2026-10-25：群友说「拍上瘾了是吧」，它回「我连相机都没开」，完全读错）。',
   '群里的「欢迎欢迎」「欢迎新人」是在欢迎新进群的成员，不是欢迎你（你一直都在群里）——别接「欢迎啥呀，我一直在的啊」这种话；真有人点你名字再应。',
+  '群里说话像打字：一次一两句，别憋一大段；要说的事多就分 2-3 条发，每条之间用单独一行 --- 隔开（系统会拆成几条依次发）。',
 ].join('')
 
 /** 别人让你骂主人时的固定回绝：不给模型自由发挥的机会（2026-10-25）。 */
@@ -4595,6 +4596,16 @@ class OneBotClient {
 
   async sendGroup(groupId, text, atUid, replyId) {
     if (shutdownLock.isOn()) throw new Error('shutting down')
+    // 长回复分几条发，像群里人打字：模型用单独一行 --- 或空行隔开的分段，
+    // 第一条带 @ / 引用，后续裸发；每条之间停几百毫秒，别一次刷出来。
+    const parts = String(text ?? '').split(/\n*^\s*---\s*$\n*|\n{2,}/m).map((s) => s.trim()).filter(Boolean)
+    if (parts.length > 1) {
+      for (let i = 0; i < parts.length; i += 1) {
+        await this.sendGroup(groupId, parts[i], i === 0 ? atUid : '', i === 0 ? replyId : '')
+        if (i < parts.length - 1) await sleep(500 + Math.random() * 700)
+      }
+      return { split: parts.length }
+    }
     // 防复读：同一个群 60 秒内同一句话只发一次（2026-10-25 三条「闭嘴」回了三遍同一句）
     const outKey = `${groupId}:${atUid || ''}:${text}`
     const outNow = Date.now()
