@@ -4075,6 +4075,12 @@ async function noteTakeoverFromHistory(msgs, self, config, scope = {}, ob = null
       // 历史消息只到秒；补 999ms 让同一秒内的接管记录排在实时消息之后，日志时间线更顺
       ts: Number(m.time || 0) * 1000 + 999 || Date.now(),
     }, config)
+    // 主人在 QQ 客户端用机器人号接管说话，说明这个窗口在活动：也给它挂 5 分钟聚焦，
+    // 接下来群里有人接话就跟上（2026-10-26 主人问「接管时聚焦能不能运行」）
+    try {
+      if (scope.groupId) focusChat.set(`g:${scope.groupId}`, Date.now() + FOCUS_MS)
+      else if (scope.peer) focusChat.set(`p:${scope.peer}`, Date.now() + FOCUS_MS)
+    } catch { /* ignore */ }
     appendNote({ kind: 'takeover', role: String(config.takeoverLabel.get() || 'Admin'), text })
   }
 }
@@ -6530,8 +6536,18 @@ export function apply(ctx, config) {
       const single = ownerQQOf(config)
       if (single) list.push({ type: 'private', id: single })
     }
-    // 群优先、好友在后：主人在群里聊着的时候，主动搭话先去群里，
-    // 别一跳过就跑去私聊他。两组各自洗牌，避免每次都是同一个目标。
+    // 群优先、好友在后；群之间按「热闹程度」排——最近十分钟有消息的群排前面，
+    // 都不热闹才随机，免得每次搭话都去同一个冷群（2026-10-26 主人：看哪个群热闹聚焦哪个）。
+    const activity = (gid) => {
+      try {
+        const f = chatFilePath(`group-${gid}`)
+        if (!existsSync(f)) return 0
+        const age = Date.now() - statSync(f).mtimeMs
+        return age < 10 * 60_000 ? 3 : age < 60 * 60_000 ? 2 : age < 6 * 3600_000 ? 1 : 0
+      } catch {
+        return 0
+      }
+    }
     const shuffle = (arr) => {
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
@@ -6541,8 +6557,11 @@ export function apply(ctx, config) {
       }
       return arr
     }
+    const groupsRanked = shuffle(list.filter((t) => t.type === 'group'))
+      .map((t) => ({ id: t.id, act: activity(t.id) }))
+      .sort((a, b) => b.act - a.act)
     return [
-      ...shuffle(list.filter((t) => t.type === 'group')),
+      ...groupsRanked.map((t) => ({ type: 'group', id: t.id })),
       ...shuffle(list.filter((t) => t.type === 'private')),
     ]
   }
@@ -7281,6 +7300,11 @@ export function apply(ctx, config) {
         // 主动输出（分享、表情包、拍一拍、主动搭话）由各自的出口用 inQuiet() 挡。
         const quietNow = inQuiet(data.group_id)
         if (quietNow && !atMe && !calledByName) return
+        // 被 @ 或点名之后也盯住这个窗口 5 分钟（跟搓一搓一样）：
+        // 主人问「@ 他之后聚焦聊天有没有在跑」——之前只有搓一搓和分享会设 focus，@ 完只回那一条。
+        if (atMe || calledByName) {
+          try { focusChat.set(`g:${data.group_id}`, Date.now() + FOCUS_MS) } catch { /* ignore */ }
+        }
         // 刚被搓完的 5 分钟里，这个群的消息都跟上；分享卡片/视频也算
         const focusedNow = Number(focusChat.get(`g:${data.group_id}`) || 0) > Date.now()
         if (!focusedNow && !forceForImage && !ownerShareAsk && !hasImageSeg && !foreignText && !ownerPoke && !calledByName) {
