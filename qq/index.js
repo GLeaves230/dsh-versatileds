@@ -8120,6 +8120,21 @@ export function apply(ctx, config) {
     // 合并转发（聊天记录）以前直接读成空 → 整条不回；这里把内容拉出来
     const forwardSeg = (data.message || []).find((s) => s && s.type === 'forward')
     const forwardText = forwardSeg ? await forwardToText(forwardSeg, ob) : ''
+    // 引用回复：被引用的那条如果是合并转发，也要套进去看内容
+    // （2026-10-26 主人：我回复引用的是聊天记录时，要能看到里面的内容）
+    let quotedForwardText = ''
+    if (!forwardSeg) {
+      const replySeg = (data.message || []).find((s) => s && s.type === 'reply')
+      const quotedId = replySeg?.data?.id || replySeg?.data?.message_id
+      if (quotedId) {
+        try {
+          const r = await ob.call('get_msg', { message_id: Number(quotedId) })
+          const quotedSegs = r?.data?.message || r?.message || []
+          const innerFwd = (Array.isArray(quotedSegs) ? quotedSegs : []).find((s) => s && s.type === 'forward')
+          if (innerFwd) quotedForwardText = await forwardToText(innerFwd, ob)
+        } catch { /* 拉不到就算了 */ }
+      }
+    }
     // 乱码先还原（UTF-8 被当 Latin-1 读的那种），还原不出来再按原文走
     const rawText = plainText(data.message)
     const fixedText = tryFixGarbled(rawText)
@@ -8129,6 +8144,7 @@ export function apply(ctx, config) {
     let text = forwardText
       ? (baseText ? `${baseText}\n${forwardText}` : forwardText)
       : baseText
+    if (quotedForwardText) text = text ? `${text}\n${quotedForwardText}` : quotedForwardText
     text = text
       || (imageFiles.length ? '[图片]' : '')
       || faceText
