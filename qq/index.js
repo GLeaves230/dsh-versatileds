@@ -1944,35 +1944,39 @@ function faceSegsToText(segs) {
 /**
  * 合并转发（聊天记录）转成可读文本：
  * forward 段的 data 里有时自带 content（内联节点），没有就拿 id 去 get_forward_msg 拉。
+ * 嵌套转发要一直往下钻（「套到底」），用 seen 防重复/死循环（2026-10-26 主人要求）。
  */
-async function forwardToText(seg, ob) {
+async function forwardToText(seg, ob, depth = 0, seen = null) {
   const data = seg?.data || {}
+  if (!seen) seen = new Set()
+  const id = String(data.id || data.message_id || '')
+  if (depth > 8) return '[转发层数太深]'
+  if (id && seen.has(id)) return '[这个转发已经拉过了]'
+  if (id) seen.add(id)
   let nodes = Array.isArray(data.content) ? data.content : []
-  if (!nodes.length && (data.id || data.message_id)) {
+  if (!nodes.length && id) {
     try {
-      const r = await ob.call('get_forward_msg', { id: String(data.id || data.message_id) })
+      const r = await ob.call('get_forward_msg', { id })
       nodes = r?.messages || r?.data || []
     } catch { /* 拉不到就空着 */ }
   }
   if (!Array.isArray(nodes) || !nodes.length) return '[合并转发的聊天记录（没拉到内容）]'
-  const depth = Number(seg?.data?.__depth || 0)
-  const lines = (await Promise.all(nodes.slice(0, 12).map(async (n) => {
+  const lines = (await Promise.all(nodes.slice(0, 20).map(async (n) => {
     const who = String(n.sender?.nickname || n.sender?.card || n.nickname || n.uin || '某人')
     const segs = n.message || n.content || []
     let body = plainText(segs)
     if (!body && Array.isArray(segs)) {
-      // 嵌套转发（聊天记录里又转发聊天记录）：再拉一层，最多 2 层，防死循环
+      // 嵌套转发（聊天记录里又转发聊天记录）：套到底，用 seen 防重复
       const inner = segs.find((s) => s && s.type === 'forward')
-      if (inner && depth < 2) {
-        inner.data = { ...(inner.data || {}), __depth: depth + 1 }
-        body = await forwardToText(inner, ob)
+      if (inner) {
+        body = await forwardToText(inner, ob, depth + 1, seen)
       } else if (segs.some((s) => s && s.type === 'image')) {
         body = '[图片]'
       }
     }
     return `${who}：${body || '[空]'}`
   }))).join('\n')
-  const more = nodes.length > 12 ? `\n…（还有 ${nodes.length - 12} 条）` : ''
+  const more = nodes.length > 20 ? `\n…（还有 ${nodes.length - 20} 条）` : ''
   return `[合并转发]\n${lines.join('\n')}${more}`
 }
 
