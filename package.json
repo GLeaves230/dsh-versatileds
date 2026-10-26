@@ -1,6 +1,6 @@
 {
   "name": "dsh-versatileds",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "多功能DS插件：B站小号代理 + QQ代理合体，左侧栏一个入口，B站/QQ 两模块分页；QQ 侧支持本地 GPT-SoVITS 语音（可一键部署）。仅供学习/个人使用，商用需取得所有版权方授权。",
   "type": "module",
   "main": "index.js",
