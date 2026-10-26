@@ -6926,8 +6926,7 @@ export function apply(ctx, config) {
    * 主动聊天状态里，每 2.5 分钟让模型自己看一次群气氛：最近几条是不是在聊正事。
    * 是正事就退出主动聊天（2026-10-26 主人选：不要关键词硬判，让模型主观判断）。
    */
-  function startTopicJudge() {
-    let stopped = false
+  function startTopicJudge() {    let stopped = false
     let busy = false
     const judge = async () => {
       if (stopped || busy) return
@@ -6967,6 +6966,30 @@ export function apply(ctx, config) {
       finally { busy = false }
     }
     const timer = setInterval(() => { judge().catch(() => {}) }, 150_000)
+    return () => { stopped = true; clearInterval(timer) }
+  }
+
+  /**
+   * GPT-SoVITS 会自己崩（跑久了/显存），每 60 秒看一眼，挂了就拉起来。
+   * 5 分钟内不重复重启，免得启动过程中被反复杀掉（2026-10-26：语音反复 fetch failed）。
+   */
+  function startGsvGuard() {
+    let stopped = false
+    let lastAt = 0
+    const tick = async () => {
+      if (stopped) return
+      try {
+        if (String(config.voiceBackend.get() || 'qq') !== 'gpt-sovits') return
+        if (gsvStatus(config).ok) return
+        if (Date.now() - lastAt < 5 * 60_000) return
+        lastAt = Date.now()
+        plog('info', '[dsh-versatileds] GPT-SoVITS 不可用，尝试重启')
+        await restartGsvApi(config, String(config.gsvVersion.get() || 'v4'))
+      } catch (err) {
+        plog('warn', '[dsh-versatileds] GPT-SoVITS 守护重启失败:', err?.message ?? err)
+      }
+    }
+    const timer = setInterval(() => { tick().catch(() => {}) }, 60_000)
     return () => { stopped = true; clearInterval(timer) }
   }
 
@@ -9039,6 +9062,7 @@ export function apply(ctx, config) {
       startBalanceWatch(),
       startTopicSummary(),
       startTopicJudge(),
+      startGsvGuard(),
     ].filter((stop) => typeof stop === 'function')
     if (!qqToolDisposer) qqToolDisposer = registerQqTool()
   }
