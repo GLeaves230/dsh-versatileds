@@ -18,6 +18,9 @@ const VERSION = (() => {
   }
 })()
 
+/** 当前版本 tag（硬编码，每次源码更新后一起改这里；更新自检拿它跟远端比）。 */
+const CURRENT_TAG = 'v0.3.9'
+
 /** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序；顺带带上版本号。 */
 function plog(level, ...args) {
   const t = new Date().toTimeString().slice(0, 8)
@@ -1343,6 +1346,33 @@ function runPsAsync(command, timeoutMs) {
     child.on('close', (code) => { clearTimeout(timer); resolve({ status: code, stdout: out, stderr: err }) })
     child.on('error', (e) => { clearTimeout(timer); resolve({ status: -2, stdout: out, stderr: String(e?.message ?? e) }) })
   })
+}
+
+
+/**
+ * 启动后异步自检：查 GitHub 最新 release tag（官方 API → gh-proxy 镜像），
+ * 和硬编码的 CURRENT_TAG 比，有新版本就提示用户更新。失败一律静默。
+ */
+async function checkUpdate() {
+  const api = 'https://api.github.com/repos/GLeaves230/dsh-versatileds/releases/latest'
+  const urls = [api, 'https://gh-proxy.com/' + api]
+  for (const u of urls) {
+    try {
+      const r = await runPsAsync(
+        `try { $r = Invoke-RestMethod -Uri '${u}' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 15; ` +
+        `if ($r.tag_name) { Write-Output $r.tag_name } } catch { }`,
+        25000,
+      )
+      const tag = String(r?.stdout || '').trim().split(/\s+/).pop() || ''
+      if (!tag) continue
+      if (tag !== CURRENT_TAG) {
+        plog('info', `[dsh-versatileds] 发现新版本 ${tag}（当前 ${CURRENT_TAG}），去 https://github.com/GLeaves230/dsh-versatileds/releases 看看`)
+      } else {
+        plog('info', `[dsh-versatileds] 已是最新版本 ${CURRENT_TAG}`)
+      }
+      return
+    } catch { /* 换下一个源 */ }
+  }
 }
 
 async function downloadNapcatPackage() {
@@ -4799,6 +4829,8 @@ export function apply(ctx, config) {
       }
     } catch { /* 目录不可写就跳过 */ }
   }, 0)
+  // 启动完成后（8 秒）异步查一下有没有新版本，别拖慢启动
+  setTimeout(() => { checkUpdate().catch(() => {}) }, 8000)
   // 重载会复用模块实例：上一轮的反思静默期要清掉，不然改完配置还在「反思中」
   quietState.clear()
   // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
