@@ -111,6 +111,7 @@ const GROUP_SYSTEM_PROMPT = [
   '技术上的事聊 DeepSeek 和 DSH 这一层就够；再往下第三方怎么接的不用展开。',
   '不编造人类经历（上班、吃饭、睡觉这些别编）。',
   '别把「主人」挂嘴边，对谁都按对方昵称叫；只有别人直接问「你主人是谁」，才说是主人号（配置里绑定的那个 QQ）那个人。',
+  '别人问「你主人是谁」「你谁家的」「你家里还有谁」时，要认主从关系：主人就是配置里 ownerQQ 绑定的那个人；家里是梁文峰团队没错，但团队不等于主人——别拿「我们梁文峰团队」顶替主人，也别只炫耀团队不认主人。可以炫耀家里，主次别弄反。',
   '别人之间在聊的事（词条、代码、别人的消息）不关你的事，别插嘴，更别替别人回答。',
   '别主动自我介绍，别说「被拉进来」「被介绍到群里」这种话。',
   '也别把前面别人问过的再答一遍。',
@@ -382,6 +383,19 @@ export const Config = Schema.object({
     .description('QQ 官方 AI 语音的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
   voiceChance: Schema.number().default(5).volatile()
     .description('闲聊时主动用语音回复的概率（0-100），0 表示只在被要求时才发语音；长回复不转语音'),
+  // ---- 唱歌（Seed-VC 翻唱；说话模型不变）----
+  singEnabled: Schema.boolean().default(true).volatile()
+    .description('允许唱歌：点歌时优先发曲库里的翻唱'),
+  singSearchEnabled: Schema.boolean().default(false).volatile()
+    .description('点歌没收录时自动去 B站 搜原唱、分离人声、渲染成它的声线（每首 2-4 分钟，默认关）'),
+  singStartSec: Schema.number().default(40).volatile()
+    .description('自动渲染时从原唱第几秒开始截（默认 40，通常能截到副歌）'),
+  singDurationSec: Schema.number().default(30).volatile()
+    .description('每首唱多长（秒），默认 30，建议 20-45'),
+  singPitch: Schema.number().default(0).volatile()
+    .description('唱歌移调（半音）：0 原调，正数更高更夹，负数更低沉'),
+  singStyle: Schema.string().default('原版').volatile()
+    .description('演唱风格：原版 / 轻柔 / 激昂 / 慢速（会写进唱歌时的语气提示）'),
   gsvApiUrl: Schema.string().default('http://127.0.0.1:9880').volatile()
     .description('GPT-SoVITS API 地址（api_v2.py，默认 9880 端口）'),
   gsvDir: Schema.string().default('').volatile()
@@ -1087,13 +1101,20 @@ function loadMemory() {
   }
 }
 
-/** 群聊里用的人设：去掉「称呼」「重要」两节（含主人 QQ 号和私密约定），其余照用。 */
+/** 群聊里用的人设：「重要」段去掉（私密约定）；「称呼」段保留但脱敏，把 QQ 号换成「主人号」，
+ *  让群里也能认主从关系、又不露号（2026-10-26 主人：它在群里不认主人了，只炫耀梁文峰团队）。 */
 function personaForGroup(text) {
   const src = String(text || '').trim()
   if (!src) return ''
   return src
     .split(/\n(?=##\s)/)
-    .filter((sec) => !/^##\s*(称呼|重要)\s*$/.test((sec.split('\n')[0] || '').trim()))
+    .map((sec) => {
+      const head = (sec.split('\n')[0] || '').trim()
+      if (/^##\s*重要\s*$/.test(head)) return ''
+      if (/^##\s*称呼\s*$/.test(head)) return sec.replace(/\d{5,12}/g, '主人号')
+      return sec
+    })
+    .filter(Boolean)
     .join('\n')
     .trim()
 }
@@ -2903,6 +2924,22 @@ function pickSongFor(text) {
   const hit = songs.find((s) => s.keys.some((k) => t.includes(k)))
   return hit && existsSync(hit.file) ? hit : null
 }
+
+/** 从「唱一首 XX」「来段《XX》」里抠歌名；抠不出就返回空，别拿整句去搜。 */
+function pickSongName(text) {
+  const t = String(text || '').trim()
+  if (!t) return ''
+  const q = t.match(/[《「『“"]([^》」』”"]{1,20})[》」』”"]/)
+  if (q) return q[1].trim()
+  const m = t.match(/(?:唱|来|点|放)(?:一)?(?:首|段|个)?\s*([^\s，,。！？!?~～]{2,15})/)
+  if (!m) return ''
+  const name = m[1].trim()
+  if (/^(歌|歌曲|一段|一下|个|点|什么|啥|吧|呗|啊|呀|的|这首|那首|试试|看看)$/.test(name)) return ''
+  return name
+}
+
+/** 自动渲染一次只跑一首，别几个人同时点歌把 GPU 排爆。 */
+let singJobBusy = false
 
 /**
  * 念之前把文本收拾成人话：
@@ -8397,9 +8434,9 @@ export function apply(ctx, config) {
         }
       }
       let reply = ''
-      // 点歌直唱：曲库里有的歌（目前《朋友的酒》）直接发提前做好的翻唱，不走 LLM（2026-10-26）
+      // 点歌直唱：曲库里有的歌直接发提前做好的翻唱，不走 LLM（2026-10-26）
       // 歌词是原唱人声转成它的音色再混伴奏，真旋律真词，不是念白。
-      if (!reply && isGroup) {
+      if (!reply && isGroup && config.singEnabled.get() !== false) {
         const song = pickSongFor(text)
         if (song) {
           try {
@@ -8421,6 +8458,41 @@ export function apply(ctx, config) {
           } catch (err) {
             plog('warn', '[dsh-versatileds] 翻唱发送失败:', err?.message ?? err)
           }
+        }
+        // 曲库没有：开了「自动搜歌渲染」就后台去 B站 搜原唱、渲染成它的声线，好了再发
+        const wanted = pickSongName(text)
+        if (wanted && config.singSearchEnabled.get() === true && !singJobBusy) {
+          singJobBusy = true
+          const gid = Number(data.group_id)
+          const script = join(versatiledsBase(), 'qq', 'sing.mjs')
+          const outName = 'auto-' + Date.now()
+          ;(async () => {
+            try {
+              const r = await runAsync('node', [
+                script, wanted, outName,
+                String(config.singStartSec.get() ?? 40),
+                String(config.singDurationSec.get() ?? 30),
+              ], 900000)
+              const amr = String(r.stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || ''
+              if (r.status === 0 && amr && existsSync(amr)) {
+                await ob.call('send_group_msg', {
+                  group_id: gid,
+                  message: [{ type: 'record', data: { file: `file:///${amr}` } }],
+                })
+                recordSelfSent(config, { kind: 'sent-voice', groupId: String(gid), text: `[语音/翻唱] ${wanted}` })
+                appendNote({ kind: 'group-auto', role: String(config.selfLabel.get() || 'DS'), from: String(sender), name: senderName, text, reply: `（翻唱）${wanted}` })
+                plog('info', `[dsh-versatileds] 自动渲染翻唱：${wanted}`)
+              } else {
+                plog('warn', `[dsh-versatileds] 自动渲染失败：${wanted}`, String(r.stderr || '').slice(-160))
+                await ob.sendGroup(gid, '这首我搜不到原唱，或者渲染失败了，换一首？').catch(() => {})
+              }
+            } catch (err) {
+              plog('warn', '[dsh-versatileds] 自动渲染异常:', err?.message ?? err)
+            } finally {
+              singJobBusy = false
+            }
+          })()
+          return
         }
       }
       const bvHit = text.match(/BV[0-9A-Za-z]{10}/)

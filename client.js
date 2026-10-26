@@ -1226,7 +1226,7 @@ window.__ModuleLoader__.load({
       if (/^poke/.test(field)) return 'poke'
       if (/^(rule|neighbor|quiet)/.test(field)) return 'group'
       if (/^videoShare/.test(field)) return 'share'
-      if (/^(voice|aiGroup)/.test(field)) return 'voice'
+      if (/^(voice|aiGroup|sing)/.test(field)) return 'voice'
       if (/^(image|sticker|live|shareCard)/.test(field)) return 'media'
       if (/^(proactive|focusChat|updateCheck)/.test(field)) return 'proactive'
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
@@ -1265,6 +1265,8 @@ window.__ModuleLoader__.load({
       ['imageVisionEnabled', '自动识图', '收到图时用 DSH 的多模态模型自己看，不再说看不到'],
       ['videoShareEnabled', '自动分享视频', '每隔一段时间，从刷过的 B站 视频里挑一条没分享过的发出去'],
       ['shareCardWatch', '打开分享卡片看内容', '别人发 B站 链接/小程序卡片时，顺着跳转点进去看标题、UP、简介、字幕、热评再回话；关掉就只按卡片标题接'],
+      ['singEnabled', '允许唱歌', '点歌时优先发曲库里的翻唱（朋友的酒/叹云兮/云原神之歌）'],
+      ['singSearchEnabled', '自动搜歌渲染', '曲库没有的歌：去 B站 搜原唱、分离人声、渲染成它的声线再发（每首 2-4 分钟，默认关）'],
       ['stickerEnabled', '表情包库', '收图时顺手收进表情库，群里按话题随机发'],
       ['stickerFavorEnabled', '收进 QQ 我的表情', '收到的图顺手加进账号收藏表情（NapCat add_custom_face）'],
       ['swearEnabled', '脏话与谐音', '群规没禁时可以偶尔带脏话、用谐音梗接'],
@@ -1307,6 +1309,9 @@ window.__ModuleLoader__.load({
       ['chatLogMaxKB', '单会话日志上限（KB）', '超了归档到 chat/old'],
       ['stickerChance', '群里发表情包概率（0-100）', '回完话后附一张的概率'],
       ['voiceChance', '主动发语音概率（0-100）', '闲聊时把这条文字换成语音的概率；0＝只在被要求时发，长回复仍走文字'],
+      ['singStartSec', '唱歌：从原唱第几秒开始截', '自动渲染时用，默认 40，通常能截到副歌'],
+      ['singDurationSec', '唱歌：每首唱多长（秒）', '默认 30，建议 20-45'],
+      ['singPitch', '唱歌：移调（半音）', '0 原调，正数更高更夹，负数更低'],
       ['stickerSendMinGapSec', '同群两次表情包最短间隔（秒）', ''],
       ['stickerMax', '表情包库最多保留张数', '超了删最旧的'],
       ['stickerResizeMaxPx', '发表情包缩到几像素', '默认 240，接近 QQ 表情尺寸；0 不缩'],
@@ -1337,6 +1342,7 @@ window.__ModuleLoader__.load({
       ['videoShareTarget', '分享视频的目标', '留空＝发主人私聊；*＝当前聚焦的 QQ 会话；也可以填群号或 QQ 号'],
       ['focusChatTarget', '聚焦聊天（手动指定）', '填群号或 QQ 号就只盯这一个会话：主动搭话不去别处、这个窗口的消息都跟上。留空＝按活跃度自动挑（大肥鱼自己的玩法，别的用户不用动）'],
       ['videoShareCardStyle', '分享样式', 'text＝封面图+标题+b23 短链（手机端样式）；link＝纯文本+标题+完整 bilibili.com 链接（电脑端样式）'],
+      ['singStyle', '唱歌：演唱风格', '原版 / 轻柔 / 激昂 / 慢速，会写进唱歌时的语气提示'],
       ['taskSessionName', 'DSH 会话名', '主人派活时新会话叫什么'],
       ['taskDefaultModel', '派活默认模型', 'flash 或 pro'],
       ['taskDefaultEffort', '派活默认强度', 'high / medium / low'],
