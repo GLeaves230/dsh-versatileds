@@ -4779,23 +4779,26 @@ export const name = 'qq-agent'
 export const inject = ['tools']
 
 export function apply(ctx, config) {
-  // 首次启动：没有人设文件就落一份模板，让人有个空可填
-  try {
-    if (ensurePersonaTemplate()) {
-      plog('info', '[dsh-versatileds] 已生成人设模板，去改成你自己的：' + personaPath())
-    }
-    // 记忆目录先建出来，AGENTS.md 里指向它的指引才不是死链
-    const memoryCreated = ensureMemoryScaffold()
-    if (memoryCreated.length) {
-      plog('info', '[dsh-versatileds] 已初始化记忆目录（新增 ' + memoryCreated.join('、') + '）：' + join(versatiledsBase(), 'memory'))
-    }
-    const agentsAction = ensureAgentsTemplate()
-    if (agentsAction === 'created') {
-      plog('info', '[dsh-versatileds] 已生成 AGENTS.md 模板（含记忆目录骨架）：' + join(dshHome(), 'AGENTS.md'))
-    } else if (agentsAction === 'upgraded') {
-      plog('info', '[dsh-versatileds] 已给旧 AGENTS.md 补上「记忆目录」一节：' + join(dshHome(), 'AGENTS.md'))
-    }
-  } catch { /* 目录不可写就跳过 */ }
+  // 首次启动初始化（人设模板、记忆目录、AGENTS 模板）放后台跑：
+  // 都是写文件/建目录，同步做会拖慢 DSH 启动；失败也不影响插件主流程。
+  setTimeout(() => {
+    try {
+      if (ensurePersonaTemplate()) {
+        plog('info', '[dsh-versatileds] 已生成人设模板，去改成你自己的：' + personaPath())
+      }
+      // 记忆目录先建出来，AGENTS.md 里指向它的指引才不是死链
+      const memoryCreated = ensureMemoryScaffold()
+      if (memoryCreated.length) {
+        plog('info', '[dsh-versatileds] 已初始化记忆目录（新增 ' + memoryCreated.join('、') + '）：' + join(versatiledsBase(), 'memory'))
+      }
+      const agentsAction = ensureAgentsTemplate()
+      if (agentsAction === 'created') {
+        plog('info', '[dsh-versatileds] 已生成 AGENTS.md 模板（含记忆目录骨架）：' + join(dshHome(), 'AGENTS.md'))
+      } else if (agentsAction === 'upgraded') {
+        plog('info', '[dsh-versatileds] 已给旧 AGENTS.md 补上「记忆目录」一节：' + join(dshHome(), 'AGENTS.md'))
+      }
+    } catch { /* 目录不可写就跳过 */ }
+  }, 0)
   // 重载会复用模块实例：上一轮的反思静默期要清掉，不然改完配置还在「反思中」
   quietState.clear()
   // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
