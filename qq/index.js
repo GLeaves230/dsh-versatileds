@@ -7084,7 +7084,7 @@ export function apply(ctx, config) {
    * 统一解除反思（2026-10-26 主人要求）：清状态 + 清计数 + 记一笔 + 群里说一声。
    * 到期、群友多次 @ 恢复，都走这里；跳过（skip）直接清倒计时，不走这里。
    */
-  async function endQuiet(key, reason = '') {
+  async function endQuiet(key, reason = '', opts = {}) {
     const k = String(key || '')
     if (!k) return false
     if (!quietState.has(k) && !quietKnock.has(k)) return false
@@ -7095,6 +7095,8 @@ export function apply(ctx, config) {
     quietKnock.delete(k)
     appendNote({ kind: 'quiet-end', role: 'DS', to: targetId, reply: `反思结束（${reason || '到期'}）` })
     plog('info', `[dsh-versatileds] 反思结束（${reason || '到期'}）：${isPrivate ? '私聊' : '群'} ${targetId}`)
+    // 主人直接叫醒的，就别再补一句「我回来了」——马上要回主人的话，多一句反而啰嗦
+    if (opts.silent) return true
     try {
       if (isPrivate) await ob.sendPrivate(targetId, '我回来了')
       else await ob.sendGroup(targetId, '我回来了，刚才安静了一会儿')
@@ -8132,8 +8134,12 @@ export function apply(ctx, config) {
       // 低余额时私聊也只回主人
       if (lowMode && owner && sender !== owner) return
       // 私聊也有自己的反思倒计时（2026-10-26 主人要求）：反思期只回主人明确让说话
-      if (inQuiet(`p:${sender}`) && !(Boolean(owner) && sender === owner
-        && /(继续|可以说话|说话吧|出来吧|好了|行了|醒醒|醒来)/.test(plainText(data.message)))) return
+      if (inQuiet(`p:${sender}`)) {
+        const ownerLetsTalk = Boolean(owner) && sender === owner
+          && /(继续|可以说话|说话吧|出来吧|好了|行了|醒醒|醒来)/.test(plainText(data.message))
+        if (ownerLetsTalk) await endQuiet(`p:${sender}`, '主人叫', { silent: true })
+        else return
+      }
     } else if (data.message_type === 'group') {
       if (!config.autoReplyEnabled.get()) return
       // 低余额时群里完全不说话
@@ -8242,6 +8248,12 @@ export function apply(ctx, config) {
           atMe || /(继续|可以说话|说话吧|出来吧|聊吧|说吧|恢复了|好了|行了|醒醒|醒来)/.test(plainText(data.message))
         )
         let quietNow = inQuiet(data.group_id)
+        if (quietNow && ownerBreakQuiet) {
+          // 主人 @ 它 / 明确让说话：直接把反思解除（静默解除，不补「我回来了」），走正常流程
+          // （2026-10-26 主人：聚焦到我时 → 查到没反思 → 走正常流程）
+          await endQuiet(`g:${data.group_id}`, '主人叫', { silent: true })
+          quietNow = false
+        }
         if (quietNow && !ownerBreakQuiet) {
           if (atMe) {
             const k = `g:${data.group_id}`
