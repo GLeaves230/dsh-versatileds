@@ -1,4 +1,4 @@
-# dsh-versatileds-plugin — 多功能DS插件
+# dsh-versatileds — 多功能DS插件
 
 <p align="center">
   <img src="./assets/cover.jpg" alt="大肥鱼 · 多功能DS插件" width="320">
@@ -26,7 +26,7 @@
 ## 目录
 
 ```
-dsh-versatileds-plugin/
+dsh-versatileds/
 ├── index.js            # 合并入口：Config = { bili, qq }，apply 调两个模块
 ├── client.js           # 浏览器半侧：左侧栏「多功能DS插件」+ 两个模块页
 ├── bili/index.js       # B站 模块入口（工具 + 配置）
@@ -145,7 +145,7 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 ```yaml
 # profile 的 cordis.patch.yml
 - id: versatileds
-  name: dsh-versatileds-plugin
+  name: dsh-versatileds
   config:
     bili: { ... }
     qq: { ... }
@@ -293,8 +293,8 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 
 ## 问题反馈
 
-- **GitHub Issues（推荐）**：https://github.com/GLeaves230/dsh-versatileds-plugin/issues
-- **PR / 讨论**：https://github.com/GLeaves230/dsh-versatileds-plugin/pulls
+- **GitHub Issues（推荐）**：https://github.com/GLeaves230/dsh-versatileds/issues
+- **PR / 讨论**：https://github.com/GLeaves230/dsh-versatileds/pulls
 - 反馈时请带上：DSH 版本、插件版本（当前 0.3.6）、出问题时控制台的报错、语音问题附 `/voice_deps` 的返回
 - 先在本文档「常见问题」里找一眼，能自己解决就不用等回复
 

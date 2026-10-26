@@ -5,7 +5,7 @@
 # config.bili = B站 模块，config.qq = QQ 模块，各自字段跟原来两个插件一样。
 - insert:
     - id: versatileds
-      name: dsh-versatileds-plugin
+      name: dsh-versatileds
       config:
         bili: {}
         qq: {}
