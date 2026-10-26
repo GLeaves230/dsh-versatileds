@@ -926,16 +926,16 @@ window.__ModuleLoader__.load({
           ),
           React.createElement('button', { type: 'button', onClick: add, disabled, style: { padding: '4px 10px', cursor: 'pointer' } }, '添加'),
         ),
-        quies.length
-          ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: 8 } },
-            React.createElement('div', { style: hintStyle }, '当前反思（禁言）倒计时'),
-            ...quies.map((q) => React.createElement('div', { key: q.key, style: rowStyle },
+        React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: 8 } },
+          React.createElement('div', { style: hintStyle }, '当前反思（禁言）倒计时'),
+          quies.length === 0
+            ? React.createElement('div', { style: hintStyle }, '当前没有反思中的会话')
+            : quies.map((q) => React.createElement('div', { key: q.key, style: rowStyle },
               React.createElement('span', { style: labelStyle }, `${q.kind === 'private' ? '私聊' : '群'} ${q.id}`),
               React.createElement('span', { style: cdStyle }, `剩 ${Math.ceil(Number(q.left))} 秒`),
               React.createElement('button', { type: 'button', onClick: () => clearQuiet(q.key), style: { padding: '2px 8px', cursor: 'pointer' } }, '解除'),
             )),
-          )
-          : null,
+        ),
         gids.length === 0
           ? React.createElement('div', { style: hintStyle }, '还没有群级设置。添加群号后可以给这个群单独设免打扰时段（全局免打扰另算，两边取交集）。')
           : null,
