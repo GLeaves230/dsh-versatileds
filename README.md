@@ -347,4 +347,4 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 >
 > **即便获得完整商用授权，也请尽量奉行 DSH 的即插即用、开放公开的插件精神。**
 
-完整条款见 [`LICENSE.txt`](./LICENSE.txt)。
+完整条款见 [`LICENSE-GLeaves.txt`](./LICENSE-GLeaves.txt)。

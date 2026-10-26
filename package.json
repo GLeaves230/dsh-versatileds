@@ -13,7 +13,7 @@
     "vendor",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE.txt",
+    "LICENSE-GLeaves.txt",
     "assets"
   ],
   "exports": {
@@ -36,7 +36,7 @@
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/schemastery": "*"
   },
-  "license": "SEE LICENSE IN LICENSE.txt",
+  "license": "SEE LICENSE IN LICENSE-GLeaves.txt",
   "author": "黑木钟 - GLeaves",
   "icon": "assets/icon.jpg"
 }

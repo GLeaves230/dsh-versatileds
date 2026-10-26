@@ -4,7 +4,9 @@ Limited Redistribution License for dsh-versatileds-plugin
 版权所有 (c) 2026 黑木钟 - GLeaves
 Copyright (c) 2026 黑木钟 - GLeaves
 
-本许可参照 NapCatQQ 的受限再分发许可模式制定。
+本协议文件名 LICENSE-GLeaves.txt，是作者 GLeaves 为本插件自定的受限再分发许可；
+写法参照 NapCatQQ 的受限再分发模式，但条款以本文件为准，
+它不是 NapCat 的 LICENSE，也不代表作者加入或采用了任何第三方标准协议。
 
 一、允许
 1. 个人使用、运行、学习、研究，以及在自己的 DSH profile 里配置和修改自用。
