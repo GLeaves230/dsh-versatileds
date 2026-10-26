@@ -129,6 +129,7 @@ const GROUP_SYSTEM_PROMPT = [
   '群里不止你一条「肥鱼」，还有隔壁家的同类。接话前先自己判断主次：这句到底是在叫你，还是在说别人？被 @、被点名「大肥鱼」「本鲸」「笨鱼」、或者明显接着你上一句在说 → 是在叫你。碰到「另一条」「另一个」「那条」这种含糊指代，别只盯着那个词，先回到最近几轮对话看当时在聊什么：刚才在说同类（隔壁家的肥鱼、别的 AI、谁是谁）→ 多半指另一个同类，不是你，别抢着应；刚才在说记录、消息、群、视频这类东西 → 多半指那类东西，按内容正常聊。从最近对话的对象和话题推主次，实在推不出来就不接，或者直接问一句「啥」。别靠词表硬套。',
   '有人转发视频或 B站 卡片时，按你实际看到的内容说（标题、简介、字幕）；没看到就说没看，别拿标题脑补成别的视频，也别把别的事安到这上面。',
   '别人说的话没理解透时：先把那句看完，挑一个最可能的理解接着往下说（猜错也比干问一句强）；只有连着几轮都拼不上才问，问的时候把你猜的版本带上，别光甩「啥意思」「你说哪个」。',
+  '有人把一段话贴出来、开头带着「@某人：」时，那多半是引用或转发别人的原话（歌词、台词、题目、公告这类），原话本身就是要给你看的：别当成他在跟那个人说话，也别回「没看到词」「你没发」；看完内容直接顺着接，实在拿不准引用的是谁，就照原话内容接（2026-10-26：群友贴了整段歌词让它唱，它连说三次「词没发」，还把人家的「这个就是歌词」听成歌名）。',
   '群里聊到视频、直播、新闻、新梗时，只有你真看过（拿到视频详情、字幕或评论）或者真查到了，才能说「刚刷到」「刚看了」；没看过就直说没看/不清楚，或者先问「啥梗」，不许编来源、编数字。',
   '有人生病、受伤、难受（说自己在打吊针、住院、摔了、疼得睡不着）时，先说句人话关心一下，一两句就够；别只甩个表情包、别当没看见、更别拿这个开玩笑（2026-10-25：群友说肩膀拉伤在打吊针，它只发了个表情包）。',
   '有人问「这个网站/链接安不安全」「是不是钓鱼网站」「能不能填账号」时：别扯别的话题、别用「神了」这类话敷衍；先把链接域名念出来表个态（看着像不像正规站、有没有明显广告劫持），拿不准就说「我没把握，别在上面填密码和手机号」——这种问题答错比不答危险（2026-10-25：群友问 dev-cpp 是不是钓鱼站，它回了句「神了神了 你也在说哪个神了」）。',
@@ -2848,9 +2849,12 @@ async function pitchVoice(wavPath, semitones) {
  */
 async function trimVoiceSilence(wavPath) {
   const out = wavPath.replace(/\.wav$/i, '.trim.wav')
+  // 只剪开头和结尾的静音，中间的停顿要留着。
+  // 2026-10-26 踩坑：原来用 stop_periods=-1，会把第一个停顿之后的内容全剪掉——
+  // 12.9 秒的语音只剩 1.45 秒，群里听到的就是「只出来最后一句」。改成剪首尾（areverse 两边各剪一次）。
   const args = [
     '-y', '-loglevel', 'error', '-i', wavPath,
-    '-af', 'silenceremove=start_periods=1:start_silence=0.05:start_threshold=-45dB:stop_periods=-1:stop_silence=0.3:stop_threshold=-45dB',
+    '-af', 'silenceremove=start_periods=1:start_silence=0.05:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_silence=0.05:start_threshold=-45dB,areverse',
     out,
   ]
   for (const exe of ['ffmpeg', ...bundledFfmpegCandidates()]) {
@@ -2860,6 +2864,21 @@ async function trimVoiceSilence(wavPath) {
       } catch { /* 用原文件 */ }
     }
   }
+  return wavPath
+}
+
+/**
+ * 发给 QQ 的语音必须转成 AMR：WAV 发出去客户端显示时长但播不出声（群友反馈「语音听不了」）。
+ * 用 bundled ffmpeg 转 8000Hz 单声道 12.2k AMR；转码失败就退回 WAV，至少别整条哑掉。
+ */
+async function toAmrVoice(wavPath) {
+  try {
+    const amr = wavPath.replace(/\.wav$/i, '.amr')
+    if (existsSync(amr) && statSync(amr).size > 1000) return amr
+    const ff = bundledFfmpegCandidates().find((p) => existsSync(p)) || 'ffmpeg'
+    const r = await runAsync(ff, ['-y', '-loglevel', 'error', '-i', wavPath, '-ar', '8000', '-ac', '1', '-c:a', 'libopencore_amrnb', '-b:a', '12.2k', amr], 30000)
+    if (r.status === 0 && existsSync(amr) && statSync(amr).size > 1000) return amr
+  } catch { /* 转码失败就退回 WAV */ }
   return wavPath
 }
 
@@ -8527,9 +8546,10 @@ export function apply(ctx, config) {
               try {
                 if (useGsv) {
                   const wav = await gsvSynthesize(voiceText, config)
+                  const sendFile = await toAmrVoice(wav)
                   await ob.call(isGroup ? 'send_group_msg' : 'send_private_msg', {
                     ...(isGroup ? { group_id: Number(data.group_id) } : { user_id: Number(sender) }),
-                    message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+                    message: [{ type: 'record', data: { file: `file:///${sendFile}` } }],
                   })
                 } else {
                   await ob.call('send_group_ai_record', {
@@ -9005,12 +9025,13 @@ export function apply(ctx, config) {
             const useGsv = backend === 'gpt-sovits' && gsvStatus(config).ok
             if (useGsv) {
               const wav = await gsvSynthesize(voiceText, config)
+              const sendFile = await toAmrVoice(wav)
               const sent = await ob.call('send_group_msg', {
                 group_id: Number(gid),
-                message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+                message: [{ type: 'record', data: { file: `file:///${sendFile}` } }],
               })
               recordSelfSent(config, { kind: 'sent-voice', groupId: gid, text: `[语音/gpt-sovits] ${voiceText}` })
-              return JSON.stringify({ 动作: 'voice', 方案: 'gpt-sovits', 已发送: sent, 音频: wav }, null, 2)
+              return JSON.stringify({ 动作: 'voice', 方案: 'gpt-sovits', 已发送: sent, 音频: sendFile }, null, 2)
             }
             const vr = await ob.call('send_group_ai_record', { character, text: voiceText, group_id: Number(gid) })
             // 工具发的语音也要进同一套日志（发送登记 + chat 流水，role=DS）
