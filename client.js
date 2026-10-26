@@ -880,6 +880,23 @@ window.__ModuleLoader__.load({
         if (f) return `好友 ${f.name}`
         return String(id)
       }
+      // 当前反思（禁言）倒计时：按会话一条条列出来，能单独解除（2026-10-26 主人要求 UI 层）
+      const [quies, setQuies] = React.useState([])
+      React.useEffect(() => {
+        let alive = true
+        const load = () => fetch(`${QQ_STATUS_URL}/cooldowns`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (alive) setQuies(Array.isArray(d.quies) ? d.quies : []) })
+          .catch(() => {})
+        load()
+        const t = setInterval(load, 5000)
+        return () => { alive = false; clearInterval(t) }
+      }, [])
+      const clearQuiet = (key) => {
+        fetch(`${QQ_STATUS_URL}/skip?action=quiet&key=${encodeURIComponent(key)}`, { method: 'POST' })
+          .then(() => setQuies((q) => q.filter((x) => x.key !== key)))
+          .catch(() => {})
+      }
       const gids = Object.keys(list)
       const save = (next) => form.set('groupProfiles', JSON.stringify(next))
       const update = (gid, patch) => save({ ...list, [gid]: { ...(list[gid] || {}), ...patch } })
@@ -909,6 +926,16 @@ window.__ModuleLoader__.load({
           ),
           React.createElement('button', { type: 'button', onClick: add, disabled, style: { padding: '4px 10px', cursor: 'pointer' } }, '添加'),
         ),
+        quies.length
+          ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: 8 } },
+            React.createElement('div', { style: hintStyle }, '当前反思（禁言）倒计时'),
+            ...quies.map((q) => React.createElement('div', { key: q.key, style: rowStyle },
+              React.createElement('span', { style: labelStyle }, `${q.kind === 'private' ? '私聊' : '群'} ${q.id}`),
+              React.createElement('span', { style: cdStyle }, `剩 ${Math.ceil(Number(q.left))} 秒`),
+              React.createElement('button', { type: 'button', onClick: () => clearQuiet(q.key), style: { padding: '2px 8px', cursor: 'pointer' } }, '解除'),
+            )),
+          )
+          : null,
         gids.length === 0
           ? React.createElement('div', { style: hintStyle }, '还没有群级设置。添加群号后可以给这个群单独设免打扰时段（全局免打扰另算，两边取交集）。')
           : null,

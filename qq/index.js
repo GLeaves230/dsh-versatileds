@@ -3747,6 +3747,15 @@ function startStatusServer(config, napcat = null) {
           }
           return Math.max(0, left)
         })(),
+        // 每个会话的反思倒计时（群 g: / 私聊 p:），UI 里一条一条列出来、能单独解除（2026-10-26）
+        quies: [...quietState.entries()]
+          .map(([k, until]) => ({
+            key: String(k),
+            kind: String(k).startsWith('p:') ? 'private' : 'group',
+            id: String(k).replace(/^[gp]:/, ''),
+            left: Math.max(0, Math.ceil((Number(until) - Date.now()) / 1000)),
+          }))
+          .filter((q) => q.left > 0),
         // 搓一搓：最近一次回搓之后还要等多久才能再回搓（同一人按 pokeGapSec 算）
         poke: leftOf(
           Math.max(0, ...Array.from(pokeClock.byUser.values())),
@@ -3760,7 +3769,14 @@ function startStatusServer(config, napcat = null) {
     }
     if (url.pathname === '/skip') {
       const action = url.searchParams.get('action')
-      if (action === 'proactive') {
+      if (action === 'quiet') {
+        // 解除反思：传 key 就只解这一条，不传就全清（2026-10-26）
+        const key = String(url.searchParams.get('key') || '')
+        if (key) quietState.delete(key)
+        else quietState.clear()
+        saveQuietState()
+        quietKnock.clear()
+      } else if (action === 'proactive') {
         const state = loadProactiveState()
         state.lastAt = 0
         state.nextAt = 0
