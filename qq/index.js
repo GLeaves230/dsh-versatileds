@@ -3272,6 +3272,26 @@ const napcatControl = { start: null, alive: null, stop: null }
 /** 主动退出登录：置 true 后不再自动拉起 NapCat，WS 断了也不再自动重连；点「启动登录服务」才清掉。 */
 let napcatLoggedOut = false
 
+/** 退出登录标志**落盘**：以前只存内存，热重载/重启后变回 false，插件又把 NapCat 拉起来了
+ *  （2026-10-27 主人：退出登录 → 刷新页面 → 又显示已登录）。 */
+function napcatLoggedOutPath() {
+  return join(versatiledsBase(), 'qq', 'napcat-logged-out.json')
+}
+function setNapcatLoggedOut(v) {
+  napcatLoggedOut = Boolean(v)
+  try {
+    writeFileSync(napcatLoggedOutPath(), JSON.stringify({ loggedOut: napcatLoggedOut, at: Date.now() }), 'utf8')
+  } catch { /* ignore */ }
+}
+function loadNapcatLoggedOut() {
+  try {
+    const d = JSON.parse(readFileSync(napcatLoggedOutPath(), 'utf8'))
+    napcatLoggedOut = d?.loggedOut === true
+  } catch {
+    napcatLoggedOut = false
+  }
+}
+
 /** WS 控制：startAutoReply 里挂上 rearm，退出登录后进程被杀、socket 自然关闭就够了。 */
 const wsControl = { rearm: null }
 
@@ -3634,7 +3654,7 @@ async function taskkillTree(pid, elevated) {
 async function logoutNapCat(config) {
   const pids = await napcatPidCandidates(config)
   if (!pids.length) {
-    napcatLoggedOut = true
+    setNapcatLoggedOut(true)
     return { ok: false, error: '没找到 NapCat 进程（可能本来就没登录）', pids }
   }
   const attempts = []
@@ -3651,7 +3671,12 @@ async function logoutNapCat(config) {
     if (!pids.some((pid) => isProcessAlive(pid))) { alive = false; break }
   }
   napcatPidCache = { pid: 0, at: 0 }
-  napcatLoggedOut = true
+  setNapcatLoggedOut(true)
+  // 守护进程也要杀：NapCatWinBootMain 会在 QQ 被杀后把 QQ 重新拉起来，
+  // 之前只杀端口持有者，退出登录几秒后又被它拉起来（2026-10-27 主人：退出后刷新又已登录）
+  try {
+    await runAsync('taskkill', ['/F', '/IM', 'NapCatWinBootMain.exe'], 5000)
+  } catch { /* 没有这个进程就算了 */ }
   try {
     appendFileSync(join(versatiledsBase(), 'qq', 'napcat_exit.log'),
       `- ${new Date().toLocaleString('zh-CN', { hour12: false })} 主人点了退出登录：`
@@ -3962,18 +3987,22 @@ function startStatusServer(config, napcat = null) {
       let qrAt = 0
       if (hasQr) { try { qrAt = statSync(qrFile).mtimeMs } catch { /* ignore */ } }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      // 已经点过「退出登录」时，即使 NapCat 进程还活着（被守护进程拉起来了），
+      // 也别在页面上显示「已登录」——以退出标志为准（2026-10-27 主人：退出后刷新又已登录）
+      const loggedInShown = loggedIn && !napcatLoggedOut
       res.end(JSON.stringify({
-        loggedIn,
+        loggedIn: loggedInShown,
         loggedOut: napcatLoggedOut,
         // 退出登录要杀的进程：设置页顺手显示出来，出问题时不用再翻日志
-        pid: loggedIn ? await resolveNapcatPid() : 0,
+        pid: loggedInShown ? await resolveNapcatPid() : 0,
         hasQr,
         qrAt,
         pkgReady: napcatInstalled(napcatRoot(config)),
         pkgBusy: napcatPkg.busy,
         pkgError: napcatPkg.error,
         dir: join(napcatRoot(config), 'napcat'),
-        phase: loggedIn ? 'ready' : (hasQr ? 'waiting_qrcode' : 'offline'),
+        // phase 也要用掩码后的值：不然顶部会显示「已登录」、下面又写「已退出登录」（2026-10-27 主人截图）
+        phase: loggedInShown ? 'ready' : (hasQr ? 'waiting_qrcode' : 'offline'),
       }))
       return
     }
@@ -4120,6 +4149,10 @@ function startStatusServer(config, napcat = null) {
         }
         try {
           const payload = JSON.parse(body || '{}')
+          // 总开关关掉 = 完全禁言：连设置页「测试语音」都不许发（2026-10-27 主人要求）
+          if (!config.autoReplyEnabled.get()) {
+            throw new Error('QQ 模块已关闭（总开关），不会发任何消息')
+          }
           const target = payload.target === 'group' ? 'group' : 'private'
           const text = prepareVoiceText(payload.text)
           if (!text) throw new Error('先写要念的文本')
@@ -5305,6 +5338,8 @@ export function apply(ctx, config) {
   // 重载后保留反思静默期：quiet.json 里落盘，热重载/重启都不该把「被嫌吵」后的安静弄丢
   // （2026-10-26 主人发现：热重载后它又在反思期里接话。以前这里 clear() 就是原因）
   loadQuietState()
+  // 退出登录标志也从磁盘读回来：重载/重启后不能把「已退出」忘掉（2026-10-27）
+  loadNapcatLoggedOut()
   // 笔记镜像后台灌一次（读文件在插件进程里会卡，所以不 await、失败就算了）
   initNotesMem().catch(() => {})
   // 重载会复用模块实例，上一轮的退出锁必须复位，否则重载后一条消息都不处理
@@ -6962,8 +6997,12 @@ export function apply(ctx, config) {
   // 启动/登录/工具调用前先确保 NapCat 包在（npm 版不自带 118MB 大包，缺了就现下最新的）
   await ensureNapcatPackage(config).catch(() => {})
     if (await napcatAlive()) {
+      // 主人点过「退出登录」：即使 NapCat 进程还活着，也**不要自动恢复连接**——
+      // 以前这里会无条件清标志 + rearm，等于退出后又自己连回去了（2026-10-27 主人要求关掉）。
+      // 只有 force（设置页点「登录」）才恢复；点登录时如果已经登录着，这里会直接检测到并接上。
       if (napcatLoggedOut) {
-        napcatLoggedOut = false
+        if (!force) return true
+        setNapcatLoggedOut(false)
         try { wsControl.rearm?.() } catch { /* ignore */ }
       }
       return true
@@ -7001,7 +7040,7 @@ export function apply(ctx, config) {
           plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
           // 退出登录时 WS 已经收手了，这里让它重新连上
           const wasLoggedOut = napcatLoggedOut
-          napcatLoggedOut = false
+          setNapcatLoggedOut(false)
           if (wasLoggedOut) { try { wsControl.rearm?.() } catch { /* ignore */ } }
           return true
         }
