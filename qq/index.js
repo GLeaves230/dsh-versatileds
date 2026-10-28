@@ -7912,6 +7912,19 @@ async function syncGroupRules(force = false) {
       }
     } catch { /* 清不掉也别挡住登录 */ }
   }
+    // 正在等扫码：二维码还新鲜（3 分钟内）就别重启，否则会反复拉起新的 QQ 进程
+    // （2026-10-29 Win10 实测：未登录时 3000 永远不通，保活每 3-4 分钟重启一次，QQ 进程堆到 8 个）
+    if (!force) {
+      try {
+        const qrPath = napcatQrPath(config)
+        if (existsSync(qrPath)) {
+          const age = Date.now() - statSync(qrPath).mtimeMs
+          if (age >= 0 && age < 3 * 60_000) {
+            return true // 认为「已经拉起，正在等扫码」
+          }
+        }
+      } catch { /* ignore */ }
+    }
     if (await napcatAlive()) {
       // 主人点过「退出登录」：即使 NapCat 进程还活着，也**不要自动恢复连接**——
       // 以前这里会无条件清标志 + rearm，等于退出后又自己连回去了（2026-10-27 主人要求关掉）。
