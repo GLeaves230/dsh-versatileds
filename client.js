@@ -851,6 +851,54 @@ window.__ModuleLoader__.load({
       liveFrame: '直播抓帧',
     }
 
+    /** 账号选择：通用设置 / 自动选择当前号 / 历史登录过的号（2026-10-28） */
+    function AccountPickerRow({ onChanged }) {
+      const [info, setInfo] = React.useState(null)
+      const [saving, setSaving] = React.useState(false)
+      const load = () => {
+        fetch(`${QQ_STATUS_URL}/accounts`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then(setInfo)
+          .catch(() => setInfo(null))
+      }
+      React.useEffect(() => { load() }, [])
+      const save = (view) => {
+        setSaving(true)
+        fetch(`${QQ_STATUS_URL}/account-view`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ view }),
+        })
+          .then(() => { load(); if (onChanged) onChanged() })
+          .catch(() => {})
+          .finally(() => setSaving(false))
+      }
+      const view = (info && info.view) || 'auto'
+      const accounts = (info && info.accounts) || []
+      return React.createElement('div', { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, '账号选择'),
+        React.createElement('select', {
+          value: view,
+          disabled: saving,
+          onChange: (e) => save(e.target.value),
+          style: {
+            padding: '4px 8px',
+            borderRadius: '6px',
+            background: 'transparent',
+            color: 'inherit',
+            border: '1px solid rgba(128,128,128,0.3)',
+            fontSize: '13px',
+            minWidth: '240px',
+          },
+        },
+        React.createElement('option', { value: 'normal' }, '通用设置（共享）'),
+        React.createElement('option', { value: 'auto' }, `自动选择当前号${info && info.current ? `（${info.current}）` : ''}`),
+        ...accounts.map((id) => React.createElement('option', { key: id, value: id }, `QQ ${id}`)),
+        ),
+        React.createElement('span', { style: hintStyle }, '选择要看/改哪个账号的数据；「自动」跟着当前登录号，「通用」是共享的那份'),
+      )
+    }
+
     /** 账号状态：QQ 与 B站 各一行，未登录直说；B站顺带显示等级/经验（2026-10-28） */
     function AccountStatusPanel() {
       const [qq, setQq] = React.useState(null)
@@ -2096,6 +2144,7 @@ window.__ModuleLoader__.load({
           ),
           React.createElement(
             'div',
+            React.createElement(AccountPickerRow, { key: 'account-picker', onChanged: () => loadPersona() }),
             { key: 'persona', style: rowStyle },
             React.createElement('span', { style: labelStyle }, '人设文件'),
             React.createElement('button', {

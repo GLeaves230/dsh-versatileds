@@ -490,6 +490,8 @@ export const Config = Schema.object({
 
   isolateHostQq: Schema.boolean().default(false).volatile()
     .description('A 前后端记忆隔离：打开后 DS 侧（DSH 会话）与 QQ 侧（大肥鱼）各用各的记忆，不互相读'),
+  accountView: Schema.string().default('auto').volatile()
+    .description('设置页查看/编辑哪个账号的数据：auto=当前登录号，normal=通用设置，或填一个历史 QQ 号'),
   isolateAccountMemory: Schema.boolean().default(false).volatile()
     .description('账号记忆隔离：打开后不同 QQ 号的人设/记忆/笔记各用各的（配合「前后端记忆隔离」决定目录层级）'),
   isolateGroupPrivate: Schema.boolean().default(false).volatile()
@@ -1102,7 +1104,8 @@ function qqDataDir() {
     acctIso = qqConfigRef?.isolateAccountMemory?.get?.() === true
   } catch { /* ignore */ }
   // 已退出登录：即使之前记着号，也回退到共享目录（2026-10-28 主人确认）
-  if (hostIso && acctIso && loginQqCache && !napcatLoggedOut) return join(versatiledsBase(), 'qq', loginQqCache)
+  const acct = effectiveAccount()
+  if (hostIso && acctIso && acct) return join(versatiledsBase(), 'qq', acct)
   if (hostIso) return join(versatiledsBase(), 'qq', 'normal')
   return join(versatiledsBase(), 'normal')
 }
@@ -1276,9 +1279,19 @@ function disableImQqbotEntry() {
 }
 
 /** 账号数据目录：qq/<QQ号>/（一个账号一个目录，2026-10-28 主人要求）。没探测到账号时退回 qq/ 根。 */
+/** 设置页当前操作的账号：auto 跟登录号，normal 表示通用，其余是历史号（2026-10-28） */
+function effectiveAccount() {
+  let view = 'auto'
+  try { view = String(qqConfigRef?.accountView?.get?.() || 'auto').trim() || 'auto' } catch { /* ignore */ }
+  if (view === 'auto') return loginQqCache
+  if (view === 'normal') return ''
+  return view
+}
+
 function qqAccountDir() {
   const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, loginQqCache) : base
+  const acct = effectiveAccount()
+  return acct ? join(base, acct) : base
 }
 
 function qqStatePath(name, ext = 'json') {
@@ -4380,6 +4393,43 @@ function startStatusServer(config, napcat = null) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ path: p, exists, chars }))
+      return
+    }
+    if (url.pathname === '/accounts') {
+      // 账号选择页用：当前号、view、历史账号（扫描 qq/*/ 目录，2026-10-28）
+      let accounts = []
+      try {
+        for (const ent of readdirSync(join(versatiledsBase(), 'qq'), { withFileTypes: true })) {
+          if (!ent.isDirectory()) continue
+          if (!/^\d{5,12}$/.test(ent.name)) continue
+          accounts.push(ent.name)
+        }
+      } catch { /* ignore */ }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({
+        current: loginQqCache || '',
+        view: String(config.accountView.get() || 'auto'),
+        accounts: accounts.sort(),
+        normalExists: existsSync(join(versatiledsBase(), 'normal', 'persona.md')) || existsSync(join(versatiledsBase(), 'qq', 'normal', 'persona.md')),
+        dataDir: qqDataDir(),
+      }))
+      return
+    }
+    if (url.pathname === '/account-view' && req.method === 'POST') {
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        try {
+          const j = JSON.parse(body || '{}')
+          const view = String(j.view || 'auto')
+          config.accountView = view
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify({ ok: true, view, dataDir: qqDataDir() }))
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false }))
+        }
+      })
       return
     }
     if (url.pathname === '/persona') {
