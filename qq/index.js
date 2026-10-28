@@ -1207,6 +1207,23 @@ function ensureImQqbotEntry() {
   }
 }
 
+/** 确保 profile 的 dsh.profile.bundles 里有官方插件（bundle 不挂载的话裸 entry 加载不了）。 */
+function ensureQqbotBundle() {
+  try {
+    const p = join(dshHome(), 'profiles', 'web', 'package.json')
+    if (!existsSync(p)) return 'no-package'
+    const j = JSON.parse(readFileSync(p, 'utf8'))
+    const b = j?.dsh?.profile?.bundles
+    if (!Array.isArray(b)) return 'no-bundles'
+    if (b.includes('@tencent-connect/dsh-qqbot')) return 'already'
+    b.push('@tencent-connect/dsh-qqbot')
+    writeFileSync(p, JSON.stringify(j, null, 2), 'utf8')
+    return 'added'
+  } catch {
+    return 'error'
+  }
+}
+
 /** NapCat 模式下禁用官方插件 im-qqbot（避免双通道同时在线）。 */
 function disableImQqbotEntry() {
   try {
@@ -9958,7 +9975,9 @@ export function apply(ctx, config) {
         await runAsync('cmd', ['/c', `cd /d "${pdir}" && pnpm add @tencent-connect/dsh-qqbot@latest --registry=https://registry.npmjs.org`], 300000)
         plog('info', '[dsh-versatileds] 官方 QQ 插件安装完成，注入 vds 补丁…')
         ensureQqbotPatch()
-        // 自动启用：确保 im-qqbot entry 存在且没被禁用（写配置会触发热更新加载）
+        // 确保 bundle 挂载 + entry 启用（bundle 不挂载的话裸 entry 加载不了）
+        const bst = ensureQqbotBundle()
+        plog('info', `[dsh-versatileds] bundle 挂载：${bst}`)
         const st = ensureImQqbotEntry()
         plog('info', `[dsh-versatileds] 已处理 im-qqbot 启用状态：${st}`)
       } catch (err) {
@@ -9969,9 +9988,9 @@ export function apply(ctx, config) {
     // 已装：检查注入（ensureQqbotPatch 内部幂等），并确保没被禁用
     plog('info', `[dsh-versatileds] QQ 通道=官方模式：依赖已装（${qqbotDir}），检查注入…`)
     ensureQqbotPatch()
+    const bst = ensureQqbotBundle()
     const entryState = ensureImQqbotEntry()
-    plog('info', `[dsh-versatileds] QQ 通道=官方模式：依赖齐全，vds 注入已确认（im-qqbot ${entryState}）`)
-    plog('info', '[dsh-versatileds] 提示：DSH 不会热加载外部配置改动——官方插件开关请重启 DSH 自动配置（或先到「插件」页手动确认一下开关）')
+    plog('info', `[dsh-versatileds] QQ 通道=官方模式：依赖齐全，vds 注入已确认（bundle ${bst}，im-qqbot ${entryState}）`)
   }
 
   /** NapCat 模式：禁用官方插件，避免两个通道同时在线（2026-10-28 主人要求互斥）。 */
@@ -9985,9 +10004,6 @@ export function apply(ctx, config) {
     plog('info', `[dsh-versatileds] NapCat 状态：${nap ? '在线/已拉起' : '未启动（上次退出登录或自动拉起关闭）'}`)
     const st = disableImQqbotEntry()
     plog('info', `[dsh-versatileds] im-qqbot：${st === 'disabled' ? '已禁用官方插件' : st === 'already' ? '已是禁用状态' : st === 'absent' ? '没有这个 entry' : st}`)
-    if (st === 'disabled') {
-      plog('info', '[dsh-versatileds] 提示：DSH 不会热加载外部配置改动——官方插件开关请重启 DSH 自动配置（或先到「插件」页手动确认一下开关）')
-    }
   }
 
   // 通道切换监听：qqChannel 是 volatile（改值不重跑 apply），轮询发现变化后执行对应逻辑
