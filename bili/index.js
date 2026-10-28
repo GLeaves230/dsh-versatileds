@@ -244,12 +244,34 @@ function clearAutoLastRun() {
 }
 
 /** 给设置页轮询冷却状态用的小接口，只监听本机。 */
-function startStatusServer(guard, config) {
-  const server = http.createServer((req, res) => {
+function startStatusServer(guard, config, biliClient) {
+  const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
     const url = new URL(req.url || '/', 'http://127.0.0.1')
+    if (url.pathname === '/account') {
+      // B站 账号状态（设置页「账号状态」用，走 lib 的 me()，2026-10-28）
+      let loggedIn = false
+      let uid = ''
+      let name = ''
+      try {
+        const nav = await biliClient.me()
+        loggedIn = nav?.isLogin === true
+        uid = String(nav?.mid || '')
+        name = String(nav?.uname || '')
+      } catch {
+        // 网络/接口失败时退回只看有没有 cookie
+        try {
+          const ck = JSON.parse(readFileSync(cookiePath(config), 'utf8'))
+          loggedIn = Boolean(ck && (ck.SESSDATA || ck.sessData))
+          uid = String(ck?.DedeUserID || ck?.uid || '')
+        } catch { /* 未登录 */ }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ loggedIn, uid, name }))
+      return
+    }
     if (url.pathname === '/cooldowns') {
       const now = Date.now()
       const out = guard.snapshot()
@@ -397,7 +419,7 @@ export function apply(ctx, config) {
   const guard = new Guard(config)
 
   ctx.effect(() => {
-    const stop = startStatusServer(guard, config)
+    const stop = startStatusServer(guard, config, client)
     return () => { stop?.() }
   }, 'dsh-versatileds: cooldown status server')
 

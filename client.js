@@ -851,6 +851,49 @@ window.__ModuleLoader__.load({
       liveFrame: '直播抓帧',
     }
 
+    /** 账号状态：QQ 与 B站 各一行，未登录直说（2026-10-28 主人要求，从冷却状态里拆出来） */
+    function AccountStatusPanel({ cooldowns }) {
+      const [bili, setBili] = React.useState(null)
+      React.useEffect(() => {
+        let alive = true
+        const load = () => {
+          fetch(`${BILI_STATUS_URL}/account`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => { if (alive) setBili(d) })
+            .catch(() => { if (alive) setBili({ loggedIn: false }) })
+        }
+        load()
+        const t = setInterval(load, 30000)
+        return () => { alive = false; clearInterval(t) }
+      }, [])
+
+      const sess = (cooldowns && cooldowns.session) || {}
+      const qqLine = cooldowns && cooldowns.account
+        ? `当前QQ账号：${cooldowns.account}`
+          + (sess.lastOnlineAt
+            ? ` · 上线 ${new Date(sess.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
+              + ` · 离线 ${Math.round((sess.offlineMs || 0) / 60000)} 分钟（倒计时已更新）`
+            : '')
+        : 'QQ账号未登录'
+      const biliLine = bili && bili.loggedIn
+        ? `B站账号：${bili.name || bili.uid || '已登录'}${bili.uid ? `（UID ${bili.uid}）` : ''}`
+        : 'B站账号未登录'
+
+      return React.createElement('div', {
+        style: {
+          marginBottom: '10px',
+          padding: '10px 12px',
+          border: '1px solid rgba(128,128,128,0.2)',
+          borderRadius: '6px',
+          background: 'rgba(128,128,128,0.06)',
+        },
+      },
+      React.createElement('div', { style: { fontWeight: 600, marginBottom: '4px' } }, '账号状态'),
+      React.createElement('div', { style: { fontSize: '13px' } }, qqLine),
+      React.createElement('div', { style: { fontSize: '13px', marginTop: '2px' } }, biliLine),
+      )
+    }
+
     /** 冷却状态面板：倒计时 + 跳过。labels 决定显示哪些项，B站/QQ 共用。 */
     function CooldownPanel({ labels, cooldowns, onSkip }) {
       const rows = Object.keys(labels || {}).filter((a) => Number(cooldowns[a]) > 0)
@@ -880,16 +923,6 @@ window.__ModuleLoader__.load({
           },
         },
         React.createElement('div', { style: { fontWeight: 600, marginBottom: '4px' } }, '冷却状态'),
-        cooldowns && cooldowns.account
-          ? React.createElement('div', { style: { ...hintStyle, marginBottom: '4px' } },
-              `当前账号：${cooldowns.account}` +
-              (cooldowns.session && cooldowns.session.lastOnlineAt
-                ? ` · 上线 ${new Date(cooldowns.session.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
-                  + (cooldowns.session.offlineMs > 0
-                    ? ` · 离线 ${Math.round(cooldowns.session.offlineMs / 60000)} 分钟（倒计时已扣减）`
-                    : '')
-                : ''))
-          : null,
         rows.length
           ? rows.map((a) => React.createElement(
               'div',
@@ -950,6 +983,7 @@ window.__ModuleLoader__.load({
         ]
 
         // 冷却状态放在标签栏下面，五个子页都能看到，不用来回切
+        children.push(React.createElement(AccountStatusPanel, { key: 'account-status', cooldowns }))
         children.push(React.createElement(CooldownPanel, {
           key: 'cooldowns',
           labels: BILI_ACTION_LABELS,
@@ -2101,6 +2135,7 @@ window.__ModuleLoader__.load({
         ]
 
         // 和 B站 页一样：冷却状态放标签栏下面，八个子页都能看到
+        children.push(React.createElement(AccountStatusPanel, { key: 'account-status', cooldowns }))
         children.push(React.createElement(CooldownPanel, {
           key: 'cooldowns',
           labels: (options && options.personaScope) === 'common' ? COMMON_COOLDOWN_LABELS : QQ_COOLDOWN_LABELS,
