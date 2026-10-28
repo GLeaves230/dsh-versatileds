@@ -632,6 +632,10 @@ window.__ModuleLoader__.load({
               return copy
             })
             Promise.resolve(form.set(field, next)).then(settle, settle)
+            // 隔离类开关会改人设/记忆路径：勾完立刻刷新（2026-10-28）
+            if (field === 'isolateAccountMemory' || field === 'isolateHostQq') {
+              try { if (props.onAfterChange) setTimeout(props.onAfterChange, 300) } catch { /* ignore */ }
+            }
           },
           style: { margin: 0, cursor: 'pointer' },
         }),
@@ -959,6 +963,8 @@ window.__ModuleLoader__.load({
             key: field, form, field, label, hint, pending, setPending,
             checked: Boolean(v[field]),
             disabled: !snap.writable,
+            // 隔离开关改完刷一次人设路径（QQ/通用两页都准确，2026-10-28）
+            onAfterChange: () => loadPersona(),
           }))
         }
 
@@ -1558,11 +1564,13 @@ window.__ModuleLoader__.load({
       if (/^(webSearch|searchDelegate|task)/.test(field)) return 'task'
       if (/^balance/.test(field)) return 'balance'
       if (/^(isolateHostQq|isolateGroupPrivate|sharedMemory)/.test(field)) return 'memory'
+      if (/^isolateAccountMemory/.test(field)) return 'system'
       return 'system'
     }
 
     const QQ_BOOL_FIELDS = [
-      ['enabled', 'QQ模块启用', '关掉后不连 NapCat、不注册 qq 工具，自动回复/主动搭话/群规/余额全停；登录页的「启动登录服务」「退出登录」仍然可用'],
+      ['isolateAccountMemory', '账号记忆是否隔离', '打开后不同 QQ 号的人设/记忆/笔记各用各的；配合「前后端记忆隔离」决定是 qq\\<号>\\ 还是 qq\\normal\\'],
+  ['enabled', 'QQ模块启用', '关掉后不连 NapCat、不注册 qq 工具，自动回复/主动搭话/群规/余额全停；登录页的「启动登录服务」「退出登录」仍然可用'],
       ['autoReplyEnabled', '自动回复总开关', '私聊和群聊一起管；群里接话频率看下面的概率'],
       ['onlyReplyOwner', '只回复主人', '打开后其他人的消息一律不理'],
       ['proactiveEnabled', '主动搭话', '按随机间隔主动发消息'],
@@ -2145,6 +2153,8 @@ window.__ModuleLoader__.load({
             key: field, form, field, label, hint, pending, setPending,
             checked: Boolean(v[field]),
             disabled: !snap.writable,
+            // 隔离开关改完刷一次人设路径（QQ/通用两页都准确，2026-10-28）
+            onAfterChange: () => loadPersona(),
           }))
         }
 

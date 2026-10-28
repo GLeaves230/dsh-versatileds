@@ -490,6 +490,8 @@ export const Config = Schema.object({
 
   isolateHostQq: Schema.boolean().default(false).volatile()
     .description('A 前后端记忆隔离：打开后 DS 侧（DSH 会话）与 QQ 侧（大肥鱼）各用各的记忆，不互相读'),
+  isolateAccountMemory: Schema.boolean().default(false).volatile()
+    .description('账号记忆隔离：打开后不同 QQ 号的人设/记忆/笔记各用各的（配合「前后端记忆隔离」决定目录层级）'),
   isolateGroupPrivate: Schema.boolean().default(false).volatile()
     .description('B 群与个人记忆隔离：打开后群里聊的笔记不带进私聊、私聊的也不带进群，别的 QQ 之间也各记各的'),
 
@@ -1097,7 +1099,7 @@ function qqDataDir() {
   let acctIso = false
   try {
     hostIso = qqConfigRef?.isolateHostQq?.get?.() === true
-    acctIso = qqConfigRef?.isolateGroupPrivate?.get?.() === true
+    acctIso = qqConfigRef?.isolateAccountMemory?.get?.() === true
   } catch { /* ignore */ }
   if (hostIso && acctIso && loginQqCache) return join(versatiledsBase(), 'qq', loginQqCache)
   if (hostIso) return join(versatiledsBase(), 'qq', 'normal')
