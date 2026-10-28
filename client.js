@@ -851,32 +851,42 @@ window.__ModuleLoader__.load({
       liveFrame: '直播抓帧',
     }
 
-    /** 账号状态：QQ 与 B站 各一行，未登录直说（2026-10-28 主人要求，从冷却状态里拆出来） */
-    function AccountStatusPanel({ cooldowns }) {
+    /** 账号状态：QQ 与 B站 各一行，未登录直说；B站顺带显示等级/经验（2026-10-28） */
+    function AccountStatusPanel() {
+      const [qq, setQq] = React.useState(null)
       const [bili, setBili] = React.useState(null)
       React.useEffect(() => {
         let alive = true
-        const load = () => {
+        const loadQq = () => {
+          fetch(`${QQ_STATUS_URL}/cooldowns`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => { if (alive) setQq(d) })
+            .catch(() => { if (alive) setQq(null) })
+        }
+        const loadBili = () => {
           fetch(`${BILI_STATUS_URL}/account`, { cache: 'no-store' })
             .then((r) => r.json())
             .then((d) => { if (alive) setBili(d) })
             .catch(() => { if (alive) setBili({ loggedIn: false }) })
         }
-        load()
-        const t = setInterval(load, 30000)
+        loadQq(); loadBili()
+        const t = setInterval(() => { loadQq(); loadBili() }, 30000)
         return () => { alive = false; clearInterval(t) }
       }, [])
 
-      const sess = (cooldowns && cooldowns.session) || {}
-      const qqLine = cooldowns && cooldowns.account
-        ? `当前QQ账号：${cooldowns.account}`
+      const sess = (qq && qq.session) || {}
+      const qqLine = qq && qq.account
+        ? `当前QQ账号：${qq.account}`
           + (sess.lastOnlineAt
             ? ` · 上线 ${new Date(sess.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
               + ` · 离线 ${Math.round((sess.offlineMs || 0) / 60000)} 分钟（倒计时已更新）`
             : '')
         : 'QQ账号未登录'
       const biliLine = bili && bili.loggedIn
-        ? `B站账号：${bili.name || bili.uid || '已登录'}${bili.uid ? `（UID ${bili.uid}）` : ''}`
+        ? `B站账号：${bili.name || bili.uid || '已登录'}`
+          + (bili.uid ? `（UID ${bili.uid}）` : '')
+          + (bili.level ? ` · Lv.${bili.level}` : '')
+          + (bili.nextExp > 0 ? ` · 经验 ${bili.exp}/${bili.nextExp}` : (bili.exp ? ` · 经验 ${bili.exp}` : ''))
         : 'B站账号未登录'
 
       return React.createElement('div', {
@@ -983,7 +993,7 @@ window.__ModuleLoader__.load({
         ]
 
         // 冷却状态放在标签栏下面，五个子页都能看到，不用来回切
-        children.push(React.createElement(AccountStatusPanel, { key: 'account-status', cooldowns }))
+        children.push(React.createElement(AccountStatusPanel, { key: 'account-status' }))
         children.push(React.createElement(CooldownPanel, {
           key: 'cooldowns',
           labels: BILI_ACTION_LABELS,
@@ -2135,7 +2145,7 @@ window.__ModuleLoader__.load({
         ]
 
         // 和 B站 页一样：冷却状态放标签栏下面，八个子页都能看到
-        children.push(React.createElement(AccountStatusPanel, { key: 'account-status', cooldowns }))
+        children.push(React.createElement(AccountStatusPanel, { key: 'account-status' }))
         children.push(React.createElement(CooldownPanel, {
           key: 'cooldowns',
           labels: (options && options.personaScope) === 'common' ? COMMON_COOLDOWN_LABELS : QQ_COOLDOWN_LABELS,

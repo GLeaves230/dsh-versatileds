@@ -255,11 +255,17 @@ function startStatusServer(guard, config, biliClient) {
       let loggedIn = false
       let uid = ''
       let name = ''
+      let level = 0
+      let exp = 0
+      let nextExp = 0
       try {
         const nav = await biliClient.me()
         loggedIn = nav?.isLogin === true
         uid = String(nav?.mid || '')
         name = String(nav?.uname || '')
+        level = Number(nav?.level_info?.current_level || 0)
+        exp = Number(nav?.level_info?.current_exp || 0)
+        nextExp = Number(nav?.level_info?.next_exp || 0)
       } catch {
         // 网络/接口失败时退回只看有没有 cookie
         try {
@@ -269,7 +275,7 @@ function startStatusServer(guard, config, biliClient) {
         } catch { /* 未登录 */ }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      res.end(JSON.stringify({ loggedIn, uid, name }))
+      res.end(JSON.stringify({ loggedIn, uid, name, level, exp, nextExp }))
       return
     }
     if (url.pathname === '/cooldowns') {
