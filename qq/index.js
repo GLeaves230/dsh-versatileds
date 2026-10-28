@@ -3459,11 +3459,23 @@ function inTimeRange(start, end, now = new Date()) {
   return a < b ? (cur >= a && cur < b) : (cur >= a || cur < b)
 }
 
-/** 这个群现在是不是群级免打扰时段。 */
+/** 群级免打扰区间列表：新格式 quietRanges 优先，没有就退回旧的 quietStart/quietEnd。 */
+function quietRangesOf(p) {
+  if (!p || typeof p !== 'object') return []
+  if (Array.isArray(p.quietRanges) && p.quietRanges.length) {
+    return p.quietRanges
+      .map((r) => ({ start: String(r?.start || ''), end: String(r?.end || '') }))
+      .filter((r) => hhmmToMin(r.start) >= 0 && hhmmToMin(r.end) >= 0)
+  }
+  if (p.quietStart && p.quietEnd) return [{ start: String(p.quietStart), end: String(p.quietEnd) }]
+  return []
+}
+
+/** 这个群现在是不是群级免打扰时段（支持多条区间，2026-10-28）。 */
 function inGroupQuiet(config, gid, now = new Date()) {
   const p = groupProfileOf(config, gid)
   if (!p) return false
-  return inTimeRange(p.quietStart, p.quietEnd, now)
+  return quietRangesOf(p).some((r) => inTimeRange(r.start, r.end, now))
 }
 
 
@@ -4269,6 +4281,21 @@ function resolveLogPath(config, id) {
 }
 
 /** 给设置页轮询主动搭话倒计时用的小接口，只监听本机。 */
+/** 账号昵称（只用于界面显示，不参与路径） */
+const accountNameCache = new Map()
+async function accountNameOf(ob, id) {
+  const key = String(id || '')
+  if (!key || !ob) return ''
+  const hit = accountNameCache.get(key)
+  if (hit && Date.now() - hit.at < 600_000) return hit.name
+  try {
+    const info = await ob.call('get_stranger_info', { user_id: Number(key) })
+    const name = String(info?.nickname || '')
+    accountNameCache.set(key, { at: Date.now(), name })
+    return name
+  } catch { return hit?.name || '' }
+}
+
 function startStatusServer(config, napcat = null) {
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -4299,6 +4326,7 @@ function startStatusServer(config, napcat = null) {
       const offAt = Number(session.lastOfflineAt || 0)
       const payload = {
         account: loginQqCache || '',
+        accountName: await accountNameOf(napcat, loginQqCache).catch(() => ''),
         session: {
           lastOnlineAt: Number(session.lastOnlineAt || 0),
           lastOfflineAt: offAt,
@@ -4427,10 +4455,15 @@ function startStatusServer(config, napcat = null) {
         }
       } catch { /* ignore */ }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      const named = []
+      for (const id of accounts.sort()) {
+        named.push({ id, name: await accountNameOf(napcat, id).catch(() => '') })
+      }
       res.end(JSON.stringify({
         current: loginQqCache || '',
+        currentName: await accountNameOf(napcat, loginQqCache).catch(() => ''),
         view: currentAccountView(),
-        accounts: accounts.sort(),
+        accounts: named,
         normalExists: existsSync(join(versatiledsBase(), 'normal', 'persona.md')) || existsSync(join(versatiledsBase(), 'qq', 'normal', 'persona.md')),
         dataDir: qqDataDir(),
       }))

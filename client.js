@@ -906,8 +906,8 @@ window.__ModuleLoader__.load({
           },
         },
         React.createElement('option', { value: 'normal' }, '通用设置（共享）'),
-        React.createElement('option', { value: 'auto' }, `自动选择当前号${info && info.current ? `（${info.current}）` : ''}`),
-        ...accounts.map((id) => React.createElement('option', { key: id, value: id }, `QQ ${id}`)),
+        React.createElement('option', { value: 'auto' }, `自动选择当前号${info && info.current ? `（${info.currentName || ''}${info.currentName ? ' ' : ''}${info.current}）` : ''}`),
+        ...accounts.map((a) => React.createElement('option', { key: a.id, value: a.id }, a.name ? `${a.name}（${a.id}）` : `QQ ${a.id}`)),
         ),
         React.createElement('span', { style: hintStyle }, '选择要看/改哪份数据；「自动」跟着当前登录号，「通用」是共享的那份'),
       )
@@ -940,7 +940,7 @@ window.__ModuleLoader__.load({
       const qqLine = qq && qq.account
         ? (sess.online === false
           // 已下线：显示「已离线 X 分钟」，数字随轮询增长
-          ? `当前QQ账号：${qq.account}`
+          ? `当前QQ账号：${qq.accountName ? `${qq.accountName}（${qq.account}）` : qq.account}`
             + (sess.lastOfflineAt ? ` · 已于 ${new Date(sess.lastOfflineAt).toLocaleString('zh-CN', { hour12: false })} 下线` : '')
             + ` · 已离线 ${Math.max(1, Math.round((sess.offlineMs || 0) / 60000))} 分钟`
           : `当前QQ账号：${qq.account}`
@@ -950,11 +950,11 @@ window.__ModuleLoader__.load({
               : ''))
         : 'QQ账号未登录'
       const biliLine = bili && bili.loggedIn
-        ? `B站账号：${bili.name || bili.uid || '已登录'}`
+        ? `当前B站账号：${bili.name || bili.uid || '已登录'}`
           + (bili.uid ? `（UID ${bili.uid}）` : '')
           + (bili.level ? ` · Lv.${bili.level}` : '')
           + (bili.nextExp > 0 ? ` · 经验 ${bili.exp}/${bili.nextExp}` : (bili.exp ? ` · 经验 ${bili.exp}` : ''))
-        : 'B站账号未登录'
+        : '当前B站账号未登录'
 
       return React.createElement('div', {
         style: {
@@ -1213,7 +1213,7 @@ window.__ModuleLoader__.load({
       const add = () => {
         const gid = draft.trim()
         if (!/^\d{5,12}$/.test(gid)) return
-        update(gid, { quietStart: '23:00', quietEnd: '08:00', ruleInject: true, memoryInject: true })
+        update(gid, { quietRanges: [{ start: '23:00', end: '08:00' }], ruleInject: true, memoryInject: true })
         setDraft('')
       }
       const chk = (gid, key, label, p) => React.createElement('label', { key: `${gid}-${key}`, style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 } },
@@ -1252,10 +1252,37 @@ window.__ModuleLoader__.load({
           const p = list[gid] || {}
           return React.createElement('div', { key: gid, style: { ...rowStyle, flexWrap: 'wrap', gap: 8, borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: 8 } },
             React.createElement('span', { style: { ...labelStyle, minWidth: 110 } }, `${nameOf(gid)}（${gid}）`),
-            React.createElement('span', { style: hintStyle }, '免打扰'),
-            React.createElement('input', { type: 'time', value: p.quietStart || '', disabled, onChange: (e) => update(gid, { quietStart: e.target.value }), style: inputStyle }),
-            React.createElement('span', { style: hintStyle }, '到'),
-            React.createElement('input', { type: 'time', value: p.quietEnd || '', disabled, onChange: (e) => update(gid, { quietEnd: e.target.value }), style: inputStyle }),
+            ...(() => {
+              const ranges = Array.isArray(p.quietRanges) && p.quietRanges.length
+                ? p.quietRanges
+                : (p.quietStart && p.quietEnd ? [{ start: p.quietStart, end: p.quietEnd }] : [])
+              const setRanges = (next) => update(gid, { quietRanges: next, quietStart: '', quietEnd: '' })
+              const rows = ranges.map((r, idx) => React.createElement('span', { key: `${gid}-range-${idx}`, style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+                React.createElement('input', {
+                  type: 'time', value: r.start || '', disabled,
+                  onChange: (e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, start: e.target.value } : x))),
+                  style: inputStyle,
+                }),
+                React.createElement('span', { style: hintStyle }, '到'),
+                React.createElement('input', {
+                  type: 'time', value: r.end || '', disabled,
+                  onChange: (e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, end: e.target.value } : x))),
+                  style: inputStyle,
+                }),
+                React.createElement('button', {
+                  type: 'button', disabled, style: skipStyle,
+                  onClick: () => setRanges(ranges.filter((_, i) => i !== idx)),
+                }, '删'),
+              ))
+              return [
+                React.createElement('span', { key: `${gid}-quiet-label`, style: hintStyle }, '免打扰'),
+                ...rows,
+                React.createElement('button', {
+                  type: 'button', disabled, style: skipStyle,
+                  onClick: () => setRanges([...ranges, { start: '23:00', end: '08:00' }]),
+                }, '加时段'),
+              ]
+            })(),
             chk(gid, 'ruleInject', '群规注入', p),
             chk(gid, 'memoryInject', '记忆注入', p),
             (() => {
