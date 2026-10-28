@@ -1998,7 +1998,9 @@ window.__ModuleLoader__.load({
             React.createElement('span', { style: hintStyle },
               personaInfo
                 ? (personaInfo.exists
-                  ? `已有（${personaInfo.chars} 字）· ${personaInfo.path}`
+                  ? (personaInfo.sharedPath && personaInfo.sharedPath !== personaInfo.path
+                    ? `已有（${personaInfo.chars} 字）· QQ：${personaInfo.path} · 通用：${personaInfo.sharedPath}`
+                    : `已有（${personaInfo.chars} 字）· ${personaInfo.path}`)
                   : '还没有 —— 点「生成模板」，照着骨架改成你自己的')
                 : '读取中…'),
             personaMsg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, personaMsg) : null,

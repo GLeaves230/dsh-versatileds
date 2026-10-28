@@ -1087,9 +1087,20 @@ function ensureAgentsTemplate() {
   }
 }
 
+/** 通用侧人设（共享模式）：versatileds/normal/persona.md —— DSH 与 QQ 共用这一份（2026-10-28 主人要求） */
+function sharedPersonaPath() {
+  return join(versatiledsBase(), 'normal', 'persona.md')
+}
+
+/** QQ 侧人设：隔离模式按账号（qq/<qq>/persona.md），共享模式用 normal/persona.md。 */
 function personaPath() {
-  const per = join(qqAccountDir(), 'persona.md')
-  if (loginQqCache && existsSync(per)) return per
+  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) {
+    const per = join(qqAccountDir(), 'persona.md')
+    if (existsSync(per)) return per
+  }
+  const shared = sharedPersonaPath()
+  if (existsSync(shared)) return shared
+  // 老数据回退
   return join(versatiledsBase(), 'qq', 'persona.md')
 }
 
@@ -4321,7 +4332,11 @@ function startStatusServer(config, napcat = null) {
         return
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ path: p, exists, chars }))
+      // 共享模式下 QQ/通用同一份；隔离模式下 QQ 按号、通用仍是 normal（2026-10-28 主人要求按模块显示）
+      const sharedP = sharedPersonaPath()
+      let sharedChars = 0
+      try { if (existsSync(sharedP)) sharedChars = readFileSync(sharedP, 'utf8').replace(/\s+/g, '').length } catch { /* ignore */ }
+      res.end(JSON.stringify({ path: p, exists, chars, sharedPath: sharedP, sharedExists: existsSync(sharedP), sharedChars }))
       return
     }
     if (url.pathname === '/balance_check') {
