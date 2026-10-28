@@ -777,6 +777,7 @@ window.__ModuleLoader__.load({
       ['auto', '自动刷'],
       ['live', '直播'],
       ['conn', '连接/身份'],
+      ['login', '登录'],
     ]
 
     /** B站 字段归到哪一页。 */
@@ -1022,6 +1023,86 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** B站 登录：输入 cookie 保存；已保存的不回显，输入框永远空白（2026-10-28） */
+    function BiliLoginPanel() {
+      const [status, setStatus] = React.useState(null)
+      const [draft, setDraft] = React.useState('')
+      const [msg, setMsg] = React.useState('')
+      const [dirty, setDirty] = React.useState(false)
+      const load = () => {
+        fetch(`${BILI_STATUS_URL}/cookie`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then(setStatus)
+          .catch(() => setStatus(null))
+      }
+      React.useEffect(() => { load() }, [])
+      const save = async () => {
+        if (!draft.trim()) { setMsg('先把 cookie 粘进去'); return }
+        try {
+          const r = await fetch(`${BILI_STATUS_URL}/cookie`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookie: draft }),
+          })
+          const d = await r.json()
+          if (d && d.ok) {
+            setMsg(`已保存（${d.keys} 个字段）`)
+            setDraft('')
+            setDirty(false)
+            load()
+          } else {
+            setMsg('保存失败：' + (d?.error || '格式不对'))
+          }
+        } catch { setMsg('接口没响应') }
+      }
+      const cancel = () => { setDraft(''); setDirty(false); setMsg('') }
+      const clear = async () => {
+        try {
+          await fetch(`${BILI_STATUS_URL}/cookie`, { method: 'DELETE' })
+          setMsg('已清除')
+          load()
+        } catch { setMsg('清除失败') }
+      }
+      const boxStyle = {
+        width: '100%',
+        minHeight: '90px',
+        padding: '8px 10px',
+        borderRadius: '6px',
+        background: 'transparent',
+        color: 'inherit',
+        fontSize: '12px',
+        fontFamily: 'monospace',
+        // 有未保存内容才红框，保存后恢复（2026-10-28 主人要求）
+        border: dirty ? '1px solid #d32f2f' : '1px solid rgba(128,128,128,0.35)',
+        boxSizing: 'border-box',
+      }
+      return React.createElement('div', { style: { padding: '4px 0' } },
+        React.createElement('div', { style: { ...hintStyle, marginBottom: '6px' } },
+          status && status.exists
+            ? `已保存 cookie（${status.keys} 个字段）· 保存路径 ${status.path}`
+            : '还没有保存 cookie —— 粘贴后点「保存」'),
+        React.createElement('textarea', {
+          value: draft,
+          placeholder: status && status.exists
+            ? '已保存过，不回显；要换就把新的 cookie 粘进来再点保存'
+            : '把 B站 cookie 粘进来（支持 k=v; k=v 或 JSON）',
+          onChange: (e) => { setDraft(e.target.value); setDirty(Boolean(e.target.value.trim())) },
+          style: boxStyle,
+          spellCheck: false,
+        }),
+        React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' } },
+          React.createElement('button', { type: 'button', style: skipStyle, onClick: save }, '保存'),
+          React.createElement('button', { type: 'button', style: skipStyle, onClick: cancel }, '取消'),
+          status && status.exists
+            ? React.createElement('button', { type: 'button', style: skipStyle, onClick: clear }, '清除已保存')
+            : null,
+          msg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, msg) : null,
+        ),
+        React.createElement('div', { style: { ...hintStyle, marginTop: '8px' } },
+          '怎么取：电脑浏览器登录 bilibili.com → F12 → Application/存储 → Cookies → 复制 SESSDATA、bili_jct、buvid3、buvid4、DedeUserID，拼成 SESSDATA=...; bili_jct=... 粘进来。'),
+      )
+    }
+
     function createBiliPage(form) {
       return function BiliConfig() {
         const snap = useSnapshot(form)
@@ -1067,6 +1148,10 @@ window.__ModuleLoader__.load({
           cooldowns,
           onSkip: skipCooldown,
         }))
+
+        if (activeTab === 'login') {
+          children.push(React.createElement(BiliLoginPanel, { key: 'bili-login' }))
+        }
 
         for (const [field, label, hint] of BILI_BOOL_FIELDS) {
           if (biliGroupOf(field) !== activeTab) continue

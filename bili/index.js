@@ -13,7 +13,7 @@ function plog(level, ...args) {
   fn.call(console, `[${t}]`, ...args)
 }
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { unlinkSync, appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 
@@ -250,6 +250,57 @@ function startStatusServer(guard, config, biliClient) {
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
     const url = new URL(req.url || '/', 'http://127.0.0.1')
+    if (url.pathname === '/cookie') {
+      // 设置页「登录」：GET 只看状态（绝不回显 cookie）；POST 保存；DELETE 清空
+      const file = cookiePath(config)
+      if (req.method === 'POST') {
+        let body = ''
+        req.on('data', (c) => { body += c })
+        req.on('end', () => {
+          try {
+            const j = JSON.parse(body || '{}')
+            const raw = String(j.cookie || '').trim()
+            if (!raw) {
+              res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+              res.end(JSON.stringify({ ok: false, error: 'empty' }))
+              return
+            }
+            let obj = {}
+            try { obj = JSON.parse(raw) } catch {
+              for (const part of raw.split(/[;\n]+/)) {
+                const m = part.match(/^\s*([^=]+?)\s*=\s*(.+?)\s*$/)
+                if (m) obj[m[1]] = m[2]
+              }
+            }
+            const keep = Object.fromEntries(Object.entries(obj).filter(([k]) => k))
+            mkdirSync(dirname(file), { recursive: true })
+            writeFileSync(file, JSON.stringify(keep, null, 2), 'utf8')
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: true, keys: Object.keys(keep).length }))
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: false, error: String(err?.message ?? err) }))
+          }
+        })
+        return
+      }
+      if (req.method === 'DELETE') {
+        try { unlinkSync(file) } catch { /* ignore */ }
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: true }))
+        return
+      }
+      let exists = false
+      let keys = 0
+      try {
+        const data = JSON.parse(readFileSync(file, 'utf8'))
+        exists = Boolean(data && data.SESSDATA)
+        keys = Object.keys(data || {}).length
+      } catch { /* 没文件 */ }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ exists, keys, path: file }))
+      return
+    }
     if (url.pathname === '/account') {
       // B站 账号状态（设置页「账号状态」用，走 lib 的 me()，2026-10-28）
       let loggedIn = false
