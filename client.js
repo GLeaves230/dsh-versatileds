@@ -955,6 +955,7 @@ window.__ModuleLoader__.load({
           + (bili.uid ? `（UID ${bili.uid}）` : '')
           + (bili.level ? ` · Lv.${bili.level}` : '')
           + (bili.nextExp > 0 ? ` · 经验 ${bili.exp}/${bili.nextExp}` : (bili.exp ? ` · 经验 ${bili.exp}` : ''))
+          + (bili.coins !== undefined ? ` · 硬币 ${bili.coins}` : '')
         : '当前B站账号未登录'
 
       return React.createElement('div', {

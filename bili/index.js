@@ -23,6 +23,9 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { BiliClient, BiliError } from '../lib/bili.js'
 import { fetchLiveInfo, grabLiveFrame, grabVideoFrames, parseLiveRoom } from '../lib/live.js'
 
+/** 当前 B站 client 引用：保存 cookie 后热更新，不用重载插件（2026-10-28） */
+let biliClientRef = null
+
 const COOKIE_KEYS = ['SESSDATA', 'bili_jct', 'buvid3', 'buvid4', 'DedeUserID']
 
 const ACTIONS = [
@@ -289,6 +292,8 @@ function startStatusServer(guard, config, biliClient) {
             }
             mkdirSync(dirname(file), { recursive: true })
             writeFileSync(file, JSON.stringify(keep, null, 2), 'utf8')
+            // 立刻让内存里的 client 用上新 cookie（2026-10-28）
+            try { if (biliClientRef) biliClientRef.cookies = loadCookies(config) } catch { /* ignore */ }
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
             res.end(JSON.stringify({ ok: true, keys: Object.keys(keep).length, saved: Object.keys(keep), missing }))
           } catch (err) {
@@ -323,6 +328,7 @@ function startStatusServer(guard, config, biliClient) {
       let level = 0
       let exp = 0
       let nextExp = 0
+      let coins = 0
       try {
         const nav = await biliClient.me()
         loggedIn = nav?.isLogin === true
@@ -331,6 +337,7 @@ function startStatusServer(guard, config, biliClient) {
         level = Number(nav?.level_info?.current_level || 0)
         exp = Number(nav?.level_info?.current_exp || 0)
         nextExp = Number(nav?.level_info?.next_exp || 0)
+        coins = Number(nav?.money || 0)
       } catch {
         // 网络/接口失败时退回只看有没有 cookie
         try {
@@ -340,7 +347,7 @@ function startStatusServer(guard, config, biliClient) {
         } catch { /* 未登录 */ }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      res.end(JSON.stringify({ loggedIn, uid, name, level, exp, nextExp }))
+      res.end(JSON.stringify({ loggedIn, uid, name, level, exp, nextExp, coins }))
       return
     }
     if (url.pathname === '/cooldowns') {
@@ -487,6 +494,7 @@ export const inject = ['tools']
 
 export function apply(ctx, config) {
   const client = new BiliClient({ cookies: loadCookies(config), dryRun: false })
+  biliClientRef = client
   const guard = new Guard(config)
 
   ctx.effect(() => {
