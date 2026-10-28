@@ -1185,7 +1185,9 @@ function ensureImQqbotEntry() {
     let s = readFileSync(p, 'utf8')
     if (/^- id: im-qqbot/m.test(s)) {
       const idx = s.indexOf('- id: im-qqbot')
-      const block = s.slice(idx, idx + 3000)
+      // block 到下一个 entry 为止（不能用固定长度截断：directPrompt 很长，disabled 在末尾）
+      const j = s.indexOf('\n- id: ', idx + 5)
+      const block = s.slice(idx, j < 0 ? s.length : j)
       if (/^  disabled: true/m.test(block)) {
         s = s.slice(0, idx) + block.replace(/^  disabled: true/m, '  disabled: false') + s.slice(idx + block.length)
         writeFileSync(p, s, 'utf8')
@@ -1213,7 +1215,9 @@ function disableImQqbotEntry() {
     let s = readFileSync(p, 'utf8')
     const idx = s.indexOf('- id: im-qqbot')
     if (idx < 0) return 'absent'
-    const block = s.slice(idx, idx + 3000)
+    // block 到下一个 entry 为止（directPrompt 很长，不能用固定长度截断）
+    const end = s.indexOf('\n- id: ', idx + 5)
+    const block = s.slice(idx, end < 0 ? s.length : end)
     if (/^  disabled: true/m.test(block)) return 'already'
     if (/^  disabled: false/m.test(block)) {
       s = s.slice(0, idx) + block.replace(/^  disabled: false/m, '  disabled: true') + s.slice(idx + block.length)
@@ -9950,6 +9954,7 @@ export function apply(ctx, config) {
         return
       }
       try {
+        plog('info', '[dsh-versatileds] 开始自动安装（pnpm add，约 20-60 秒）…')
         await runAsync('cmd', ['/c', `cd /d "${pdir}" && pnpm add @tencent-connect/dsh-qqbot@latest --registry=https://registry.npmjs.org`], 300000)
         plog('info', '[dsh-versatileds] 官方 QQ 插件安装完成，注入 vds 补丁…')
         ensureQqbotPatch()
@@ -9962,9 +9967,11 @@ export function apply(ctx, config) {
       return
     }
     // 已装：检查注入（ensureQqbotPatch 内部幂等），并确保没被禁用
+    plog('info', `[dsh-versatileds] QQ 通道=官方模式：依赖已装（${qqbotDir}），检查注入…`)
     ensureQqbotPatch()
     const entryState = ensureImQqbotEntry()
     plog('info', `[dsh-versatileds] QQ 通道=官方模式：依赖齐全，vds 注入已确认（im-qqbot ${entryState}）`)
+    plog('info', '[dsh-versatileds] 提示：DSH 不会热加载外部配置改动——官方插件开关请重启 DSH 自动配置（或先到「插件」页手动确认一下开关）')
   }
 
   /** NapCat 模式：禁用官方插件，避免两个通道同时在线（2026-10-28 主人要求互斥）。 */
@@ -9972,12 +9979,31 @@ export function apply(ctx, config) {
     const channel = String(config.qqChannel?.get?.() || 'napcat')
     if (channel !== 'napcat') return
     // 先走一遍 NapCat 的自动启动/登录判断（没登录就按配置自动拉起）
-    try { await ensureNapCat('startup') } catch { /* ignore */ }
+    plog('info', '[dsh-versatileds] QQ 通道=NapCat：检查自动启动/登录判断…')
+    let nap = false
+    try { nap = await ensureNapCat('startup') } catch (err) { plog('warn', '[dsh-versatileds] NapCat 启动判断失败:', err?.message ?? err) }
+    plog('info', `[dsh-versatileds] NapCat 状态：${nap ? '在线/已拉起' : '未启动（上次退出登录或自动拉起关闭）'}`)
     const st = disableImQqbotEntry()
+    plog('info', `[dsh-versatileds] im-qqbot：${st === 'disabled' ? '已禁用官方插件' : st === 'already' ? '已是禁用状态' : st === 'absent' ? '没有这个 entry' : st}`)
     if (st === 'disabled') {
-      plog('info', '[dsh-versatileds] QQ 通道=NapCat：已禁用官方插件 im-qqbot（避免双通道同时在线）')
+      plog('info', '[dsh-versatileds] 提示：DSH 不会热加载外部配置改动——官方插件开关请重启 DSH 自动配置（或先到「插件」页手动确认一下开关）')
     }
   }
+
+  // 通道切换监听：qqChannel 是 volatile（改值不重跑 apply），轮询发现变化后执行对应逻辑
+  // （2026-10-28：主人卸载官方插件后切官方模式，apply 不重跑导致自动安装没触发）
+  let lastChannel = String(config.qqChannel?.get?.() || 'napcat')
+  ctx.effect(() => {
+    const t = setInterval(() => {
+      const ch = String(config.qqChannel?.get?.() || 'napcat')
+      if (ch === lastChannel) return
+      lastChannel = ch
+      plog('info', `[dsh-versatileds] QQ 通道切换为 ${ch}，执行切换逻辑…`)
+      if (ch === 'official') ensureOfficialChannel().catch(() => {})
+      else ensureNapcatChannel().catch(() => {})
+    }, 5000)
+    return () => clearInterval(t)
+  }, 'dsh-versatileds: qq channel watch')
 
   /**
    * 独立语音工具：只生成语音文件（AMR），不发送。
