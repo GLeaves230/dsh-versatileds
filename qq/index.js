@@ -6133,7 +6133,7 @@ export function apply(ctx, config) {
     }
     add(on.qqName)
     add(String(on.card || '').split(/[（(\s]/)[0])
-    // 长的先替换，免得「黑木钟（群第一闭嘴）」被短词替换掉一半
+    // 长的先替换，免得「老黑（群第一闭嘴）」被短词替换掉一半
     return terms.sort((a, b) => b.length - a.length)
   }
 
@@ -9985,8 +9985,8 @@ async function syncGroupRules(force = false) {
       if (!reply && isGroup && !talkerIsOwner) {
         try {
           const terms = await ownerTerms()
-          // 只拿真正的文字段判断：@ 段里的昵称（「@黑木钟」）也被算进 text 的话，
-          // 「黑木钟」的「黑」会命中动词表，把「你们俩再不叫主人」这种话误当成「让你骂主人」。
+          // 只拿真正的文字段判断：@ 段里的昵称（「@老黑」）也被算进 text 的话，
+          // 「老黑」的「黑」会命中动词表，把「你们俩再不叫主人」这种话误当成「让你骂主人」。
           // 2026-10-25 实测就这样回了句「别人可以，我主人不行。」，答非所问。
           const textNoAt = (data.message || [])
             .filter((seg) => seg && seg.type === 'text')
@@ -10034,10 +10034,10 @@ async function syncGroupRules(force = false) {
 
       // 硬性纠正称呼：回复里直呼主人的昵称/群名片，一律改成「主人」。
       // 不写死名字（认的是 ownerQQ），也不只管他本人说话那一轮——
-      // 别人提到他、它自己提起他（「黑木钟那个…」）同样改口（2026-10-25 修）。
+      // 别人提到他、它自己提起他（「老黑那个…」）同样改口（2026-10-25 修）。
       if (reply && isGroup) {
         try {
-          // 被问「你主人是谁/叫什么」时要答「主人就是 @黑木钟」：
+          // 被问「你主人是谁/叫什么」时要答「主人就是 @老黑」：
           // 这一轮不能把他的昵称替换成「主人」，否则会变成「主人就是 @主人」。
           // 正文里自己写了「@主人名字」的也不能替换，否则后面转 at 段时找不到名字。
           const ownerDisplayNow = ownerDisplayName(await ownerNames())
@@ -10045,10 +10045,10 @@ async function syncGroupRules(force = false) {
             || Boolean(ownerDisplayNow && reply.includes(`@${ownerDisplayNow}`))
           if (!askingOwner) {
             for (const t of await ownerTerms()) {
-              // 它自己的名字「黑木钟の大肥鱼」别被拆开替换
+              // 它自己的名字「老黑の大肥鱼」别被拆开替换
               reply = reply.replace(new RegExp(escReg(t) + '(?!の)', 'g'), '主人')
             }
-            // 「我主人黑木钟」替换后会变成「我主人主人」，压一下
+            // 「我主人老黑」替换后会变成「我主人主人」，压一下
             reply = reply.replace(/主人主人/g, '主人')
           }
           // 群里不露主人的 QQ 号：号码只在日志/上下文里认人用，模型自己加上也要删掉
@@ -10229,7 +10229,7 @@ async function syncGroupRules(force = false) {
           const replyId = wantQuote ? data.message_id : ''
           // 正文里写了「@主人名」就发成真正的 at 段（QQ 里 at 靠 at 段提醒，裸文本「@名字」不会亮）：
           // at 段只带 QQ 号，群里显示的是对方群名片，号码不会露出来。
-          // 「@主人」这种称呼也叫得认——它经常写「@主人」而不是「@黑木钟」（2026-10-26 主人发现）。
+          // 「@主人」这种称呼也叫得认——它经常写「@主人」而不是「@老黑」（2026-10-26 主人发现）。
           const ownerDisplay = ownerDisplayName(await ownerNames())
           const ownerTokens = [ownerDisplay ? `@${ownerDisplay}` : '', '@主人'].filter(Boolean)
           for (const token of ownerTokens) {
@@ -10237,7 +10237,7 @@ async function syncGroupRules(force = false) {
             reply = reply.split(token).join('').trim()
             if (!atUid) atUid = ownerQQOf(config)
           }
-          // 已经 @ 了主人，正文开头再写「主人」就重复了（「@黑木钟 主人就是 啊」→「@黑木钟 就是 啊」）
+          // 已经 @ 了主人，正文开头再写「主人」就重复了（「@老黑 主人就是 啊」→「@老黑 就是 啊」）
           if (atUid) reply = reply.replace(/^主人[，,、\s]*/, '').trim() || reply
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
