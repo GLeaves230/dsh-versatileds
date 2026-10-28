@@ -2142,9 +2142,9 @@ window.__ModuleLoader__.load({
               return '改完立即生效。自动回复要 NapCat 正在运行并连上（WebSocket 地址要对）；切官方机器人通道后，对话由 QQ 机器人插件负责，这里主要配工具和记忆。'
             })()),
           ),
+          React.createElement(AccountPickerRow, { key: 'account-picker', onChanged: () => loadPersona() }),
           React.createElement(
             'div',
-            React.createElement(AccountPickerRow, { key: 'account-picker', onChanged: () => loadPersona() }),
             { key: 'persona', style: rowStyle },
             React.createElement('span', { style: labelStyle }, '人设文件'),
             React.createElement('button', {
