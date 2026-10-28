@@ -1313,25 +1313,54 @@ let loginQqCache = ''
 function accountSessionPath(qq) {
   return qq ? join(versatiledsBase(), 'qq', qq, 'session.json') : join(versatiledsBase(), 'qq', 'session.json')
 }
-function markAccountSwitch(prevQq, nextQq) {
+/** 记下线时间：已经有下线时间就不覆盖（先退出登录、再退出 DSH 的情况，2026-10-28） */
+function markAccountOffline(qq) {
+  const id = String(qq || '').trim() || loginQqCache
+  if (!id) return
+  try {
+    const f = accountSessionPath(id)
+    const j = loadJsonFile(f) || {}
+    if (Number(j.lastOfflineAt || 0) > 0) return
+    saveJsonFile(f, { ...j, lastOfflineAt: Date.now() })
+  } catch { /* ignore */ }
+}
+
+/** 记上线：用下线时间（没有就退回上次在线时间）算离线时长，供倒计时扣减 */
+function markAccountOnline(qq) {
+  const id = String(qq || '').trim()
+  if (!id) return
   try {
     const now = Date.now()
-    if (prevQq && prevQq !== nextQq) {
-      const f = accountSessionPath(prevQq)
-      const j = loadJsonFile(f) || {}
-      saveJsonFile(f, { ...j, lastOfflineAt: now })
-    }
-    if (nextQq) {
-      const f = accountSessionPath(nextQq)
-      const j = loadJsonFile(f) || {}
-      const off = Number(j.lastOfflineAt || 0)
-      saveJsonFile(f, {
-        ...j,
-        lastOnlineAt: now,
-        offlineMs: off ? Math.max(0, now - off) : 0,
-        lastOfflineAt: 0,
-      })
-    }
+    const f = accountSessionPath(id)
+    const j = loadJsonFile(f) || {}
+    const off = Number(j.lastOfflineAt || 0) || Number(j.lastOnlineAt || 0)
+    saveJsonFile(f, {
+      ...j,
+      lastOnlineAt: now,
+      offlineMs: off ? Math.max(0, now - off) : 0,
+      lastOfflineAt: 0,
+      heartbeatAt: now,
+    })
+  } catch { /* ignore */ }
+}
+
+/** 心跳：还在线就刷新 lastOnlineAt，异常退出（崩溃/断电）也能拿它当离线起点 */
+function markAccountHeartbeat(qq) {
+  const id = String(qq || '').trim() || loginQqCache
+  if (!id) return
+  try {
+    const f = accountSessionPath(id)
+    const j = loadJsonFile(f) || {}
+    const now = Date.now()
+    if (now - Number(j.heartbeatAt || 0) < 120_000) return
+    saveJsonFile(f, { ...j, lastOnlineAt: now, heartbeatAt: now })
+  } catch { /* ignore */ }
+}
+
+function markAccountSwitch(prevQq, nextQq) {
+  try {
+    if (prevQq && prevQq !== nextQq) markAccountOffline(prevQq)
+    if (nextQq) markAccountOnline(nextQq)
   } catch { /* ignore */ }
 }
 
@@ -5026,6 +5055,8 @@ button{margin:8px;padding:10px 30px;font-size:16px;border-radius:8px;border:0;cu
     // 只调 server.close() 的话，前端每秒轮询 /cooldowns 的长连接会把它挂到超时，
     // 表现就是 Ctrl+C 之后进程迟迟不退（2026-10-25 主人提的「退出时加异步锁」）。
     try { shutdownLock.trip() } catch { /* ignore */ }
+    // 退出 DSH/插件时记下线时间（已记过就不覆盖）；下次上线用它扣减倒计时（2026-10-28）
+    try { markAccountOffline(loginQqCache) } catch { /* ignore */ }
     try {
       if (typeof server.closeAllConnections === 'function') server.closeAllConnections()
       server.close()
@@ -8166,6 +8197,13 @@ export function apply(ctx, config) {
     }
     // 切号后立刻补一次：倒计时已按离线时长扣减（2026-10-28）
     const guard = async () => {
+      try {
+        const alive = await napcatAlive()
+        if (loginQqCache) {
+          if (alive) markAccountHeartbeat(loginQqCache)
+          else markAccountOffline(loginQqCache)
+        }
+      } catch { /* ignore */ }
       if (loginQqCache && loginQqCache !== lastAccount) {
         lastAccount = loginQqCache
         await tick()
