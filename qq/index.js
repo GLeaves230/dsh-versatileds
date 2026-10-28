@@ -1293,6 +1293,11 @@ function setLoginQq(qq) {
     notesMemLoaded = false
     initNotesMem().catch(() => {})
   } catch { /* ignore */ }
+  // 反思（禁言）状态也按号：清空后从新号的文件恢复
+  try {
+    quietState.clear()
+    loadQuietState()
+  } catch { /* ignore */ }
 }
 
 function notesPath() {
@@ -3587,7 +3592,8 @@ const quietState = new Map()
  * （2026-10-26 主人发现：热重载后它又在反思期里接话）。
  */
 function quietFilePath() {
-  return join(versatiledsBase(), 'qq', 'quiet.json')
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `quiet-${loginQqCache}.json`) : join(base, 'quiet.json')
 }
 
 function loadQuietState() {
@@ -4378,6 +4384,23 @@ function startStatusServer(config, napcat = null) {
           const ok = writeFocusTarget(j.target ?? '')
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
           res.end(JSON.stringify({ ok, target: String(j.target || '') }))
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false }))
+        }
+      })
+      return
+    }
+    if (url.pathname === '/group-profiles' && req.method === 'POST') {
+      // 按账号写群偏好（groups-<qq>.json），设置页调用（2026-10-28）
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        try {
+          const j = JSON.parse(body || '{}')
+          const ok = writeGroupProfiles(j.profiles || {})
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify({ ok }))
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false }))

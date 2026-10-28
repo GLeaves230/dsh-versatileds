@@ -935,7 +935,17 @@ window.__ModuleLoader__.load({
           .catch(() => {})
       }
       const gids = Object.keys(list)
-      const save = (next) => form.set('groupProfiles', JSON.stringify(next))
+      const save = (next) => {
+        form.set('groupProfiles', JSON.stringify(next))
+        // 同时按账号存一份（vds 读取时文件优先，2026-10-28）
+        try {
+          fetch(`${QQ_STATUS_URL}/group-profiles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profiles: next }),
+          }).catch(() => {})
+        } catch { /* ignore */ }
+      }
       const update = (gid, patch) => save({ ...list, [gid]: { ...(list[gid] || {}), ...patch } })
       const remove = (gid) => { const n = { ...list }; delete n[gid]; save(n) }
       const add = () => {
