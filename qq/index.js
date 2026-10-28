@@ -1902,6 +1902,9 @@ async function ensureNapcatPackage(config) {
 // ---------- 共享记忆 ----------
 
 function sharedMemoryPath() {
+  // 独立模式：QQ 侧共享记忆按账号存（qq/<qq>/shared-memory.md，2026-10-28 主人要求）
+  const perAccount = join(qqAccountDir(), 'shared-memory.md')
+  if (loginQqCache && existsSync(perAccount)) return perAccount
   // 2026-10-25 记忆目录迁到 <DSH_HOME>/versatileds/memory/ 并改英文名（shared-memory.md）。
   // 老路径 <工作区>/tool/记忆/共享记忆.md 只作为回退。
   const inHome = join(dshHome(), 'versatileds', 'memory', 'shared-memory.md')
