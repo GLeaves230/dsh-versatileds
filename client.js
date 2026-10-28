@@ -1,7 +1,7 @@
 /**
  * dsh-versatileds 的浏览器半侧。
  *
- * 一个左侧栏入口「多功能DS插件」，主面板里分「B站模块」「QQ模块」两个选项页，
+ * 一个左侧栏入口「多功能DS插件」，主面板里分「B站模块」「QQ模块」「通用模块」三个选项页，
  * 每个模块页就是原来各自插件设置页的样子（内部还保留自己的分类标签）。
  *
  * 配置读写仍走 Host 的 Config 表单：form.set / form.mutate 落盘并热替换插件。
@@ -2790,7 +2790,7 @@ window.__ModuleLoader__.load({
                 {},
                 React.createElement('div', { style: { fontSize: '15px', fontWeight: 600 } }, '多功能DS插件'),
                 React.createElement('div', { style: { ...hintStyle, marginTop: '2px' } },
-                  'B站 与 QQ 合成了一个插件：上面切模块，下面就是原来那套设置，改完立即生效。'),
+                  'B站 / QQ / 通用 三个模块：上面切模块，下面就是对应设置，改完立即生效。QQ 官方通道需自行按文档登录。'),
               ),
             ),
             React.createElement('div', {

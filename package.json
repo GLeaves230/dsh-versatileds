@@ -1,7 +1,7 @@
 {
   "name": "dsh-versatileds",
   "version": "0.4.4",
-  "description": "多功能DS插件：支持 B站小号代理 + QQ 代理（NapCat 小号通道 / 官方机器人通道），UI 为 B站/QQ/通用 三个模块页；QQ 侧支持本地 GPT-SoVITS 语音、Whisper 语音转文字、按账号/按模块的记忆与人设隔离。仅供学习/个人使用，商用需取得所有版权方授权。",
+  "description": "多功能DS插件：支持B站小号代理 + QQ 代理（NapCat 小号通道 / 官方机器人通道）。左侧栏在仅NapCat模式下一个入口，QQ官方模式下QQ机器人与多功能DS插件两个入口。UI层为B站 / QQ / 通用 三个模块页；QQ 侧支持本地 GPT-SoVITS 语音、Whisper 语音转文字、按账号/按模块的记忆与人设隔离。QQ官方机器人模式下请自行按文档登录，仅供学习/个人使用，商用需取得所有版权方授权。",
   "type": "module",
   "main": "index.js",
   "files": [
