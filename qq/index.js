@@ -9972,7 +9972,13 @@ export function apply(ctx, config) {
       }
       try {
         plog('info', '[dsh-versatileds] 开始自动安装（pnpm add，约 20-60 秒）…')
-        await runAsync('cmd', ['/c', `cd /d "${pdir}" && pnpm add @tencent-connect/dsh-qqbot@latest --registry=https://registry.npmjs.org`], 300000)
+        const r = await runAsync('cmd', ['/c', `cd /d "${pdir}" && pnpm add @tencent-connect/dsh-qqbot@latest --registry=https://registry.npmjs.org`], 300000)
+        if (!r || r.status !== 0) {
+          throw new Error(`pnpm add 返回 status=${r?.status ?? '?'}：${String(r?.stderr || r?.stdout || '').slice(0, 300)}`)
+        }
+        if (!existsSync(join(pdir, 'node_modules', '@tencent-connect', 'dsh-qqbot'))) {
+          throw new Error('pnpm add 说完了，但没找到包目录')
+        }
         plog('info', '[dsh-versatileds] 官方 QQ 插件安装完成，注入 vds 补丁…')
         ensureQqbotPatch()
         // 确保 bundle 挂载 + entry 启用（bundle 不挂载的话裸 entry 加载不了）
