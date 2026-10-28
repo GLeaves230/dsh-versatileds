@@ -1569,7 +1569,7 @@ window.__ModuleLoader__.load({
     }
 
     const QQ_BOOL_FIELDS = [
-      ['isolateAccountMemory', '账号记忆是否隔离', '打开后不同 QQ 号的人设/记忆/笔记各用各的；配合「前后端记忆隔离」决定是 qq\\<号>\\ 还是 qq\\normal\\'],
+      ['isolateAccountMemory', '账号记忆是否隔离', '打开后不同 QQ 号的人设/记忆/笔记各用各的；配合「前后端记忆隔离」：两个都开→qq\\<号>\\，只开前后端→qq\\normal\\，都不开→versatileds\\normal\\'],
   ['enabled', 'QQ模块启用', '关掉后不连 NapCat、不注册 qq 工具，自动回复/主动搭话/群规/余额全停；登录页的「启动登录服务」「退出登录」仍然可用'],
       ['autoReplyEnabled', '自动回复总开关', '私聊和群聊一起管；群里接话频率看下面的概率'],
       ['onlyReplyOwner', '只回复主人', '打开后其他人的消息一律不理'],

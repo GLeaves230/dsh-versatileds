@@ -337,7 +337,7 @@ QQ 侧的记录、设置、媒体都按**当前登录的 QQ 号**分目录，互
     └─ balance.state.json      # 余额（全局资源）
 ```
 
-**人设 / 记忆走哪**（两个开关：前后端记忆隔离 isolateHostQq、按号记忆隔离 isolateGroupPrivate）
+**人设 / 记忆走哪**（两个开关：前后端记忆隔离 `isolateHostQq`、账号记忆隔离 `isolateAccountMemory`）
 
 | 前后端隔离 | 按号隔离 | 人设 / 记忆 / 笔记 | 共享记忆 |
 |---|---|---|---|
@@ -357,8 +357,8 @@ QQ 侧的记录、设置、媒体都按**当前登录的 QQ 号**分目录，互
 
 | 模块页 | 显示 / 写入 |
 |---|---|
-| QQ 模块 | QQ 侧那份（隔离 → `qq\<号>\persona.md`；共享 → `qq\normal\persona.md`） |
-| 通用模块 | 固定 `qq\normal\persona.md` |
+| QQ 模块 | QQ 侧那份（两个都开 → `qq\<号>\persona.md`；只开前后端 → `qq\normal\persona.md`；都不开 → `versatileds\normal\persona.md`） |
+| 通用模块 | 固定 `versatileds\normal\persona.md` |
 | B站模块 | 不显示 |
 
 切模块时会重新读一次路径，改完隔离开关切一下 tab 就能看到变化。
@@ -383,7 +383,7 @@ QQ 侧的记录、设置、媒体都按**当前登录的 QQ 号**分目录，互
    - 点「启动登录服务」，UAC 点「是」，手机 QQ 扫码并确认。
 3. 登录后二维码自动删除，`3000` / `3011` 起来就通了。不想挂着了点「退出登录」（会杀掉 NapCat 进程），下次点启动走快速登录。
 4. B站 模块要自己的 cookie（`cookieFile`），没配就只能匿名看公开内容，点赞/投币/评论都会失败。
-5. 人设改 `qq/normal/persona.md`（共享模式；开了「前后端记忆隔离」就改 `qq/<当前账号>/persona.md`）：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。默认人设已带完整家庭关系（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小），开箱即用。
+5. 人设默认改 `versatileds/normal/persona.md`（两边共用；开「前后端记忆隔离」+「账号记忆隔离」后改 `qq/<当前账号>/persona.md`）：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。默认人设已带完整家庭关系（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小），开箱即用。
 6. **语音（可选但推荐）**：设置页 →「语音」→ 方案选「GPT-SoVITS（本地）」→ 点「环境检查」，缺依赖就点「一键部署」（自动装 Python 3.11 + torch + 模型，约 20-30 分钟，全程后台）；不装也能用 QQ 官方 AI 语音。默认音色是可莉（参考音频 `kc-1.wav`，CV 花玲），换音色把 3-10 秒干净人声放进 `versatileds/models/gpt-sovits/ref/` 再填文件名。
 
 ## 常见问题（排坑）

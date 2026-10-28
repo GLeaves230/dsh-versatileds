@@ -922,7 +922,7 @@ function memoryReadmeTemplate() {
 | \`pitfalls.md\` | 踩过的坑、排查顺序 | 第一次踩坑后 |
 | \`shared-memory.md\` | QQ 与 DSH 共用：群梗、群规、圈内关系 | 第一次有群梗或群规时 |
 | \`archive.md\` | 更早的历史（归档用） | 需要归档时 |
-| \`persona.md\` | 人设摘要（指向 \`.dsh/versatileds/qq/persona.md\`） | 想在这里留一份摘要时 |
+| \`persona.md\` | 人设摘要（实际人设在 \`versatileds/normal/persona.md\`，开隔离后为 \`qq/<账号>/persona.md\`） | 想在这里留一份摘要时 |
 | \`lock.mjs\` | 多进程写入锁（Node，零依赖，默认用这个） | 已随目录生成 |
 | \`lock.py\` | 同上，Python 版（可选；没装 Python 就用 mjs） | 已随目录生成 |
 | \`memwrite.mjs\` | 带锁写记忆的小工具（DSH 侧用）：\`node memwrite.mjs append <文件> "<内容>"\` | 已随目录生成 |
@@ -2000,7 +2000,7 @@ async function ensureNapcatPackage(config) {
 
 function sharedMemoryPath() {
   // 「共享记忆」默认就是 DSH 与 QQ 共用一份（memory/shared-memory.md）；
-  // 只有开了「前后端记忆隔离」才按账号各存一份（qq/<qq>/shared-memory.md，2026-10-28）
+  // 只有「前后端记忆隔离」+「账号记忆隔离」都开，才按账号各存一份（qq/<qq>/shared-memory.md，2026-10-28）
   let hostIso = false
   try { hostIso = qqConfigRef?.isolateHostQq?.get?.() === true } catch { /* ignore */ }
   if (hostIso) return join(qqDataDir(), 'shared-memory.md')
@@ -5884,7 +5884,7 @@ function fmtMessage(msg, config, selfId, target = '') {
 export const name = 'qq-agent'
 export const inject = ['tools']
 
-/** 近期配置引用：路径函数据此判断「前后端记忆隔离」开没开（2026-10-28）。 */
+/** 近期配置引用：路径函数据此判断「前后端记忆隔离」「账号记忆隔离」开没开（2026-10-28）。 */
 let qqConfigRef = null
 
 export function apply(ctx, config) {
@@ -6641,7 +6641,7 @@ export function apply(ctx, config) {
     } catch { /* ignore */ }
 
     const memory = loadMemory()
-    // 锚点现在主要记在 shared-memory.md（qq/memory.md 只留指向），两边都查，直答才有兜底
+    // 锚点现在主要记在 shared-memory.md（memory.md 只留指向），两边都查，直答才有兜底
     const anchors = `${memory}\n${loadSharedMemory(config)}`
 
     // 1) 锚点最优先：「还记得数字吗」不能被「记得」抢走
