@@ -3464,10 +3464,15 @@ function quietRangesOf(p) {
   if (!p || typeof p !== 'object') return []
   if (Array.isArray(p.quietRanges) && p.quietRanges.length) {
     return p.quietRanges
-      .map((r) => ({ start: String(r?.start || ''), end: String(r?.end || '') }))
+      .map((r) => ({
+        start: String(r?.start || ''),
+        end: String(r?.end || ''),
+        // mode: in=这时段静默（正向集）；out=这时段保持活跃（反向集）
+        mode: r?.mode === 'out' ? 'out' : 'in',
+      }))
       .filter((r) => hhmmToMin(r.start) >= 0 && hhmmToMin(r.end) >= 0)
   }
-  if (p.quietStart && p.quietEnd) return [{ start: String(p.quietStart), end: String(p.quietEnd) }]
+  if (p.quietStart && p.quietEnd) return [{ start: String(p.quietStart), end: String(p.quietEnd), mode: 'in' }]
   return []
 }
 
@@ -3475,7 +3480,10 @@ function quietRangesOf(p) {
 function inGroupQuiet(config, gid, now = new Date()) {
   const p = groupProfileOf(config, gid)
   if (!p) return false
-  return quietRangesOf(p).some((r) => inTimeRange(r.start, r.end, now))
+  const ranges = quietRangesOf(p)
+  // 反向集（保持活跃）优先：命中就不静默
+  if (ranges.some((r) => r.mode === 'out' && inTimeRange(r.start, r.end, now))) return false
+  return ranges.some((r) => r.mode === 'in' && inTimeRange(r.start, r.end, now))
 }
 
 

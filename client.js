@@ -1250,10 +1250,13 @@ window.__ModuleLoader__.load({
     function GroupProfilesPanel(props) {
       const { form, value, disabled } = props
       const [draft, setDraft] = React.useState('')
+      const [localList, setLocalList] = React.useState(null)
       const [contacts, setContacts] = React.useState({ groups: [], friends: [] })
       const list = React.useMemo(() => {
+        if (localList) return localList
         try { return JSON.parse(String(value || '{}')) || {} } catch { return {} }
-      }, [value])
+      }, [value, localList])
+      React.useEffect(() => { setLocalList(null) }, [value])
       React.useEffect(() => {
         let alive = true
         fetch(`${QQ_STATUS_URL}/contacts`, { cache: 'no-store' })
@@ -1288,6 +1291,7 @@ window.__ModuleLoader__.load({
       }
       const gids = Object.keys(list)
       const save = (next) => {
+        setLocalList(next)
         form.set('groupProfiles', JSON.stringify(next))
         // 同时按账号存一份（vds 读取时文件优先，2026-10-28）
         try {
@@ -1359,6 +1363,15 @@ window.__ModuleLoader__.load({
                   onChange: (e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, end: e.target.value } : x))),
                   style: inputStyle,
                 }),
+                React.createElement('select', {
+                  value: r.mode === 'out' ? 'out' : 'in',
+                  disabled,
+                  onChange: (e) => setRanges(ranges.map((x, i) => (i === idx ? { ...x, mode: e.target.value } : x))),
+                  style: inputStyle,
+                },
+                  React.createElement('option', { value: 'in' }, '静默'),
+                  React.createElement('option', { value: 'out' }, '保持活跃'),
+                ),
                 React.createElement('button', {
                   type: 'button', disabled, style: skipStyle,
                   onClick: () => setRanges(ranges.filter((_, i) => i !== idx)),
