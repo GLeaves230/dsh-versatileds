@@ -3161,7 +3161,19 @@ function transcribeVoice(wavPath, model) {
     try {
       const args = [script, String(wavPath)]
       if (model) args.push(String(model))
+      // 模型缓存目录（stt.mjs 写这里）：没下载过就先提示，下完再提示一次（2026-10-28）
+      const modelId = String(model || 'onnx-community/whisper-base')
+      const modelDir = join(versatiledsBase(), 'models', 'hf', ...modelId.split('/'))
+      const existed = existsSync(modelDir)
+      if (!existed) plog('info', `[dsh-versatileds] 语音转文字模型未下载，正在下载 ${modelId}（首次约 1-2 分钟）…`)
       child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      child.on('close', () => {
+        try {
+          if (!existed && existsSync(modelDir)) {
+            plog('info', `[dsh-versatileds] 语音转文字模型已下载好：${modelId}`)
+          }
+        } catch { /* ignore */ }
+      })
     } catch {
       finish('')
       return
