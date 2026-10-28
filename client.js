@@ -1766,7 +1766,12 @@ window.__ModuleLoader__.load({
             .then(setPersonaInfo)
             .catch(() => {})
         }
-        React.useEffect(() => { loadPersona() }, [])
+        // 人设路径会随「前后端记忆隔离」开关变化：定时刷新，别让页面显示过期路径（2026-10-28）
+        React.useEffect(() => {
+          loadPersona()
+          const t = setInterval(loadPersona, 5000)
+          return () => clearInterval(t)
+        }, [])
         // 全局偏好（AGENTS.md）：不存在就生成含语言设置的模板
         const [agentsInfo, setAgentsInfo] = React.useState(null)
         const [agentsMsg, setAgentsMsg] = React.useState('')
