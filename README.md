@@ -303,9 +303,15 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 | 接口 | 用途 |
 |---|---|
 | `GET /flags` | 当前 QQ 模块总开关的值（排查热切换） |
-| `GET /cooldowns` | 各项冷却倒计时 |
+| `GET /cooldowns` | 各项冷却倒计时（带 `account` 与 `session`：当前账号、上线/下线时间、离线时长） |
 | `GET /skip` / `POST /set_used` | 跳过主动搭话倒计时 / 改今日已用次数 |
 | `GET /balance_check` | 查 DeepSeek 余额 |
+| `GET/POST /persona` | 人设路径与「初始化人设」；`?for=common` 指通用模块那份；返回带 `dataDir`（QQ 侧目录）和 `sharedDir`（通用侧目录） |
+| `POST /owner` | 按当前账号写主人号（`qq/<号>/owner.json`） |
+| `POST /focus` | 按当前账号写聚焦会话（`qq/<号>/focus.json`） |
+| `POST /group-profiles` | 按当前账号写群偏好（`qq/<号>/groups.json`） |
+| `POST /proactive-targets` | 按当前账号写主动搭话对象（`qq/<号>/proactive-targets.json`） |
+| `GET /contacts` | 群列表 + 好友列表（聚焦会话下拉框用） |
 
 ## B站 模块（18765）
 
@@ -314,10 +320,29 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 | `GET /cooldowns` | B站 各项操作（点赞/投币/评论等）的冷却倒计时 |
 | `GET /skip` | 跳过当前冷却（调试用） |
 
+## 通用模块
+
+「通用模块」不是一套独立代码，而是**复用 QQ 模块的设置页**，只显示两组：**记忆** 和 **余额**。它代表「DSH 侧/通用」这一边的数据。
+
+| 项 | 通用模块看到的 |
+|---|---|
+| 人设文件 | 固定 `<DSH_HOME>/versatileds/normal/persona.md`（不受隔离开关影响） |
+| 全局偏好 | `<DSH_HOME>/AGENTS.md` |
+| 记忆 | `shared-memory.md` 双向共享；「前后端记忆隔离」打开后 QQ 侧不再读它 |
+| 余额 | `<DSH_HOME>/versatileds/qq/normal/balance.state.json`（全局资源） |
+
+**和 QQ 模块的关系**（详见「数据目录：按账号 / 按模块隔离」）：
+
+- 前后端都不隔离：两边读同一份 `versatileds\normal\persona.md`；
+- 只开「前后端记忆隔离」：QQ 侧切到 `qq\normal\`，通用侧仍是 `versatileds\normal\`；
+- 再开「账号记忆隔离」：QQ 侧按号（`qq\<账号>\`），通用侧不变。
+
+设置页里两个模块各显示自己的人设路径（点的「初始化人设」也只写自己那份），数据目录提示也按模块区分。
+
 ## 配置分块
 
 - `config.bili`：写操作开关与间隔、cookie、主人 UID、直播抓帧、视频抓帧、观看历史上报等。字段见 `bili/index.js` 的 `Config`。
-- `config.qq`：NapCat 连接、自动回复、群聊规则、主动搭话、搜索/任务转交、余额、日志、识图、表情包、视频分享等。字段见 `qq/index.js` 的 `Config`。
+- `config.qq`：NapCat 连接、自动回复、群聊规则、主动搭话、搜索/任务转交、余额、日志、识图、表情包、视频分享、语音（含 `sttModel` 语音转文字模型）、隔离（`isolateHostQq` 前后端 / `isolateAccountMemory` 账号）等。字段见 `qq/index.js` 的 `Config`。
 
 两块都是 `volatile()` 字段：普通字段改完即时生效；两个总开关（`bili.enabled` / `qq.enabled`）约 **2 秒内热启停**——工具注册/注销、WS、定时器都跟着停/起，不用重启 DSH。**关掉 QQ 模块时「启动登录服务」「退出登录」仍然可用**（关的只是聊天自动化）。
 
