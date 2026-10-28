@@ -8156,6 +8156,7 @@ export function apply(ctx, config) {
 
   function startProactive() {
     // 定时器常驻，开关在每次 tick 里判断，这样改配置不用重启插件
+    let lastAccount = loginQqCache
     const tick = async () => {
       // NapCat 没起来/没登录就别折腾，免得每次 tick 刷一条 fetch failed
       if (!(await napcatAlive())) return
@@ -8163,8 +8164,16 @@ export function apply(ctx, config) {
         plog('warn', '[dsh-versatileds] 主动搭话失败:', err?.message ?? err)
       })
     }
+    // 切号后立刻补一次：倒计时已按离线时长扣减（2026-10-28）
+    const guard = async () => {
+      if (loginQqCache && loginQqCache !== lastAccount) {
+        lastAccount = loginQqCache
+        await tick()
+      }
+    }
+    const guardTimer = setInterval(() => { guard().catch(() => {}) }, 5_000)
     const timer = setInterval(tick, 30_000)
-    return () => clearInterval(timer)
+    return () => { clearInterval(timer); clearInterval(guardTimer) }
   }
 
   // ---------- 主动搭话：聚焦一个目标（群或好友）→ 搭话 → 倒计时 → 退出刷新 → 下一个 ----------
