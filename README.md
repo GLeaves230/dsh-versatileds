@@ -337,15 +337,17 @@ QQ 侧的记录、设置、媒体都按**当前登录的 QQ 号**分目录，互
     └─ balance.state.json      # 余额（全局资源）
 ```
 
-**人设 / 记忆走哪**
+**人设 / 记忆走哪**（两个开关：前后端记忆隔离 isolateHostQq、按号记忆隔离 isolateGroupPrivate）
 
-| 模式 | 人设 | 记忆 / 笔记 / 共享记忆 |
-|---|---|---|
-| 默认（共享） | `qq\normal\persona.md` | `qq\memory.md`、`qq\notes.md`、`versatileds\memory\shared-memory.md` |
-| 开「前后端记忆隔离」 | `qq\<当前账号>\persona.md` | `qq\<当前账号>\memory.md`、`qq\<当前账号>\notes.md`、`qq\<当前账号>\shared-memory.md` |
+| 前后端隔离 | 按号隔离 | 人设 / 记忆 / 笔记 | 共享记忆 |
+|---|---|---|---|
+| 关 | —（不生效） | `versatileds\normal\`（DSH 与 QQ 共用） | `versatileds\memory\shared-memory.md` |
+| 开 | 关 | `versatileds\qq\normal\`（QQ 侧单独一份 normal，不与 DSH 互读） | `versatileds\qq\normal\shared-memory.md` |
+| 开 | 开 | `versatileds\qq\<当前账号>\`（按号独立） | `versatileds\qq\<当前账号>\shared-memory.md` |
 
-- 共享模式下 DSH 会话和 QQ 侧读**同一份**，改一处两边都生效；
-- 隔离模式下**只读自己那份**，不回退共享；
+- **通用模块**（DSH 侧）永远读 `versatileds\normal\persona.md`，不受这两个开关影响；
+- **QQ 模块**按上表走，设置页「人设文件」显示的就是当前实际路径；
+
 - 记录/设置类（owner、focus、quiet、groups、群规、主动搭话对象、表情包、图片、聊天、语音）**永远按号**，跟开关无关；
 - 新账号首次出现（存档目录为空）**只复制人设**做初始化，记忆不复制；人设被删不自动补，交给设置页「初始化人设」按钮由号主自己决定。
 

@@ -1088,19 +1088,29 @@ function ensureAgentsTemplate() {
 }
 
 /** 通用侧人设（共享模式）：versatileds/normal/persona.md —— DSH 与 QQ 共用这一份（2026-10-28 主人要求） */
+/** 人设/记忆/笔记的数据目录（2026-10-28 主人定稿）：
+ * 前后端隔离 + 按号隔离 → versatileds/qq/<号>/
+ * 前后端隔离 + 按号隔离关 → versatileds/qq/normal/
+ * 前后端不隔离 → versatileds/normal/ */
+function qqDataDir() {
+  let hostIso = false
+  let acctIso = false
+  try {
+    hostIso = qqConfigRef?.isolateHostQq?.get?.() === true
+    acctIso = qqConfigRef?.isolateGroupPrivate?.get?.() === true
+  } catch { /* ignore */ }
+  if (hostIso && acctIso && loginQqCache) return join(versatiledsBase(), 'qq', loginQqCache)
+  if (hostIso) return join(versatiledsBase(), 'qq', 'normal')
+  return join(versatiledsBase(), 'normal')
+}
+
 function sharedPersonaPath() {
-  return join(versatiledsBase(), 'qq', 'normal', 'persona.md')
+  return join(versatiledsBase(), 'normal', 'persona.md')
 }
 
 /** QQ 侧人设：隔离模式按账号（qq/<qq>/persona.md），共享模式用 normal/persona.md。 */
 function personaPath() {
-  // 隔离：按账号（不存在就新建/回退共享）；共享：统一用 normal/persona.md（2026-10-28）
-  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) {
-    return join(qqAccountDir(), 'persona.md')
-  }
-  const shared = sharedPersonaPath()
-  if (existsSync(shared)) return shared
-  return join(versatiledsBase(), 'qq', 'persona.md')
+  return join(qqDataDir(), 'persona.md')
 }
 
 function loadPersona() {
@@ -1273,9 +1283,7 @@ function qqStatePath(name, ext = 'json') {
 }
 
 function memoryPath() {
-  // 隔离：按账号各自一份；共享：DSH 与 QQ 读同一份 qq/memory.md（2026-10-28）
-  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) return join(qqAccountDir(), 'memory.md')
-  return join(versatiledsBase(), 'qq', 'memory.md')
+  return join(qqDataDir(), 'memory.md')
 }
 
 function loadMemory() {
@@ -1377,8 +1385,8 @@ function setLoginQq(qq) {
     const empty = !existsSync(acctDir) || (readdirSync(acctDir).length === 0)
     if (empty) {
       const perPersona = join(acctDir, 'persona.md')
-      const sharedP = sharedPersonaPath()
-      const fallbackP = join(versatiledsBase(), 'qq', 'persona.md')
+      const sharedP = join(versatiledsBase(), 'normal', 'persona.md')
+      const fallbackP = sharedPersonaPath()
       const src = existsSync(sharedP) ? sharedP : (existsSync(fallbackP) ? fallbackP : '')
       if (src) {
         mkdirSync(dirname(perPersona), { recursive: true })
@@ -1400,8 +1408,7 @@ function setLoginQq(qq) {
 }
 
 function notesPath() {
-  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) return join(qqAccountDir(), 'notes.md')
-  return join(versatiledsBase(), 'qq', 'notes.md')
+  return join(qqDataDir(), 'notes.md')
 }
 
 /** 聚焦目标按账号隔离：文件 focus-<qq>.json 优先，没文件再用配置（全局兜底）。 */
@@ -1992,9 +1999,9 @@ async function ensureNapcatPackage(config) {
 function sharedMemoryPath() {
   // 「共享记忆」默认就是 DSH 与 QQ 共用一份（memory/shared-memory.md）；
   // 只有开了「前后端记忆隔离」才按账号各存一份（qq/<qq>/shared-memory.md，2026-10-28）
-  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) {
-    return join(qqAccountDir(), 'shared-memory.md')
-  }
+  let hostIso = false
+  try { hostIso = qqConfigRef?.isolateHostQq?.get?.() === true } catch { /* ignore */ }
+  if (hostIso) return join(qqDataDir(), 'shared-memory.md')
   // 2026-10-25 记忆目录迁到 <DSH_HOME>/versatileds/memory/ 并改英文名（shared-memory.md）。
   // 老路径 <工作区>/tool/记忆/共享记忆.md 只作为回退。
   const inHome = join(dshHome(), 'versatileds', 'memory', 'shared-memory.md')
