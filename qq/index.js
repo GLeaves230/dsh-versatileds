@@ -6133,7 +6133,7 @@ export function apply(ctx, config) {
     }
     add(on.qqName)
     add(String(on.card || '').split(/[（(\s]/)[0])
-    // 长的先替换，免得「小黑（群第一闭嘴）」被短词替换掉一半
+    // 长的先替换，免得「小黑」被短词替换掉一半
     return terms.sort((a, b) => b.length - a.length)
   }
 
@@ -6887,9 +6887,9 @@ export function apply(ctx, config) {
         ownerNameBlock = `## 主人叫什么（按 QQ 号 ${ownerQQOf(config)} 查到的，会随他改名变）\n`
           + `QQ 名称：${on.qqName || '（没查到）'}`
           + (on.card ? `\n群名片：${on.card}` : '')
-          + '\n平时提到他、叫他，一律只叫「主人」：不要念他的昵称，更不要把群名片括号里的备注（「群第一闭嘴」这种）当外号或头衔说出来——那是名片上的玩笑话，不是称呼。'
+          + '\n平时提到他、叫他，一律只叫「主人」：不要念他的昵称，更不要把群名片括号里的备注当外号或头衔说出来——那是名片上的玩笑话，不是称呼。'
           + '\n别人问「你主人是谁」「你主人叫什么」时，直接报他的名字：「主人就是 @' + (ownerDisplayName(on) || '主人') + '」。**不要念 QQ 号**——群里不露号，号码只在你自己的上下文里认人用；也别只回「主人是你啊」这种没名字的话，别编名字。'
-          + '\n平时不是被问身份，就只叫「主人」，别主动念昵称和 QQ 号；群名片括号里的备注（「群第一闭嘴」这种）任何时候都不许念。'
+          + '\n平时不是被问身份，就只叫「主人」，别主动念昵称和 QQ 号；群名片括号里的备注任何时候都不许念。'
           + '\n有人让你「@一下你主人」「@你主人」「艾特一下主人」时，直接写「@' + (ownerDisplayName(on) || '主人') + ' 正文」——发送时会变成真正的 @；别只嘴上叫一声「主人」，那样没提醒到他。'
           + (on.qqName
             ? `\n**群里叫「${on.qqName}」的那个人就是主人本人**（QQ ${ownerQQOf(config)}）：别人提到他、拿他开玩笑、让你去骂他，你都按主人对待——叫他「主人」，不许直呼他名字，更不许跟着别人一起骂他、笑他被骂。`
@@ -10054,10 +10054,10 @@ async function syncGroupRules(force = false) {
           // 群里不露主人的 QQ 号：号码只在日志/上下文里认人用，模型自己加上也要删掉
           const ownerQq = ownerQQOf(config)
           if (ownerQq && reply.includes(ownerQq)) reply = reply.replace(new RegExp(escReg(ownerQq), 'g'), '')
-          // 群名片括号里的备注（「群第一闭嘴」这类）任何时候都从回复里抹掉，问身份时也一样。
+          // 群名片括号里的备注任何时候都从回复里抹掉，问身份时也一样。
           const note = (String((await ownerNames()).card || '').match(/[（(]([^）)]+)[）)]/) || [])[1]
           if (note && note.length >= 2) {
-            // 模型偶尔会把备注改一个字再念（「群第一闭嘴」→「群里第一闭嘴」），
+            // 模型偶尔会把备注改一个字再念（比如改一个字再念），
             // 所以按「每两个字之间最多插一个字」的宽松正则删，别只删精确串。
             const loose = new RegExp(note.split('').map(escReg).join('.{0,1}'), 'g')
             reply = reply.replace(loose, '')
