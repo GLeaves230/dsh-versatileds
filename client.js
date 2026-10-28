@@ -876,6 +876,16 @@ window.__ModuleLoader__.load({
           },
         },
         React.createElement('div', { style: { fontWeight: 600, marginBottom: '4px' } }, '冷却状态'),
+        cooldowns && cooldowns.account
+          ? React.createElement('div', { style: { ...hintStyle, marginBottom: '4px' } },
+              `当前账号：${cooldowns.account}` +
+              (cooldowns.session && cooldowns.session.lastOnlineAt
+                ? ` · 上线 ${new Date(cooldowns.session.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
+                  + (cooldowns.session.offlineMs > 0
+                    ? ` · 离线 ${Math.round(cooldowns.session.offlineMs / 60000)} 分钟（倒计时已扣减）`
+                    : '')
+                : ''))
+          : null,
         rows.length
           ? rows.map((a) => React.createElement(
               'div',

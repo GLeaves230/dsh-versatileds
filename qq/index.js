@@ -1309,11 +1309,39 @@ function personaForGroup(text) {
 
 /** 当前登录的 QQ（用于按账号隔离记录/聚焦目标）；由探测逻辑更新（2026-10-28 主人要求一个账号一份记录）。 */
 let loginQqCache = ''
+/** 每个账号的会话记录（下线/上线时间），2026-10-28 主人要求：切号扣减离线时长 */
+function accountSessionPath(qq) {
+  return qq ? join(versatiledsBase(), 'qq', qq, 'session.json') : join(versatiledsBase(), 'qq', 'session.json')
+}
+function markAccountSwitch(prevQq, nextQq) {
+  try {
+    const now = Date.now()
+    if (prevQq && prevQq !== nextQq) {
+      const f = accountSessionPath(prevQq)
+      const j = loadJsonFile(f) || {}
+      saveJsonFile(f, { ...j, lastOfflineAt: now })
+    }
+    if (nextQq) {
+      const f = accountSessionPath(nextQq)
+      const j = loadJsonFile(f) || {}
+      const off = Number(j.lastOfflineAt || 0)
+      saveJsonFile(f, {
+        ...j,
+        lastOnlineAt: now,
+        offlineMs: off ? Math.max(0, now - off) : 0,
+        lastOfflineAt: 0,
+      })
+    }
+  } catch { /* ignore */ }
+}
+
 function setLoginQq(qq) {
   const next = String(qq || '').trim()
   if (!next) return
   if (next === loginQqCache) return
+  const prevQq = loginQqCache
   loginQqCache = next
+  markAccountSwitch(prevQq, next)
   // 换了号：清空内存镜像，重新按新账号的文件加载
   try {
     notesMem.length = 0
@@ -4217,7 +4245,14 @@ function startStatusServer(config, napcat = null) {
       const vs = loadJsonFile(qqStatePath('video_share.state'))
       const rs = loadRulesState()
       const bs = loadJsonFile(balanceStatePath())
+      const session = loadJsonFile(accountSessionPath(loginQqCache)) || {}
       const payload = {
+        account: loginQqCache || '',
+        session: {
+          lastOnlineAt: Number(session.lastOnlineAt || 0),
+          lastOfflineAt: Number(session.lastOfflineAt || 0),
+          offlineMs: Number(session.offlineMs || 0),
+        },
         proactive: left, exhausted, used, limit, unlimited: limit <= 0,
         videoShare: leftOf(vs.lastAt, Math.max(60, Number(config.videoShareIntervalSec.get() ?? 300)) * 1000, config.videoShareEnabled.get() === true),
         webSearch: leftOf(lastWebSearchAt, Math.max(10, Number(config.webSearchCooldownSec.get() ?? 90)) * 1000, config.webSearchEnabled.get() === true),
