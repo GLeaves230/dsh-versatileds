@@ -1534,6 +1534,12 @@ window.__ModuleLoader__.load({
     }
 
     /** QQ 侧在冷却的功能（和 /cooldowns 返回的字段对应）。 */
+    /** 通用模块的冷却：只放跟 DSH/余额共用的那几项，不抄 QQ 的一整套（2026-10-28） */
+    const COMMON_COOLDOWN_LABELS = {
+      balance: '余额检查',
+      updateCheck: '更新自检',
+    }
+
     const QQ_COOLDOWN_LABELS = {
       proactive: '主动搭话',
       videoShare: '视频分享',
@@ -2097,7 +2103,7 @@ window.__ModuleLoader__.load({
         // 和 B站 页一样：冷却状态放标签栏下面，八个子页都能看到
         children.push(React.createElement(CooldownPanel, {
           key: 'cooldowns',
-          labels: QQ_COOLDOWN_LABELS,
+          labels: (options && options.personaScope) === 'common' ? COMMON_COOLDOWN_LABELS : QQ_COOLDOWN_LABELS,
           cooldowns,
           onSkip: skipCooldown,
         }))
