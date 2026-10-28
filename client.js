@@ -1744,7 +1744,9 @@ window.__ModuleLoader__.load({
       const groups = Array.isArray(onlyGroups) && onlyGroups.length
         ? QQ_GROUPS.filter(([key]) => onlyGroups.includes(key))
         : QQ_GROUPS
-      return function QQConfig() {
+      return function QQConfig(props) {
+        // 切到本模块时刷新一次人设路径（不再 5 秒轮询，2026-10-28 主人要求）
+        const moduleActive = !props || props.active !== false
         const snap = useSnapshot(form)
         const [pending, setPending] = React.useState({})
         const [cleared, setCleared] = React.useState('')
@@ -1766,12 +1768,10 @@ window.__ModuleLoader__.load({
             .then(setPersonaInfo)
             .catch(() => {})
         }
-        // 人设路径会随「前后端记忆隔离」开关变化：定时刷新，别让页面显示过期路径（2026-10-28）
+        // 切到本模块时刷新人设路径（勾了隔离开关后，切回来就能看到新路径）
         React.useEffect(() => {
-          loadPersona()
-          const t = setInterval(loadPersona, 5000)
-          return () => clearInterval(t)
-        }, [])
+          if (moduleActive) loadPersona()
+        }, [moduleActive])
         // 全局偏好（AGENTS.md）：不存在就生成含语言设置的模板
         const [agentsInfo, setAgentsInfo] = React.useState(null)
         const [agentsMsg, setAgentsMsg] = React.useState('')
