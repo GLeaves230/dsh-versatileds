@@ -1101,7 +1101,8 @@ function qqDataDir() {
     hostIso = qqConfigRef?.isolateHostQq?.get?.() === true
     acctIso = qqConfigRef?.isolateAccountMemory?.get?.() === true
   } catch { /* ignore */ }
-  if (hostIso && acctIso && loginQqCache) return join(versatiledsBase(), 'qq', loginQqCache)
+  // 已退出登录：即使之前记着号，也回退到共享目录（2026-10-28 主人确认）
+  if (hostIso && acctIso && loginQqCache && !napcatLoggedOut) return join(versatiledsBase(), 'qq', loginQqCache)
   if (hostIso) return join(versatiledsBase(), 'qq', 'normal')
   return join(versatiledsBase(), 'normal')
 }
