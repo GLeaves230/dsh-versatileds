@@ -479,6 +479,13 @@ QQ 侧的记录、设置、媒体都按**当前登录的 QQ 号**分目录，互
 | GitHub / HF 拉不动 | 用镜像：代码 `ghproxy.net`，模型 `hf-mirror.com`，pip `pypi.tuna.tsinghua.edu.cn` |
 | 插件突然不工作 | DSH 启动失败会**静默禁用**插件；去 DSH 日志看原因 |
 | 群消息不回复 | 检查 `autoReplyEnabled`、WS 是否连着、是否在反思期（被嫌吵后静默） |
+| 听不到语音内容 / 转写不准 | 看日志有没有「语音转文字：…」；不准就换 `sttModel`（base→small→large-v3-turbo），大模型首次要下载（100MB～1.5GB） |
+| 自己发的语音对方显示「该消息类型暂不支持查看」 | 旧版发的是 amr，已改成直接发 wav；还出现说明 NapCat 版本太旧，重装一次 NapCat |
+| 回复为空 | 模型偶尔空回复（上下文太长时），插件会兜底回「嗯，在呢」；频繁出现就归档/新会话 |
+| 官方通道群里发不出消息 | 平台限制（群聊无主动消息权限，报 `40034105`），群聊只能带 `msg_id` 被动回复 |
+| 切号后还是旧号 | `napcatQuickLogin` 在快速登录；插件检测到换号会自动清空它，重启 NapCat 后扫码登录 |
+| 「发个表情包」没反应 | 看 `stickerEnabled` 是否开、`qq/<账号>/sticker` 里有没有图；首次用可先发几张图让它收进库 |
+| 插件面板空白 / 显示旧界面 | `client.js` 改动后要在 DSH 仓库跑 `pnpm run build:web`，再硬刷新（Ctrl+F5） |
 
 ## 问题反馈
 
