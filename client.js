@@ -1766,7 +1766,7 @@ window.__ModuleLoader__.load({
             .then(setPersonaInfo)
             .catch(() => {})
         }
-        React.useEffect(() => { loadPersona() }, [])
+        React.useEffect(() => { if (moduleActive) loadPersona() }, [moduleActive])
         // 全局偏好（AGENTS.md）：不存在就生成含语言设置的模板
         const [agentsInfo, setAgentsInfo] = React.useState(null)
         const [agentsMsg, setAgentsMsg] = React.useState('')
@@ -2776,9 +2776,9 @@ window.__ModuleLoader__.load({
         children.push(React.createElement('div', { key: 'bili', style: { display: mod === 'bili' ? 'block' : 'none' } },
           React.createElement(BiliPage, null)))
         children.push(React.createElement('div', { key: 'qq', style: { display: mod === 'qq' ? 'block' : 'none' } },
-          React.createElement(QqPage, null)))
+          React.createElement(QqPage, { active: mod === 'qq' })))
         children.push(React.createElement('div', { key: 'common', style: { display: mod === 'common' ? 'block' : 'none' } },
-          React.createElement(CommonPage, null)))
+          React.createElement(CommonPage, { active: mod === 'common' })))
 
         return React.createElement(
           'div',
