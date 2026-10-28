@@ -1740,7 +1740,7 @@ window.__ModuleLoader__.load({
      * QQ 配置页。`onlyGroups` 传了就只显示那几个分类：
      * 「通用模块」就是用它把「记忆 / 余额」单独展示，代码完全复用这一页。
      */
-    function createQqPage(form, onlyGroups) {
+    function createQqPage(form, onlyGroups, options) {
       const groups = Array.isArray(onlyGroups) && onlyGroups.length
         ? QQ_GROUPS.filter(([key]) => onlyGroups.includes(key))
         : QQ_GROUPS
@@ -1790,7 +1790,9 @@ window.__ModuleLoader__.load({
         }
         const doMakePersona = async () => {
           try {
-            const r = await fetch(`${QQ_STATUS_URL}/persona`, { method: 'POST' })
+            const scope = (options && options.personaScope) || 'qq'
+            const qs = scope === 'common' ? '?for=common' : ''
+            const r = await fetch(`${QQ_STATUS_URL}/persona${qs}`, { method: 'POST' })
             const d = await r.json()
             setPersonaMsg(d && d.created ? '已生成模板，去填吧' : '人设文件已存在，没覆盖')
             loadPersona()
@@ -2685,9 +2687,9 @@ window.__ModuleLoader__.load({
       const qqForm = scopeForm(baseForm, 'qq')
       // 记忆和余额已经搬到「通用模块」，QQ 页不再重复显示这两组
       const qqMainGroups = QQ_GROUPS.map(([key]) => key).filter((key) => key !== 'memory' && key !== 'balance')
-      const QqPage = createQqPage(qqForm, qqMainGroups)
+      const QqPage = createQqPage(qqForm, qqMainGroups, { personaScope: 'qq' })
       // 通用模块 = 同一套页面，只显示「记忆 / 余额」两组
-      const CommonPage = createQqPage(qqForm, ['memory', 'balance'])
+      const CommonPage = createQqPage(qqForm, ['memory', 'balance'], { personaScope: 'common' })
       return function VersatiledsPanel() {
         const [mod, setMod] = React.useState('bili')
         // 顶部常驻的 DeepSeek 余额：所有页面都能看到，5 分钟自动刷一次

@@ -752,8 +752,8 @@ function adoptOwner(qq, name) {
 }
 
 /** 人设文件不存在就落模板，返回 true 表示这次新建了。 */
-function ensurePersonaTemplate() {
-  const p = personaPath()
+function ensurePersonaTemplate(forCommon) {
+  const p = forCommon ? sharedPersonaPath() : personaPath()
   if (existsSync(p)) return false
   try {
     mkdirSync(dirname(p), { recursive: true })
@@ -4318,7 +4318,8 @@ function startStatusServer(config, napcat = null) {
       return
     }
     if (url.pathname === '/persona') {
-      const p = personaPath()
+      const forCommon = url.searchParams.get('for') === 'common'
+      const p = forCommon ? sharedPersonaPath() : personaPath()
       const exists = existsSync(p)
       let chars = 0
       if (exists) {
@@ -4326,7 +4327,7 @@ function startStatusServer(config, napcat = null) {
       }
       if (req.method === 'POST') {
         // 生成模板（已存在就不覆盖）
-        const created = ensurePersonaTemplate()
+        const created = ensurePersonaTemplate(forCommon)
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({ ok: true, created, path: p }))
         return
