@@ -594,6 +594,43 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function ChannelRow(props) {
+      const { form, field, label, hint, pending, setPending, value: initial, disabled } = props
+      const value = field in pending ? pending[field] : initial
+      return React.createElement(
+        'div',
+        { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, label),
+        React.createElement('select', {
+          value: String(value || 'napcat'),
+          disabled,
+          onChange: (e) => {
+            const next = e.target.value
+            setPending((p) => ({ ...p, [field]: next }))
+            const settle = () => setPending((p) => {
+              const copy = { ...p }
+              delete copy[field]
+              return copy
+            })
+            Promise.resolve(form.set(field, next)).then(settle, settle)
+          },
+          style: {
+            padding: '4px 8px',
+            borderRadius: '6px',
+            background: 'transparent',
+            color: 'inherit',
+            border: '1px solid rgba(128,128,128,0.3)',
+            fontSize: '13px',
+            minWidth: '220px',
+          },
+        },
+        React.createElement('option', { value: 'napcat' }, 'NapCat（小号）'),
+        React.createElement('option', { value: 'official' }, 'QQ 官方插件（官方机器人）'),
+        ),
+        hint ? React.createElement('span', { style: hintStyle }, hint) : null,
+      )
+    }
+
     // ================================================================= B站模块
     const BILI_GROUPS = [
       ['write', '写操作'],
@@ -1098,27 +1135,25 @@ window.__ModuleLoader__.load({
             ? data.groups.map((g) => React.createElement('div', { key: g.name, style: { marginBottom: '6px' } },
                 React.createElement('div', { style: { fontSize: '12px', fontWeight: 600, opacity: 0.75, marginBottom: '4px' } },
                   `${g.name}（${g.files.length}）`),
-                // 聊天记录用下拉：会话越多列表越长，最活跃（文件最大）的排第一
-                g.name === '聊天记录'
-                  ? React.createElement('select', {
-                      value: sel && g.files.some((f) => f.id === sel) ? sel : '',
-                      onChange: (e) => { if (e.target.value) setSel(e.target.value) },
-                      style: {
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        background: 'transparent',
-                        color: 'inherit',
-                        border: '1px solid rgba(128,128,128,0.3)',
-                        fontSize: '12px',
-                        minWidth: '260px',
-                        maxWidth: '100%',
-                      },
-                    },
-                    React.createElement('option', { value: '' }, '选择聊天记录…'),
-                    g.files.map((f) => React.createElement('option', { key: f.id, value: f.id },
-                      `${f.label}　${(f.size / 1024).toFixed(0)}KB`)),
-                  )
-                  : React.createElement('div', null, g.files.map((f) => btn(f.label, () => setSel(f.id), sel === f.id))),
+                // 统一用下拉：NapCat 日志越积越多，按钮铺满一页很乱（2026-10-27 主人要求）
+                React.createElement('select', {
+                  value: sel && g.files.some((f) => f.id === sel) ? sel : '',
+                  onChange: (e) => { if (e.target.value) setSel(e.target.value) },
+                  style: {
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    color: 'inherit',
+                    border: '1px solid rgba(128,128,128,0.3)',
+                    fontSize: '12px',
+                    minWidth: '260px',
+                    maxWidth: '100%',
+                  },
+                },
+                React.createElement('option', { value: '' }, `选择${g.name}…`),
+                g.files.map((f) => React.createElement('option', { key: f.id, value: f.id },
+                  `${f.label}　${(f.size / 1024).toFixed(0)}KB`)),
+                ),
               ))
             : React.createElement('div', { style: { fontSize: '12px', opacity: 0.6 } },
                 '还没找到日志。NapCat 的日志要它自己写过（logs 目录），插件日志要触发过对应动作。'),
@@ -1149,7 +1184,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 登录子页面：状态 + 二维码 + 启动按钮，全在模块页里操作，不弹独立网页。 */
-    function LoginPanel() {
+    function LoginPanel({ channel }) {
       const [st, setSt] = React.useState({ phase: 'loading' })
       const [busy, setBusy] = React.useState(false)
       const [stopping, setStopping] = React.useState(false)
@@ -1205,6 +1240,28 @@ window.__ModuleLoader__.load({
           })
           .catch((e) => setNote(`请求失败：${e && e.message ? e.message : e}`))
           .finally(() => setStopping(false))
+      }
+      // QQ 官方机器人模式：不用 NapCat 登录，给官方绑定指引（2026-10-28 主人要求）
+      if (channel === 'official') {
+        return React.createElement('div', { style: { padding: '16px 0', lineHeight: 1.9, fontSize: '13px' } },
+          React.createElement('div', { style: { fontSize: '14px', fontWeight: 600, marginBottom: '8px' } }, 'QQ 官方机器人模式'),
+          React.createElement('div', null, '这个模式不需要在这里登录（本页的「启动登录服务 / 退出登录」只用于 NapCat 小号模式）。'),
+          React.createElement('div', { style: { marginTop: '10px' } }, '官方机器人绑定/登录走 DSH 自己的设置页：'),
+          React.createElement('ol', { style: { margin: '6px 0 0 18px', padding: 0 } },
+            React.createElement('li', null, '点左下角的账号（头像）'),
+            React.createElement('li', null, '进入「设置」→「QQ 机器人」'),
+            React.createElement('li', null, '在那里扫码绑定，绑定后官方通道自动生效'),
+          ),
+          React.createElement('div', { style: { marginTop: '12px' } },
+            '详细文档：',
+            React.createElement('a', {
+              href: 'https://bot.q.qq.com/wiki/develop/api-v2/',
+              target: '_blank',
+              rel: 'noreferrer',
+              style: { color: '#4a90d9' },
+            }, 'bot.q.qq.com/wiki/develop/api-v2/'),
+          ),
+        )
       }
       const phase = st.phase || 'loading'
       const loggedOut = Boolean(st.loggedOut) && phase !== 'ready'
@@ -1273,7 +1330,12 @@ window.__ModuleLoader__.load({
               cursor: busy || stopping ? 'default' : 'pointer',
               opacity: busy || stopping ? 0.6 : 1,
             },
-          }, stopping ? '正在退出…' : (busy ? '正在拉起…' : (confirmStop ? '确认退出' : (loggedIn ? '退出登录' : '启动登录服务')))),
+          }, stopping ? '正在退出…'
+            : busy ? '正在拉起…'
+              : confirmStop ? '确认退出'
+                : loggedIn ? '退出登录'
+                  : phase === 'waiting_qrcode' ? '重新出码（会重启 NapCat）'
+                    : '启动登录服务'),
           React.createElement('button', {
             type: 'button',
             onClick: openDir,
@@ -1438,6 +1500,7 @@ window.__ModuleLoader__.load({
     ]
 
     const QQ_TEXT_FIELDS = [
+      ['qqChannel', 'QQ 通道（napcat / official）', 'napcat＝小号走 NapCat（插件自己收发）；official＝官方机器人走 dsh-qqbot 插件（需要安装官方插件；插件只保留语音/记忆/发送工具，不连 NapCat）'],
       ['napcatHttp', 'NapCat HTTP 地址', 'http://127.0.0.1:3000'],
       ['napcatWs', 'NapCat WebSocket 地址', 'ws://127.0.0.1:3011，留空关闭自动回复'],
       ['ownerQQ', '主人 QQ 号', '必填：不填就认不出主人（没人叫得上「主人」、也不会 @ 主人）。留空时插件会把第一条私聊它的人自动当主人，之后在这儿改；多个号用逗号分隔'],
@@ -1854,11 +1917,28 @@ window.__ModuleLoader__.load({
 
         // 登录子页面：只显示状态和二维码，不渲染普通字段
         if (activeTab === 'login') {
-          children.push(React.createElement(LoginPanel, { key: 'login-panel' }))
+          children.push(React.createElement(LoginPanel, { key: 'login-panel', channel: v.qqChannel || 'napcat' }))
         }
 
         if (activeTab === 'logs') {
           children.push(React.createElement(LogsPanel, { key: 'logs-panel' }))
+        }
+
+        // QQ 通道模式（NapCat / 官方插件）放在「连接」页最上面，一眼能切换（2026-10-28 主人要求）
+        if (activeTab === 'conn') {
+          children.push(
+            React.createElement(ChannelRow, {
+              key: 'qqChannel',
+              form,
+              field: 'qqChannel',
+              label: 'QQ 通道',
+              hint: 'NapCat＝小号自己收发（原功能全保留）；QQ 官方插件＝官方机器人走 dsh-qqbot（需要先装官方插件，插件只留语音/记忆/发送工具）',
+              pending,
+              setPending,
+              value: v.qqChannel || 'napcat',
+              disabled: !snap.writable,
+            }),
+          )
         }
 
         for (const [field, label, hint] of QQ_BOOL_FIELDS) {

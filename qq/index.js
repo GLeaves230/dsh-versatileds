@@ -311,6 +311,8 @@ const DESCRIPTION = `QQ 代理（NapCat / OneBot 11）。action 决定动作：
 export const Config = Schema.object({
   enabled: Schema.boolean().default(true).volatile()
     .description('QQ 模块启用：关掉后不连 NapCat、不注册 qq 工具，自动回复和主动搭话全停'),
+  qqChannel: Schema.union(['napcat', 'official']).default('napcat').volatile()
+    .description('QQ 通道：napcat＝小号走 NapCat（插件自己收发）；official＝官方机器人走 dsh-qqbot 插件（需要安装官方插件；插件只保留语音/记忆/发送工具，不连 NapCat）'),
   napcatHttp: Schema.string().default('http://127.0.0.1:3000').volatile()
     .description('NapCat 的 OneBot HTTP 地址'),
   napcatWs: Schema.string().default('ws://127.0.0.1:3011').volatile()
@@ -1095,6 +1097,134 @@ function loadPersona() {
   }
 }
 
+/**
+ * 官方 qqbot 插件的「前台日志」补丁自愈：官方升级会覆盖 dist，vds 启动时检查并重新打。
+ * 2026-10-28 主人要求（日志输出不全 + 升级后不要丢）。
+ */
+function ensureQqbotPatch() {
+  try {
+    const profileRoot = join(dshHome(), 'profiles')
+    let qqbotDist = ''
+    try {
+      for (const ent of readdirSync(profileRoot, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue
+        const d = join(profileRoot, ent.name, 'node_modules', '@tencent-connect', 'dsh-qqbot', 'dist')
+        if (existsSync(d)) { qqbotDist = d; break }
+      }
+    } catch { /* ignore */ }
+    if (!qqbotDist) return
+    const inFile = join(qqbotDist, 'transport', 'inbound.js')
+    const outFile = join(qqbotDist, 'transport', 'outbound.js')
+    // inbound：收到消息直接打前台
+    if (existsSync(inFile)) {
+      let s = readFileSync(inFile, 'utf8')
+      if (!s.includes('📩')) {
+        // 先清掉旧版（写文件）补丁
+        s = s.replace(/    try \{\n        appendFileSync\('[^']*qqbot-inbound\.log'[\s\S]*?\} catch \{ \/\* ignore \*\/ \}\n/, '')
+        s = s.replace(
+          /export async function handleInbound\(ctx, manager, config, logger\) \{\n    const msg = ctx\.message;/,
+          `export async function handleInbound(ctx, manager, config, logger) {\n    const msg = ctx.message;\n    try {\n        const label = msg.kind === 'group' ? \`群 \${(msg.groupOpenid || '').slice(0, 6)}…\` : '私聊'\n        const who = String(msg.senderName || msg.senderId || '').slice(0, 20)\n        console.log(\`[\${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] [QQ] 📩 \${label} \${who}: \${String(msg.content ?? '').slice(0, 120)}\`)\n    } catch { /* ignore */ }`,
+        )
+        writeFileSync(inFile, s, 'utf8')
+        console.log(`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] [dsh-versatileds] 已给 qqbot 重打 inbound 前台日志补丁`)
+      }
+    }
+    // outbound：发出消息直接打前台（放在 send()，缓冲 flush 路径也能覆盖）
+    if (existsSync(outFile)) {
+      let o = readFileSync(outFile, 'utf8')
+      if (!o.includes('📤')) {
+        // 旧版补丁（onMessage 里）先清掉
+        o = o.replace(/        try \{\n            const label = record\.replyTarget\.scope === 'group' \? '群聊' : '私聊'\n            console\.log\(`\[\$\{new Date\(\)\.toLocaleTimeString\('zh-CN', \{ hour12: false \}\)\}\] \[QQ\] 📤 \$\{label\}: \$\{fullText\.slice\(0, 120\)\}`\)\n        \} catch \{ \/\* ignore \*\/ \}\n/, '')
+        o = o.replace(/        try \{\n            appendFileSync\('[^']*qqbot-outbound\.log'[\s\S]*?\} catch \{ \/\* ignore \*\/ \}\n/, '')
+        o = o.replace(
+          /    async send\(record, text, tag\) \{\n        const chunks = chunkMarkdownText/,
+          `    async send(record, text, tag) {\n        try {\n            const label = record.replyTarget.scope === 'group' ? '群聊' : '私聊'\n            console.log(\`[\${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] [QQ] 📤 \${label}: \${String(text || '').slice(0, 120)}\`)\n        } catch { /* ignore */ }\n        const chunks = chunkMarkdownText`,
+        )
+        writeFileSync(outFile, o, 'utf8')
+        console.log(`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] [dsh-versatileds] 已给 qqbot 重打 outbound 前台日志补丁`)
+      }
+      // 输出文本习惯：agent 的文本回复去掉 markdown/emoji（跟 vds 一致，2026-10-28 主人）
+      if (!o.includes('cleanQqText')) {
+        o = o.replace(
+          /export function createOutboundHandler/,
+          `function cleanQqText(s) {
+    let out = String(s || '')
+    out = out.replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
+    out = out.replace(/__([^_]+)__/g, '$1')
+    out = out.replace(/~~([^~]+)~~/g, '$1')
+    out = out.replace(/^#{1,6}\\s+/gm, '')
+    out = out.replace(/^>\\s?/gm, '')
+    out = out.replace(/^[-*]\\s+/gm, '· ')
+    out = out.replace(/\`([^\`]+)\`/g, '$1')
+    out = out.replace(/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{FE0F}]/gu, '')
+    out = out.replace(/\\n{3,}/g, '\\n')
+    return out.trim()
+}
+export function createOutboundHandler`
+        )
+        o = o.replace(
+          `        const fullText = textParts.join('\\n');`,
+          `        let fullText = textParts.join('\\n');\n        try { fullText = cleanQqText(fullText) } catch { /* ignore */ }`
+        )
+        writeFileSync(outFile, o, 'utf8')
+        console.log(`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] [dsh-versatileds] 已给 qqbot 重打文本清洗补丁`)
+      }
+    }
+  } catch (err) {
+    try { console.warn(`[dsh-versatileds] qqbot 日志补丁检查失败: ${err?.message ?? err}`) } catch { /* ignore */ }
+  }
+}
+
+/** 确保 profile 里有 im-qqbot entry 且没被禁用（官方模式自动启用，2026-10-28）。 */
+function ensureImQqbotEntry() {
+  try {
+    const p = join(dshHome(), 'profiles', 'web', 'cordis.patch.yml')
+    if (!existsSync(p)) return 'no-profile'
+    let s = readFileSync(p, 'utf8')
+    if (/^- id: im-qqbot/m.test(s)) {
+      const idx = s.indexOf('- id: im-qqbot')
+      const block = s.slice(idx, idx + 3000)
+      if (/^  disabled: true/m.test(block)) {
+        s = s.slice(0, idx) + block.replace(/^  disabled: true/m, '  disabled: false') + s.slice(idx + block.length)
+        writeFileSync(p, s, 'utf8')
+        return 'enabled'
+      }
+      return 'already'
+    }
+    if (s.includes('\n- id: dsh-pet')) {
+      const entry = `- id: im-qqbot\n  config:\n    requireMention: false\n    streaming: false\n`
+      s = s.replace('\n- id: dsh-pet', '\n' + entry + '- id: dsh-pet')
+      writeFileSync(p, s, 'utf8')
+      return 'added'
+    }
+    return 'no-anchor'
+  } catch {
+    return 'error'
+  }
+}
+
+/** NapCat 模式下禁用官方插件 im-qqbot（避免双通道同时在线）。 */
+function disableImQqbotEntry() {
+  try {
+    const p = join(dshHome(), 'profiles', 'web', 'cordis.patch.yml')
+    if (!existsSync(p)) return 'no-profile'
+    let s = readFileSync(p, 'utf8')
+    const idx = s.indexOf('- id: im-qqbot')
+    if (idx < 0) return 'absent'
+    const block = s.slice(idx, idx + 3000)
+    if (/^  disabled: true/m.test(block)) return 'already'
+    if (/^  disabled: false/m.test(block)) {
+      s = s.slice(0, idx) + block.replace(/^  disabled: false/m, '  disabled: true') + s.slice(idx + block.length)
+      writeFileSync(p, s, 'utf8')
+      return 'disabled'
+    }
+    // 没有 disabled 行就不动（往 entry 里插行容易把块标量挤歪，2026-10-28 踩过两次）
+    return 'no-disabled'
+  } catch {
+    return 'error'
+  }
+}
+
 function memoryPath() {
   return join(versatiledsBase(), 'qq', 'memory.md')
 }
@@ -1198,23 +1328,6 @@ function loadNotes(limit = 30, scope = '', isolate = false) {
     const mine = lines.filter((l) => {
       const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
       if (!m) return true          // 老记录 / 公共记录：两边都能看
-      return m[1] === scope
-    })
-    return mine.slice(-limit).join('\n')
-  } catch {
-    return ''
-  }
-}
-
-/** 异步版 loadNotes：私聊生成前读它，卡住时能用超时兜（2026-10-26 私聊卡在同步读文件）。 */
-async function loadNotesAsync(limit = 30, scope = '', isolate = false) {
-  try {
-    const raw = await readFileAsync(notesPath(), 'utf8')
-    const lines = raw.split(/\r?\n/).filter(Boolean)
-    if (!isolate || !scope) return lines.slice(-limit).join('\n')
-    const mine = lines.filter((l) => {
-      const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
-      if (!m) return true
       return m[1] === scope
     })
     return mine.slice(-limit).join('\n')
@@ -3548,6 +3661,67 @@ async function resolveNapcatPid(home = dshHome()) {
  * 没有的话再退到 6099 的持有者（NapCat 服务进程）。
  * 杀的时候用 `taskkill /F /T /PID` 提权执行：QQ 是提权进程，普通权限杀不动；/T 连带子进程。
  */
+/**
+ * 本插件拉起过的 NapCat/QQ 进程 pid 记录（逗号分隔文本，如 "10000,10001"）。
+ * 点「登录服务」时先把上一次拉起的旧进程杀掉再刷新二维码（2026-10-28 主人要求）。
+ */
+function startedPidsPath() {
+  return join(versatiledsBase(), 'qq', 'napcat-started-pids.txt')
+}
+function loadStartedPids() {
+  try {
+    return String(readFileSync(startedPidsPath(), 'utf8'))
+      .split(/[,\s]+/).map((s) => Number(s)).filter((n) => Number.isFinite(n) && n > 100)
+  } catch { return [] }
+}
+function saveStartedPids(pids) {
+  try { writeFileSync(startedPidsPath(), [...new Set(pids)].join(','), 'utf8') } catch { /* ignore */ }
+}
+function recordStartedPid(pid) {
+  const v = Number(pid) || 0
+  if (v <= 100) return
+  const cur = loadStartedPids()
+  if (!cur.includes(v)) cur.push(v)
+  saveStartedPids(cur.slice(-20))
+}
+
+/** 点「登录服务」前先杀上一次拉起的旧进程：验明是 QQ（NapCat 注入的）才杀，杀完清记录。 */
+async function killOldStartedNapcat(config) {
+  const pids = loadStartedPids()
+  const killed = []
+  for (const pid of pids) {
+    try {
+      if (!(await isQqProcess(pid))) continue
+      await taskkillTree(pid, false)
+      killed.push(pid)
+    } catch { /* 单个失败不影响别的 */ }
+  }
+  // launcher.pid 里的那个也算（NapCat 注入时写的）
+  try {
+    const f = join(dshHome(), 'napcat', 'napcat', 'launcher.pid')
+    if (existsSync(f)) {
+      const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
+      if (v > 100 && await isQqProcess(v)) {
+        await taskkillTree(v, false)
+        killed.push(v)
+      }
+    }
+  } catch { /* ignore */ }
+  // NapCatWinBootMain 守护树也清掉，不然它会把 QQ 再拉回来
+  try { await runAsync('taskkill', ['/F', '/T', '/IM', 'NapCatWinBootMain.exe'], 8000) } catch { /* ignore */ }
+  // 再杀「本账号的 QQ 主进程」（命令行里有 -q <账号>）：它会反复重启子进程，
+  // 只杀端口持有者/子进程杀不干净（2026-10-28 实测：12160 一直重启子进程抢 6099）
+  try {
+    const quick = String(config?.napcatQuickLogin?.get?.() || '').trim()
+    if (quick) {
+      const ps = `Get-CimInstance Win32_Process -Filter "Name='QQ.exe'" | Where-Object { $_.CommandLine -like '*-q ${quick}*' } | ForEach-Object { taskkill /F /T /PID $_.ProcessId }`
+      await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 20000)
+    }
+  } catch { /* ignore */ }
+  saveStartedPids([])
+  return killed
+}
+
 function killNapCatWeStarted(config) {
   // 默认不在退出时杀 NapCat：
   // ① NapCat 是提权启动的，普通权限杀不掉，老代码用 `powershell -Verb RunAs` 同步提权，
@@ -3673,10 +3847,20 @@ async function logoutNapCat(config) {
   napcatPidCache = { pid: 0, at: 0 }
   setNapcatLoggedOut(true)
   // 守护进程也要杀：NapCatWinBootMain 会在 QQ 被杀后把 QQ 重新拉起来，
-  // 之前只杀端口持有者，退出登录几秒后又被它拉起来（2026-10-27 主人：退出后刷新又已登录）
+  // 之前只杀端口持有者，退出登录几秒后又被它拉起来（2026-10-27 主人：退出后刷新又已登录）。
+  // 用 /T 连树一起杀：QQ 主进程会反复重启子进程，只杀端口持有者杀不干净（2026-10-28 实测）。
   try {
-    await runAsync('taskkill', ['/F', '/IM', 'NapCatWinBootMain.exe'], 5000)
+    await runAsync('taskkill', ['/F', '/T', '/IM', 'NapCatWinBootMain.exe'], 8000)
   } catch { /* 没有这个进程就算了 */ }
+  // 再循环确认端口真的空了：QQ 子进程会自愈，连杀几轮直到 napcatPidCandidates 为空
+  try {
+    for (let i = 0; i < 5; i += 1) {
+      const left = await napcatPidCandidates(config)
+      if (!left.length) break
+      for (const pid of left) await taskkillTree(pid, false)
+      await new Promise((resolve) => setTimeout(resolve, 800))
+    }
+  } catch { /* ignore */ }
   try {
     appendFileSync(join(versatiledsBase(), 'qq', 'napcat_exit.log'),
       `- ${new Date().toLocaleString('zh-CN', { hour12: false })} 主人点了退出登录：`
@@ -4897,7 +5081,7 @@ function appendNote(entry) {
       || (entry.groupId ? `g:${entry.groupId}`
         : entry.peer ? `p:${entry.peer}`
           : (kind.startsWith('group') || kind === 'sent-group') && entry.to ? `g:${entry.to}`
-            : (/private/.test(kind)) && entry.to ? `p:${entry.to}`
+            : (kind === 'recv' || /private/.test(kind)) && entry.to ? `p:${entry.to}`
               : '')
     appendFileSync(file, (scope ? `${line} 〔${scope}〕` : line) + '\n', 'utf8')
   } catch { /* ignore */ }
@@ -5317,6 +5501,9 @@ export function apply(ctx, config) {
   // 都是写文件/建目录，同步做会拖慢 DSH 启动；失败也不影响插件主流程。
   setTimeout(() => {
     try {
+      // QQ 官方模式：检查依赖 / 自动安装 / 补注入；NapCat 模式：禁用官方插件（互斥）；2026-10-28
+      ensureOfficialChannel().catch(() => {})
+      ensureNapcatChannel().catch(() => {})
       if (ensurePersonaTemplate()) {
         plog('info', '[dsh-versatileds] 已生成人设模板，去改成你自己的：' + personaPath())
       }
@@ -6833,6 +7020,129 @@ export function apply(ctx, config) {
     }
   }
 
+  // ---------- 官方 QQ 机器人发送（2026-10-28：文字发送从官方插件搬回 vds） ----------
+  /** 读 profile 里 im-qqbot 的 appId/appSecret（不重复配置）。 */
+  function readQqbotCreds() {
+    try {
+      const p = join(dshHome(), 'profiles', 'web', 'cordis.patch.yml')
+      const s = readFileSync(p, 'utf8')
+      const at = s.indexOf('- id: im-qqbot')
+      if (at < 0) return { appId: '', secret: '' }
+      const seg = s.slice(at, at + 4000)
+      const appId = (seg.match(/appId:\s*'?(\d+)'?/) || [])[1] || ''
+      const secret = (seg.match(/appSecret:\s*(\S+)/) || [])[1] || ''
+      return { appId, secret }
+    } catch {
+      return { appId: '', secret: '' }
+    }
+  }
+
+  let qqOfficialToken = { token: '', exp: 0 }
+  /** 官方 access_token（2 小时过期，提前 1 分钟刷新）。 */
+  async function qqbotAccessToken() {
+    if (qqOfficialToken.token && Date.now() < qqOfficialToken.exp - 60_000) return qqOfficialToken.token
+    const { appId, secret } = readQqbotCreds()
+    if (!appId || !secret) throw new Error('没找到 QQ 官方机器人的 appId/appSecret（读不到 im-qqbot 配置）')
+    const res = await fetch('https://bots.qq.com/app/getAppAccessToken', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId, clientSecret: secret }),
+      signal: AbortSignal.timeout(15000),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!j.access_token) throw new Error(`拿 access_token 失败: ${JSON.stringify(j).slice(0, 200)}`)
+    qqOfficialToken = { token: j.access_token, exp: Date.now() + Number(j.expires_in || 7200) * 1000 }
+    return j.access_token
+  }
+
+  /** 官方通道发一条文字。target: `c2c:<openid>` 或 `group:<openid>`；不带 msg_id 就是主动消息。 */
+  async function qqbotSendText(text, target) {
+    const raw = String(target || '')
+    const idx = raw.indexOf(':')
+    const scope = idx > 0 ? raw.slice(0, idx) : ''
+    const id = idx > 0 ? raw.slice(idx + 1) : ''
+    if (!id || (scope !== 'c2c' && scope !== 'group')) {
+      throw new Error('target 要写成 c2c:<openid> 或 group:<openid>')
+    }
+    const content = String(text || '').slice(0, 2000)
+    if (!content.trim()) throw new Error('text 为空')
+    const token = await qqbotAccessToken()
+    const url = scope === 'c2c'
+      ? `https://api.bot.qq.com/v2/users/${encodeURIComponent(id)}/messages`
+      : `https://api.bot.qq.com/v2/groups/${encodeURIComponent(id)}/messages`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `QQBot ${token}` },
+      body: JSON.stringify({ content, msg_type: 0 }),
+      signal: AbortSignal.timeout(15000),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(`发送失败 ${res.status}: ${JSON.stringify(j).slice(0, 300)}`)
+    return j
+  }
+
+  /** 官方通道发一条 Markdown（单聊/群聊都支持，msg_type=2）。带 msgId 就是被动回复（群里必须带，否则算主动消息会无权限）。 */
+  async function qqbotSendMarkdown(content, target, msgId) {
+    const raw = String(target || '')
+    const idx = raw.indexOf(':')
+    const scope = idx > 0 ? raw.slice(0, idx) : ''
+    const id = idx > 0 ? raw.slice(idx + 1) : ''
+    if (!id || (scope !== 'c2c' && scope !== 'group')) {
+      throw new Error('target 要写成 c2c:<openid> 或 group:<openid>')
+    }
+    const md = String(content || '')
+    if (!md.trim()) throw new Error('content 为空')
+    const token = await qqbotAccessToken()
+    const url = scope === 'c2c'
+      ? `https://api.bot.qq.com/v2/users/${encodeURIComponent(id)}/messages`
+      : `https://api.bot.qq.com/v2/groups/${encodeURIComponent(id)}/messages`
+    const body = { msg_type: 2, markdown: { content: md.slice(0, 4000) } }
+    if (msgId) {
+      body.msg_id = String(msgId)
+      // 同一个 msg_id 重复回复要递增 msg_seq，否则会失败
+      body.msg_seq = (Date.now() % 900000) + 1
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `QQBot ${token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(`Markdown 发送失败 ${res.status}: ${JSON.stringify(j).slice(0, 300)}`)
+    return j
+  }
+
+  /** 分享一条 B站 视频（官方通道只能 markdown 卡片：封面 + 标题 + 数据 + 链接）。 */
+  async function qqbotShareBili(bvid, target) {
+    const bv = String(bvid || '').trim()
+    if (!/^BV[0-9A-Za-z]{10}$/.test(bv)) throw new Error('bvid 格式不对（BV 开头 12 位）')
+    const res = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bv}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Referer: 'https://www.bilibili.com/',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+    const j = await res.json().catch(() => ({}))
+    const d = j?.data
+    if (!d?.title) throw new Error(`拿不到视频信息（code=${j?.code ?? '?'}）`)
+    const stat = d.stat || {}
+    const wan = (n) => (Number(n) >= 10000 ? `${(Number(n) / 10000).toFixed(1)}万` : String(Number(n) || 0))
+    const mins = Math.floor(Number(d.duration || 0) / 60)
+    const secs = String(Number(d.duration || 0) % 60).padStart(2, '0')
+    const cover = String(d.pic || '').replace(/^http:/, 'https:')
+    const md = [
+      `# ${d.title}`,
+      cover ? `![封面](${cover})` : '',
+      `**UP**：${d.owner?.name || '?'} ｜ ${mins}:${secs} ｜ 播放 ${wan(stat.view)} ｜ 赞 ${wan(stat.like)} ｜ 币 ${wan(stat.coin)}`,
+      `[🔗 去 B站 看](https://www.bilibili.com/video/${bv})`,
+      d.desc ? `> ${String(d.desc).split('\n')[0].slice(0, 100)}` : '',
+    ].filter(Boolean).join('\n')
+    const r = await qqbotSendMarkdown(md, target)
+    return { id: r?.id || '', title: d.title }
+  }
+
   // ---------- NapCat 自动拉起 ----------
   let napcatStarting = false
   let lastQrCloseAt = 0
@@ -6996,6 +7306,16 @@ export function apply(ctx, config) {
   async function ensureNapCat(reason = '', openPage = true, force = false) {
   // 启动/登录/工具调用前先确保 NapCat 包在（npm 版不自带 118MB 大包，缺了就现下最新的）
   await ensureNapcatPackage(config).catch(() => {})
+  // 主人点「登录服务」：先把上一次拉起的旧进程杀干净、清记录，再刷新二维码
+  // （2026-10-28 主人要求：不然会报「账号已登录，无法重复登录」）
+  if (force) {
+    try {
+      const killed = await killOldStartedNapcat(config)
+      if (killed.length) {
+        plog('info', `[dsh-versatileds] 登录前已清理旧进程: ${killed.join(',')}`)
+      }
+    } catch { /* 清不掉也别挡住登录 */ }
+  }
     if (await napcatAlive()) {
       // 主人点过「退出登录」：即使 NapCat 进程还活着，也**不要自动恢复连接**——
       // 以前这里会无条件清标志 + rearm，等于退出后又自己连回去了（2026-10-27 主人要求关掉）。
@@ -7038,6 +7358,8 @@ export function apply(ctx, config) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
           plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
+          // 把这次拉起来的 pid 记下来：下次点「登录服务」先按它清旧进程（2026-10-28）
+          try { recordStartedPid(await resolveNapcatPid()) } catch { /* ignore */ }
           // 退出登录时 WS 已经收手了，这里让它重新连上
           const wasLoggedOut = napcatLoggedOut
           setNapcatLoggedOut(false)
@@ -7122,13 +7444,15 @@ export function apply(ctx, config) {
     return () => clearTimeout(t)
   }, 'dsh-versatileds: memory sync')
 
-  // autoStartNapCat=true 时，DSH 起来后自动把 NapCat 拉起来；延迟几秒等插件初始化完
+  // autoStartNapCat=true 时，DSH 起来后自动把 NapCat 拉起来；延迟几秒等插件初始化完。
+  // 但**不能 force**：force 会绕过「上次退出登录」标志，退出后重启又被拉起来
+  // （2026-10-28 实测：退出登录 → 重载 → 还是拉起）。这里交给 ensureNapCat 按标志判断。
   ctx.effect(() => {
     let stopped = false
     const timer = setTimeout(() => {
       if (stopped) return
       if (config.autoStartNapCat.get() !== true) return
-      ensureNapCat('startup', false, true).catch(() => {})
+      ensureNapCat('startup', false, false).catch(() => {})
     }, 6000)
     return () => { stopped = true; clearTimeout(timer) }
   }, 'dsh-versatileds: napcat autostart')
@@ -7631,7 +7955,13 @@ export function apply(ctx, config) {
     // 私聊反思期（p:key）不主动搭话，别的会话各管各的（2026-10-26 主人要求）
     if (inQuiet(`p:${target}`)) return false
     try {
-      await ob.sendPrivate(target, text)
+      const ownerQq = String(config.ownerUid.get() || '').trim()
+      if (ownerQq && String(target) === ownerQq) {
+        // 2026-10-28：主人的私聊主动搭话走官方通道（单聊主动 1000 条/天，不依赖 NapCat）
+        await qqbotSendText(text, 'c2c:5AEFDD0F5E94148E2668BF30F6F31817')
+      } else {
+        await ob.sendPrivate(target, text)
+      }
     } catch (err) {
       plog('warn', '[dsh-versatileds] 主动搭话失败:', err?.message ?? err)
       return false
@@ -9525,6 +9855,13 @@ export function apply(ctx, config) {
 
   function startChatBusiness() {
     if (!isChatOn() || chatRunning) return
+    // 官方机器人模式：收发由 dsh-qqbot 插件管，vds 不连 NapCat、不跑自动回复/主动搭话，
+    // 只保留工具（语音/记忆/官方发送）。2026-10-28 主人要求两种模式并存。
+    if (String(config.qqChannel?.get?.() || 'napcat') === 'official') {
+      chatRunning = true
+      plog('info', '[dsh-versatileds] QQ 通道=官方机器人（dsh-qqbot）：跳过 NapCat 自动回复/主动搭话，只保留工具')
+      return
+    }
     chatRunning = true
     if (!qqAgentDisposer) qqAgentDisposer = provideQqAgent()
     chatStops = [
@@ -9580,6 +9917,220 @@ export function apply(ctx, config) {
   }, 'dsh-versatileds: cooldown status server')
 
   // ---------- 工具 ----------
+  /**
+   * QQ 官方模式启动检查（2026-10-28 主人要求）：
+   * 默认 napcat 什么都不做；选 official 时检查 @tencent-connect/dsh-qqbot 是否装了，
+   * 没装就自动安装，然后（或已装时）检查 vds 的日志/清洗注入在不在，不在就补。
+   */
+  async function ensureOfficialChannel() {
+    const channel = String(config.qqChannel?.get?.() || 'napcat')
+    if (channel !== 'official') return
+    // 官方模式：把 NapCat 启动的进程停掉（只杀 launcher.pid/记录里的，不碰用户自己的 QQ）
+    try {
+      const killed = await killOldStartedNapcat(config)
+      if (killed?.length) plog('info', `[dsh-versatileds] 官方模式：已停掉 NapCat 进程 ${killed.join(',')}`)
+    } catch { /* ignore */ }
+    const profileRoot = join(dshHome(), 'profiles')
+    let qqbotDir = ''
+    try {
+      for (const ent of readdirSync(profileRoot, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue
+        const d = join(profileRoot, ent.name, 'node_modules', '@tencent-connect', 'dsh-qqbot')
+        if (existsSync(d)) { qqbotDir = d; break }
+      }
+    } catch { /* ignore */ }
+    if (!qqbotDir) {
+      const pdir = join(profileRoot, 'web')
+      plog('warn', '[dsh-versatileds] QQ 通道=官方模式，但没装 @tencent-connect/dsh-qqbot，尝试自动安装…')
+      if (!existsSync(join(pdir, 'package.json'))) {
+        plog('warn', '[dsh-versatileds] 找不到 profile 目录，请到「插件」页手动安装 @tencent-connect/dsh-qqbot')
+        return
+      }
+      try {
+        await runAsync('cmd', ['/c', `cd /d "${pdir}" && pnpm add @tencent-connect/dsh-qqbot@latest --registry=https://registry.npmjs.org`], 300000)
+        plog('info', '[dsh-versatileds] 官方 QQ 插件安装完成，注入 vds 补丁…')
+        ensureQqbotPatch()
+        // 自动启用：确保 im-qqbot entry 存在且没被禁用（写配置会触发热更新加载）
+        const st = ensureImQqbotEntry()
+        plog('info', `[dsh-versatileds] 已处理 im-qqbot 启用状态：${st}`)
+      } catch (err) {
+        plog('warn', '[dsh-versatileds] 自动安装失败，请到「插件」页手动安装 @tencent-connect/dsh-qqbot：', err?.message ?? err)
+      }
+      return
+    }
+    // 已装：检查注入（ensureQqbotPatch 内部幂等），并确保没被禁用
+    ensureQqbotPatch()
+    const entryState = ensureImQqbotEntry()
+    plog('info', `[dsh-versatileds] QQ 通道=官方模式：依赖齐全，vds 注入已确认（im-qqbot ${entryState}）`)
+  }
+
+  /** NapCat 模式：禁用官方插件，避免两个通道同时在线（2026-10-28 主人要求互斥）。 */
+  async function ensureNapcatChannel() {
+    const channel = String(config.qqChannel?.get?.() || 'napcat')
+    if (channel !== 'napcat') return
+    // 先走一遍 NapCat 的自动启动/登录判断（没登录就按配置自动拉起）
+    try { await ensureNapCat('startup') } catch { /* ignore */ }
+    const st = disableImQqbotEntry()
+    if (st === 'disabled') {
+      plog('info', '[dsh-versatileds] QQ 通道=NapCat：已禁用官方插件 im-qqbot（避免双通道同时在线）')
+    }
+  }
+
+  /**
+   * 独立语音工具：只生成语音文件（AMR），不发送。
+   * 2026-10-28 主人改用官方 QQ 机器人通道：多功能插件负责合成，agent 用 qqbot_send_file 发出去。
+   * 不挂在 QQ 总开关下——合成不需要 NapCat。
+   */
+  function registerVoiceTool() {
+    return ctx.tools.register(defineTool({
+      name: 'versatileds_voice',
+      description: '用本地 GPT-SoVITS 把一段中文合成语音文件（默认 AMR，QQ 可直接发语音）。只生成文件、不发送；生成后用 qqbot_send_file 发出去。',
+      parameters: {
+        text: { type: 'string', required: true, description: '要念的中文文本（60 字以内效果最好）。' },
+        amr: { type: 'boolean', description: '是否转成 QQ 语音格式 AMR，默认 true。' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const text = String(args.text || '').trim()
+        if (!text) return '文本为空，没合成'
+        let wav = await gsvSynthesize(text, config)
+        try { wav = await trimVoiceSilence(wav) } catch { /* 剪不了就用原文件 */ }
+        if (args.amr === false) return `语音已生成（wav）：${wav}`
+        const amr = await toAmrVoice(wav)
+        return `语音已生成（amr）：${amr}`
+      },
+    }))
+  }
+  ctx.effect(() => {
+    const dispose = registerVoiceTool()
+    return () => { try { dispose?.() } catch { /* ignore */ } }
+  }, 'dsh-versatileds: voice tool')
+
+  /** 记忆/群规/反思查询工具：官方通道的 agent 按需查 vds 的记忆（2026-10-28 主人选方案 2）。 */
+  function registerMemoryTool() {
+    return ctx.tools.register(defineTool({
+      name: 'versatileds_memory',
+      description: '查大肥鱼的记忆：what=notes（最近日记）/memory（事件记忆）/bili（最近看过的 B站 视频）/groups（群规与群公告）/quiet（当前反思/禁言状态）/all（全部）。',
+      parameters: {
+        what: { type: 'string', required: true, enum: ['notes', 'memory', 'bili', 'groups', 'quiet', 'all'], description: '查哪一类。' },
+        count: { type: 'integer', description: '条数，默认 10，最多 50。' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const n = Math.max(1, Math.min(50, Number(args.count) || 10))
+        const parts = []
+        const tail = (p, label, lines = n) => {
+          try {
+            const arr = readFileSync(p, 'utf8').split(/\r?\n/).filter(Boolean)
+            parts.push(`${label}（最近 ${Math.min(lines, arr.length)} 条）：\n${arr.slice(-lines).join('\n')}`)
+          } catch { parts.push(`${label}：没找到`) }
+        }
+        if (args.what === 'notes' || args.what === 'all') {
+          const arr = notesMem.slice(-n)
+          parts.push(`日记 notes.md（最近 ${arr.length} 条）：\n${arr.join('\n') || '（还没有）'}`)
+        }
+        if (args.what === 'memory' || args.what === 'all') tail(memoryPath(), '事件记忆 memory.md')
+        if (args.what === 'bili' || args.what === 'all') {
+          tail(join(versatiledsBase(), 'qq', 'bili_log.md'), 'B站 日志 bili_log.md')
+        }
+        if (args.what === 'groups' || args.what === 'all') {
+          tail(join(versatiledsBase(), 'qq', 'group_rules.md'), '群规 group_rules.md', 8)
+        }
+        if (args.what === 'quiet' || args.what === 'all') {
+          const now = Date.now()
+          const active = [...quietState.entries()].filter(([, v]) => v?.until && v.until > now)
+          parts.push(active.length
+            ? `反思中（禁言）：${active.map(([k, v]) => `${k} 到 ${new Date(v.until).toLocaleTimeString('zh-CN', { hour12: false })}`).join('；')}`
+            : '当前没有反思中的会话')
+        }
+        return parts.join('\n\n')
+      },
+    }))
+  }
+  ctx.effect(() => {
+    const dispose = registerMemoryTool()
+    return () => { try { dispose?.() } catch { /* ignore */ } }
+  }, 'dsh-versatileds: memory tool')
+
+  /** 官方通道主动发文字（vds 自己做，不依赖官方插件的 patch）。 */
+  function registerQqSendTool() {
+    return ctx.tools.register(defineTool({
+      name: 'versatileds_qq_send',
+      description: '用官方 QQ 机器人通道发一条文字：target 写 c2c:<openid> 或 group:<openid>。带 msg_id 是回复，不带就是主动消息（1000 条/天/用户或群）。',
+      parameters: {
+        text: { type: 'string', required: true, description: '要发的文字。' },
+        target: { type: 'string', required: true, description: 'c2c:<openid> 或 group:<openid>。' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const r = await qqbotSendText(args.text, args.target)
+        return `已发送（id=${r?.id || '?'}）`
+      },
+    }))
+  }
+  ctx.effect(() => {
+    const dispose = registerQqSendTool()
+    return () => { try { dispose?.() } catch { /* ignore */ } }
+  }, 'dsh-versatileds: qq send tool')
+
+  /** 官方通道发 Markdown（单聊/群聊都支持，适合标题/列表/加粗的长消息）。 */
+  function registerQqMarkdownTool() {
+    return ctx.tools.register(defineTool({
+      name: 'versatileds_qq_markdown',
+      description: '用官方 QQ 机器人通道发一条 Markdown 消息（单聊/群聊都支持）：支持标题、加粗、斜体、删除线、链接、图片、有序/无序列表、引用、分割线。target 写 c2c:<openid> 或 group:<openid>。',
+      parameters: {
+        content: { type: 'string', required: true, description: 'Markdown 文本（# 标题、**加粗**、- 列表、> 引用等）。' },
+        target: { type: 'string', required: true, description: 'c2c:<openid> 或 group:<openid>。' },
+        msg_id: { type: 'string', description: '可选：要回复的消息 id（群里必须带，否则会被当成主动消息、无权限失败）。' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const r = await qqbotSendMarkdown(args.content, args.target, args.msg_id)
+        return `已发送 Markdown（id=${r?.id || '?'}）`
+      },
+    }))
+  }
+  ctx.effect(() => {
+    const dispose = registerQqMarkdownTool()
+    return () => { try { dispose?.() } catch { /* ignore */ } }
+  }, 'dsh-versatileds: qq markdown tool')
+
+  /** 分享 B站 视频（官方通道：markdown 卡片 + 封面 + 数据）。 */
+  function registerQqShareTool() {
+    return ctx.tools.register(defineTool({
+      name: 'versatileds_qq_share',
+      description: '把一条 B站 视频分享到 QQ（官方通道，Markdown 卡片：封面 + 标题 + 播放/点赞 + 可点链接）。参数给 bvid，target 写 c2c:<openid> 或 group:<openid>。',
+      parameters: {
+        bvid: { type: 'string', required: true, description: 'B站 视频 BV 号，比如 BV1eXnv6jE1J。' },
+        target: { type: 'string', required: true, description: 'c2c:<openid> 或 group:<openid>。' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const r = await qqbotShareBili(args.bvid, args.target)
+        return `已分享：${r.title}（id=${r.id || '?'}）`
+      },
+    }))
+  }
+  ctx.effect(() => {
+    const dispose = registerQqShareTool()
+    return () => { try { dispose?.() } catch { /* ignore */ } }
+  }, 'dsh-versatileds: qq share tool')
+
   // 用 function 声明（会提升）：startChatBusiness 在文件靠前处就调它
   function registerQqTool() {
     return ctx.tools.register(defineTool({
