@@ -1479,13 +1479,26 @@ function readNapcatMainPid(config) {
   return 0
 }
 
+/** 探测当前登录的 QQ 号（QQ.exe 命令行里的 -q <号>）：登录谁就给谁写 OneBot 配置（2026-10-28 不硬编码）。 */
+async function detectCurrentQq() {
+  try {
+    const r = await runAsync('powershell', ['-NoProfile', '-Command', "Get-CimInstance Win32_Process -Filter \"Name='QQ.exe'\" | Select-Object -ExpandProperty CommandLine"], 10000)
+    const lines = String(r?.stdout || '').split(/\r?\n/)
+    for (const line of lines) {
+      const m = line.match(/-q\s+(\d{5,12})/)
+      if (m) return m[1]
+    }
+  } catch { /* ignore */ }
+  return ''
+}
+
 /**
  * 初始化 NapCat 的 OneBot 配置：确保有 HTTP（napcatHttp）和 WS（napcatWs）两个服务。
  * 自带包解压出来 network 是空的，不写的话插件连不上；已经有就跳过，不覆盖用户改过的。
  */
-function ensureOneBotConfig(config) {
+function ensureOneBotConfig(config, qqOverride) {
   try {
-    const qq = String(config.napcatQuickLogin.get() || '').trim()
+    const qq = String(qqOverride || config.napcatQuickLogin.get() || '').trim()
     if (!qq) return false
     const cfgDir = join(napcatRoot(config), 'napcat', 'config')
     if (!existsSync(cfgDir)) return false
@@ -1736,8 +1749,10 @@ async function ensureNapcatPackage(config) {
   const dir = napcatRoot(config)
   if (napcatInstalled(dir)) {
     napcatPkg.ready = true
-    // 已经装过也要补 OneBot 配置（自带包解压出来 network 可能是空的）
-    ensureOneBotConfig(config)
+    // 已经装过也要补 OneBot 配置（自带包解压出来 network 可能是空的）；按当前登录的号写
+    const curQq = await detectCurrentQq()
+    if (curQq) plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
+    ensureOneBotConfig(config, curQq)
     return true
   }
   if (napcatPkg.busy) return false
@@ -1757,7 +1772,11 @@ async function ensureNapcatPackage(config) {
       600000,
     )
     napcatPkg.ready = napcatInstalled(dir)
-    if (napcatPkg.ready) ensureOneBotConfig(config)
+    if (napcatPkg.ready) {
+      const curQq = await detectCurrentQq()
+      if (curQq) plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
+      ensureOneBotConfig(config, curQq)
+    }
     if (!napcatPkg.ready) napcatPkg.error = `解压后关键文件仍不完整（exit ${r.status}）`
     return napcatPkg.ready
   } catch (err) {
