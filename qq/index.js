@@ -1258,8 +1258,13 @@ function disableImQqbotEntry() {
   }
 }
 
+function qqStatePath(name, ext = 'json') {
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `${name}-${loginQqCache}.${ext}`) : join(base, `${name}.${ext}`)
+}
+
 function memoryPath() {
-  return join(versatiledsBase(), 'qq', 'memory.md')
+  return qqStatePath('memory', 'md')
 }
 
 function loadMemory() {
@@ -1947,15 +1952,15 @@ function loadSharedMemory(config) {
 // ---------- 任务转交 / 余额 ----------
 
 function taskRequestPath() {
-  return join(versatiledsBase(), 'qq', 'task.request.json')
+  return qqStatePath('task.request', 'json')
 }
 
 function taskPendingPath() {
-  return join(versatiledsBase(), 'qq', 'task.pending.json')
+  return qqStatePath('task.pending', 'json')
 }
 
 function memoryRequestPath() {
-  return join(versatiledsBase(), 'qq', 'memory.request.json')
+  return qqStatePath('memory.request', 'json')
 }
 
 function balanceStatePath() {
@@ -1963,7 +1968,7 @@ function balanceStatePath() {
 }
 
 function contextStatePath() {
-  return join(versatiledsBase(), 'qq', 'context.state.json')
+  return qqStatePath('context.state', 'json')
 }
 
 function loadJsonFile(path) {
@@ -1984,11 +1989,11 @@ function saveJsonFile(path, data) {
 // ---------- 搜索转交 ----------
 
 function searchRequestPath() {
-  return join(versatiledsBase(), 'qq', 'search.request.json')
+  return qqStatePath('search.request', 'json')
 }
 
 function searchResultPath() {
-  return join(versatiledsBase(), 'qq', 'search_result.md')
+  return qqStatePath('search_result', 'md')
 }
 
 /** 转交搜索：写请求，DSH 侧搜完把结果写回 search_result.md。 */
@@ -2029,7 +2034,7 @@ function imageDir() {
 }
 
 function imageNotesPath() {
-  return join(versatiledsBase(), 'qq', 'image_notes.md')
+  return qqStatePath('image_notes', 'md')
 }
 
 /** 我（DSH 侧）看图后写的描述，插件读它；只认最近 maxAgeMin 分钟。 */
@@ -2046,7 +2051,7 @@ function loadImageNotes(maxAgeMin = 30) {
 }
 
 function imageNotesJsonPath() {
-  return join(versatiledsBase(), 'qq', 'image_notes.json')
+  return qqStatePath('image_notes', 'json')
 }
 
 /** 每张图单独一条描述：30 分钟内所有图共用一份描述会把上一张的套到新图上。 */
@@ -2088,7 +2093,7 @@ function stickerIndexPath() {
 }
 
 function stickerStatePath() {
-  return join(versatiledsBase(), 'qq', 'sticker.state.json')
+  return qqStatePath('sticker.state', 'json')
 }
 
 function loadStickerIndex() {
@@ -2674,7 +2679,7 @@ function gagOf(desc) {
 // ---------- 群里被 @ 的计数：不主动 @ 人，被反复 @ 才回一次 ----------
 
 function atStatePath() {
-  return join(versatiledsBase(), 'qq', 'at.state.json')
+  return qqStatePath('at.state', 'json')
 }
 
 function loadAtState() {
@@ -2694,7 +2699,7 @@ function saveAtState(state) {
 // ---------- 说脏话的收放 ----------
 
 function swearStatePath() {
-  return join(versatiledsBase(), 'qq', 'swear.state.json')
+  return qqStatePath('swear.state', 'json')
 }
 
 function loadSwearState() {
@@ -2951,7 +2956,7 @@ function liveBlock(live) {
 // ---------- 群规 ----------
 
 function rulesStatePath() {
-  return join(versatiledsBase(), 'qq', 'group_rules.json')
+  return qqStatePath('group_rules', 'json')
 }
 
 function rulesMdPath() {
@@ -3496,7 +3501,7 @@ function appendNoteLine(line) {
 
 /** 话题摘要（不是流水账）：定时把最近聊的内容压成一句，群聊上下文只带 6 条时靠它。 */
 function topicsPath() {
-  return join(versatiledsBase(), 'qq', 'topics.md')
+  return qqStatePath('topics', 'md')
 }
 
 function loadTopics(limit = 12) {
@@ -3517,7 +3522,7 @@ function appendTopicLine(line) {
 }
 
 function proactiveStatePath() {
-  return join(versatiledsBase(), 'qq', 'proactive.state.json')
+  return qqStatePath('proactive.state', 'json')
 }
 
 const STATUS_PORT = 18766
@@ -6111,7 +6116,7 @@ export function apply(ctx, config) {
   // ---------- 视频分享（B站 小程序卡片） ----------
 
   function videoShareStatePath() {
-    return join(versatiledsBase(), 'qq', 'video_share.state.json')
+    return qqStatePath('video_share.state')
   }
 
   function loadVideoShareState() {
