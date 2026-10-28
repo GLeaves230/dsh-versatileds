@@ -189,6 +189,26 @@ QQ 模块的「NapCat」子页就是这套流程的入口：看状态、拉起 N
 | 模型 | 预训练权重来自 HuggingFace `lj1995/GPT-SoVITS`（hf-mirror 镜像下载） |
 | 参考音频 | 版权见 `<DSH_HOME>/versatileds/models/gpt-sovits/ref/README.md`（来源、CV、免责） |
 
+### Whisper / Transformers.js（语音转文字，可选）
+
+QQ 侧「听语音」和「语音转文字」用的是本地 Whisper，不联网识别（只在首次下载时联网取模型）。
+
+| 项 | 内容 |
+|---|---|
+| 运行时库 | [Transformers.js](https://github.com/huggingface/transformers.js)（Apache-2.0）、[wavefile](https://github.com/rochars/wavefile)（MIT）、[opencc-js](https://github.com/nk2028/opencc-js)（Apache-2.0） |
+| 模型 | [Whisper](https://github.com/openai/whisper)（OpenAI，MIT），ONNX 版本取自 HuggingFace `onnx-community/whisper-base` / `whisper-small` / `whisper-large-v3-turbo` |
+| 用法 | 用户可选（设置页「语音」→「语音转文字模型」）；首次使用时自动装依赖到 `<DSH_HOME>/versatileds/models/stt`，模型缓存到 `<DSH_HOME>/versatileds/models/hf`（走 hf-mirror 镜像）；插件只调用它做转写，不改其代码 |
+| 本插件用法 | 转写结果只用于 QQ 侧的对话上下文，不外传 |
+
+### 表情包处理（本地）
+
+| 项 | 内容 |
+|---|---|
+| 图片缩放 | 调 **FFmpeg**（见上一节）把表情包缩到 QQ 表情大小（默认 240px，gif 保留原图） |
+| 去重指纹 | 插件内自己实现的感知哈希（dHash，无第三方库），用来判断「同一张表情包换清晰度」 |
+| 识图/分类 | 走 DeepSeek 模型（见下一节）判断图片是否属于表情包，只把确认的收进表情库 |
+| 存储 | `<DSH_HOME>/versatileds/qq/<账号>/sticker`（随账号隔离），索引 `index.json` 记录来源、描述、使用次数 |
+
 ### 其他外部服务
 
 | 项 | 说明 |
