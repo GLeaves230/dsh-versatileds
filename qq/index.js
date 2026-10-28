@@ -1479,6 +1479,29 @@ function readNapcatMainPid(config) {
   return 0
 }
 
+/** 记住当前登录的 QQ：换号时清空快速登录号（强制扫码，谁扫是谁），不换号时保留（2026-10-28 主人要求）。 */
+function rememberLoginQq(cur) {
+  try {
+    const c = String(cur || '').trim()
+    if (!c) return
+    const f = join(versatiledsBase(), 'qq', 'last-login-qq.txt')
+    let last = ''
+    try { last = readFileSync(f, 'utf8').trim() } catch { /* 第一次没有 */ }
+    if (last && last !== c) {
+      const p = join(dshHome(), 'profiles', 'web', 'cordis.patch.yml')
+      try {
+        let s = readFileSync(p, 'utf8')
+        if (/napcatQuickLogin:\s*['"]?\d{5,12}['"]?/.test(s)) {
+          s = s.replace(/napcatQuickLogin:\s*['"]?\d{5,12}['"]?/, "napcatQuickLogin: ''")
+          writeFileSync(p, s, 'utf8')
+          plog('info', `[dsh-versatileds] 检测到换号（${last} → ${c}）：已清空快速登录号，下次启动需要扫码`)
+        }
+      } catch { /* 写配置失败不影响主流程 */ }
+    }
+    writeFileSync(f, c, 'utf8')
+  } catch { /* ignore */ }
+}
+
 /** 探测当前登录的 QQ 号（QQ.exe 命令行里的 -q <号>）：登录谁就给谁写 OneBot 配置（2026-10-28 不硬编码）。 */
 async function detectCurrentQq() {
   try {
@@ -1751,7 +1774,10 @@ async function ensureNapcatPackage(config) {
     napcatPkg.ready = true
     // 已经装过也要补 OneBot 配置（自带包解压出来 network 可能是空的）；按当前登录的号写
     const curQq = await detectCurrentQq()
-    if (curQq) plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
+    if (curQq) {
+      plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
+      rememberLoginQq(curQq)
+    }
     ensureOneBotConfig(config, curQq)
     return true
   }
@@ -1774,7 +1800,10 @@ async function ensureNapcatPackage(config) {
     napcatPkg.ready = napcatInstalled(dir)
     if (napcatPkg.ready) {
       const curQq = await detectCurrentQq()
-      if (curQq) plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
+      if (curQq) {
+        plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
+        rememberLoginQq(curQq)
+      }
       ensureOneBotConfig(config, curQq)
     }
     if (!napcatPkg.ready) napcatPkg.error = `解压后关键文件仍不完整（exit ${r.status}）`
