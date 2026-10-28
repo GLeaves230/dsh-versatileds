@@ -1089,7 +1089,7 @@ function ensureAgentsTemplate() {
 
 /** 通用侧人设（共享模式）：versatileds/normal/persona.md —— DSH 与 QQ 共用这一份（2026-10-28 主人要求） */
 function sharedPersonaPath() {
-  return join(versatiledsBase(), 'normal', 'persona.md')
+  return join(versatiledsBase(), 'qq', 'normal', 'persona.md')
 }
 
 /** QQ 侧人设：隔离模式按账号（qq/<qq>/persona.md），共享模式用 normal/persona.md。 */
@@ -2060,7 +2060,7 @@ function memoryRequestPath() {
 }
 
 function balanceStatePath() {
-  return join(versatiledsBase(), 'normal', 'balance.state.json')
+  return join(versatiledsBase(), 'qq', 'normal', 'balance.state.json')
 }
 
 function contextStatePath() {

@@ -311,7 +311,57 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 - 主人叫什么：按 `ownerQQ` 现查 QQ 名称 + 群名片，别人问就报名字
 - B站 @ 主人：按 `ownerUid` 查昵称
 
-### 个人内容放哪
+### 数据目录：按账号 / 按模块隔离
+
+QQ 侧的记录、设置、媒体都按**当前登录的 QQ 号**分目录，互不串；需要 DSH 与 QQ 两边共用一份的东西放 `normal`。
+
+```
+<DSH_HOME>/versatileds/qq/
+├─ 2052868419/                 # 当前登录号（按 QQ 进程的 -q 参数自动识别，不写死）
+│   ├─ persona.md              # 人设（隔离模式下独立；新号首次出现会从共享人设复制一份）
+│   ├─ memory.md               # 记忆
+│   ├─ notes.md                # 笔记（小本本）
+│   ├─ shared-memory.md        # 共享记忆（只在开「前后端记忆隔离」时用自己这份）
+│   ├─ owner.json              # 主人号
+│   ├─ focus.json              # 聚焦会话
+│   ├─ quiet.json              # 反思期（禁言）状态
+│   ├─ groups.json             # 群偏好（免打扰时段、群规/记忆注入开关）
+│   ├─ group_rules.md          # 抓到的群规
+│   ├─ proactive-targets.json  # 主动搭话对象
+│   ├─ session.json            # 上线/下线时间（离线时长用于扣减倒计时）
+│   ├─ sticker/ image/ chat/ voice-out/   # 表情包库、图片、聊天记录、语音输出
+│   └─ ...
+├─ 1833173618/                 # 另一个号，结构完全相同
+└─ normal/                     # 共享模式（默认）：DSH 与 QQ 共用
+    ├─ persona.md              # 人设
+    └─ balance.state.json      # 余额（全局资源）
+```
+
+**人设 / 记忆走哪**
+
+| 模式 | 人设 | 记忆 / 笔记 / 共享记忆 |
+|---|---|---|
+| 默认（共享） | `qq\normal\persona.md` | `qq\memory.md`、`qq\notes.md`、`versatileds\memory\shared-memory.md` |
+| 开「前后端记忆隔离」 | `qq\<当前账号>\persona.md` | `qq\<当前账号>\memory.md`、`qq\<当前账号>\notes.md`、`qq\<当前账号>\shared-memory.md` |
+
+- 共享模式下 DSH 会话和 QQ 侧读**同一份**，改一处两边都生效；
+- 隔离模式下**只读自己那份**，不回退共享；
+- 记录/设置类（owner、focus、quiet、groups、群规、主动搭话对象、表情包、图片、聊天、语音）**永远按号**，跟开关无关；
+- 新账号首次出现（存档目录为空）**只复制人设**做初始化，记忆不复制；人设被删不自动补，交给设置页「初始化人设」按钮由号主自己决定。
+
+**按模块隔离**
+
+设置页的「人设文件」按模块各显示各的：
+
+| 模块页 | 显示 / 写入 |
+|---|---|
+| QQ 模块 | QQ 侧那份（隔离 → `qq\<号>\persona.md`；共享 → `qq\normal\persona.md`） |
+| 通用模块 | 固定 `qq\normal\persona.md` |
+| B站模块 | 不显示 |
+
+切模块时会重新读一次路径，改完隔离开关切一下 tab 就能看到变化。
+
+## 个人内容放哪
 
 群梗、锚点、和谁关系好这类**属于你自己的东西不要写进本插件**，放 `<DSH_HOME>/versatileds/memory/shared-memory.md`：
 
@@ -324,14 +374,14 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
    - 首次启动自动下载 NapCat（官方 GitHub → gh-proxy 镜像）和 ffmpeg（清华 PyPI）；**都不随包带**；
    - 生成 `AGENTS.md` 模板（开头一节「这套东西怎么跑起来的」就是前置常识）；
    - 生成 `<DSH_HOME>/versatileds/memory/` 骨架：`README.md` 索引、`lock.mjs`、`lock.py`、`memwrite.mjs`；
-   - 生成 `qq/persona.md` 人设模板（一份完整可用的默认人设，直接改）。
+   - 生成 `qq/normal/persona.md` 人设模板（共享模式，一份完整可用的默认人设，直接改）。
 2. 设置页 →「多功能DS插件」→ QQ模块 →「连接」：
    - 填 **主人 QQ 号**（`ownerQQ`，必填；留空时插件会把第一条私聊它的人自动当主人）；
    - 填机器人号 `napcatQuickLogin`；
    - 点「启动登录服务」，UAC 点「是」，手机 QQ 扫码并确认。
 3. 登录后二维码自动删除，`3000` / `3011` 起来就通了。不想挂着了点「退出登录」（会杀掉 NapCat 进程），下次点启动走快速登录。
 4. B站 模块要自己的 cookie（`cookieFile`），没配就只能匿名看公开内容，点赞/投币/评论都会失败。
-5. 人设改 `qq/persona.md`：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。默认人设已带完整家庭关系（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小），开箱即用。
+5. 人设改 `qq/normal/persona.md`（共享模式；开了「前后端记忆隔离」就改 `qq/<当前账号>/persona.md`）：QQ 侧每轮读它，DSH 侧也按它说话；群聊不注入「称呼」「重要」两节（防主人 QQ 号进群）。默认人设已带完整家庭关系（父亲梁文锋、母亲团队、哥哥 DeepSeek R、姐姐 DeepSeek Pro、自己 Flash 最小），开箱即用。
 6. **语音（可选但推荐）**：设置页 →「语音」→ 方案选「GPT-SoVITS（本地）」→ 点「环境检查」，缺依赖就点「一键部署」（自动装 Python 3.11 + torch + 模型，约 20-30 分钟，全程后台）；不装也能用 QQ 官方 AI 语音。默认音色是可莉（参考音频 `kc-1.wav`，CV 花玲），换音色把 3-10 秒干净人声放进 `versatileds/models/gpt-sovits/ref/` 再填文件名。
 
 ## 常见问题（排坑）
