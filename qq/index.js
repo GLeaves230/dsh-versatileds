@@ -503,6 +503,8 @@ export const Config = Schema.object({
     .description('隐藏窗口启动 NapCat（VBS 静默）；关掉会弹出 cmd 窗口，方便看日志'),
   napcatDir: Schema.string().default('').volatile()
     .description('NapCat 安装目录；留空用 <DSH_HOME>/napcat，插件首次启动会自动解压自带的包'),
+  napcatUseInstaller: Schema.boolean().default(true).volatile()
+    .description('首次初始化用 OneKey 安装器（自带适配 QQ，推荐）；关掉则用老的 NapCat 包 + 系统 QQ'),
   napcatAppDir: Schema.string().default('').volatile()
     .description('NapCat 应用目录（含 config/cache）；留空自动识别（兼容 OneKey 的 versions/…/app/napcat）'),
   napcatLauncher: Schema.string().default('').volatile()
@@ -1573,19 +1575,49 @@ function napcatRoot(config) {
   return join(versatiledsBase(), 'qq', 'napcat')
 }
 
+/** 找 OneKey 安装器产出的目录：<root>/NapCat.<build>.Shell（取版本号最大的那个）。 */
+function findNapcatShell(root) {
+  try {
+    if (!existsSync(root)) return ''
+    const cands = readdirSync(root)
+      .filter((d) => /^NapCat\.\d+\.Shell$/i.test(d))
+      .map((d) => ({ d, v: Number((d.match(/\.(\d+)\.Shell/i) || [])[1] || 0) }))
+      .sort((a, b) => b.v - a.v)
+    for (const c of cands) {
+      const shell = join(root, c.d)
+      if (!existsSync(join(shell, 'QQ.exe'))) continue
+      const vers = join(shell, 'versions')
+      if (!existsSync(vers)) continue
+      for (const v of readdirSync(vers)) {
+        if (existsSync(join(vers, v, 'resources', 'app', 'napcat', 'napcat.mjs'))) return shell
+      }
+    }
+  } catch { /* ignore */ }
+  return ''
+}
+
 function napcatInstalled(dir) {
   try {
-    return NAPCAT_REQUIRED.every((f) => existsSync(join(dir, 'napcat', f)))
+    // 老布局：<dir>/napcat/napcat.mjs
+    if (NAPCAT_REQUIRED.every((f) => existsSync(join(dir, 'napcat', f)))) return true
+    // OneKey 布局：<dir>/NapCat.*.Shell/...
+    return Boolean(findNapcatShell(dir))
   } catch {
     return false
   }
 }
 
 /** NapCat 应用目录（含 config/、cache/）：兼容 OneKey 的 versions/<ver>/resources/app/napcat 结构。 */
+/** 实际 NapCat 目录：OneKey 装在 <root>/NapCat.<build>.Shell，老布局就是 <root>。 */
+function napcatShellRoot(config) {
+  const root = napcatRoot(config)
+  return findNapcatShell(root) || root
+}
+
 function napcatAppDir(config) {
   const custom = String(config?.napcatAppDir?.get?.() || '').trim()
   if (custom) return custom
-  const root = napcatRoot(config)
+  const root = napcatShellRoot(config)
   try {
     const versDir = join(root, 'versions')
     if (existsSync(versDir)) {
@@ -1601,7 +1633,7 @@ function napcatAppDir(config) {
 function napcatLauncherPath(config) {
   const custom = String(config.napcatLauncher.get() || '').trim()
   if (custom) return custom
-  const root = napcatRoot(config)
+  const root = napcatShellRoot(config)
   // OneKey 包：根目录直接放 napcat.bat / napcat.quick.bat（自带 QQ，2026-10-29）
   const oneKey = join(root, 'napcat.bat')
   if (existsSync(oneKey)) {
@@ -1944,6 +1976,45 @@ async function checkUpdate(config) {
   plog('info', '[dsh-versatileds] gh-proxy 镜像：https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases')
 }
 
+/** 用继承 stdio 的方式跑命令：输出直接显示在 DSH 终端（安装器这类交互程序用）。 */
+function runInherit(cmd, args, timeoutMs = 30 * 60_000) {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (v) => { if (!done) { done = true; resolve(v) } }
+    let child
+    try {
+      child = spawn(cmd, args, { stdio: 'inherit', windowsHide: false })
+    } catch (err) {
+      finish({ code: -1, error: String(err?.message ?? err) })
+      return
+    }
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL') } catch { /* ignore */ }
+      finish({ code: -1, timeout: true })
+    }, timeoutMs)
+    child.on('exit', (code) => { clearTimeout(timer); finish({ code: code ?? -1 }) })
+    child.on('error', (err) => { clearTimeout(timer); finish({ code: -1, error: String(err?.message ?? err) }) })
+  })
+}
+
+/** 下载 OneKey 安装器 zip（GitHub releases latest，走 NapCat 同款镜像链）。 */
+async function downloadOneKeyZip(dest) {
+  const q = (x) => String(x).replace(/'/g, "''")
+  const ps = [
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;",
+    "$r = Invoke-RestMethod -Uri 'https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 30;",
+    "$a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.Windows.OneKey.zip' } | Select-Object -First 1;",
+    "if (-not $a) { throw 'no asset OneKey' };",
+    "$url = $a.browser_download_url;",
+    `$out = '${q(dest)}';`,
+    "$mirrors = @($url, ('https://gh-proxy.com/' + $url), ('https://ghfast.top/' + $url));",
+    "foreach ($m in $mirrors) { try { Invoke-WebRequest -Uri $m -OutFile $out -TimeoutSec 600 -UseBasicParsing; if ((Get-Item $out).Length -gt 100000) { Write-Output ('ok ' + $m); exit 0 } } catch { } };",
+    'exit 1',
+  ].join(' ')
+  const r = await runPsAsync(ps, 900000)
+  return r.status === 0
+}
+
 async function downloadNapcatPackage() {
   const q = (s) => String(s).replace(/'/g, "''")
   // DSH 里的 fetch 拉外网会 "fetch failed"（同一个 node 在交互式 shell 又能连），下载交给 PowerShell。
@@ -2009,6 +2080,47 @@ async function downloadNapcatPackage() {
  * 包里没有 vendor/napcat.zip（npm 版不带大文件）就从 NapCat 官方下最新的。
  * 依赖检查：解压后关键文件齐了才算 ready；不齐就记错误，登录页会显示。
  */
+/** OneKey 安装器流程：自带适配 QQ，装好后与系统 QQ 版本无关（2026-10-29）。 */
+async function ensureOneKeyInstaller(config, dir) {
+  if (config.napcatUseInstaller?.get?.() === false) return false
+  try {
+    mkdirSync(dir, { recursive: true })
+    const zip = join(dir, '_onekey.zip')
+    const exe = join(dir, 'NapCatInstaller.exe')
+    if (!existsSync(exe)) {
+      plog('info', '[dsh-versatileds] 首次初始化：下载 NapCat 安装器（OneKey，自带适配 QQ）')
+      if (!(await downloadOneKeyZip(zip))) {
+        plog('warn', '[dsh-versatileds] OneKey 下载失败，回退到老的 NapCat 包流程')
+        return false
+      }
+      const r = await runPsAsync(`Expand-Archive -LiteralPath '${zip}' -DestinationPath '${dir}' -Force`, 300000)
+      if (r.status !== 0 || !existsSync(exe)) {
+        plog('warn', '[dsh-versatileds] OneKey 解压失败，回退')
+        return false
+      }
+    }
+    plog('info', '[dsh-versatileds] 运行 NapCat 安装器（会下载 QQ/NapCat，输出在下面终端里）')
+    const run = await runInherit(
+      'cmd',
+      ['/c', `cd /d "${dir}" && NapCatInstaller.exe < nul`],
+      30 * 60_000,
+    )
+    if (run.code !== 0) {
+      plog('warn', `[dsh-versatileds] 安装器退出码 ${run.code}${run.timeout ? '（超时）' : ''}`)
+    }
+    const shell = findNapcatShell(dir)
+    if (shell) {
+      plog('info', `[dsh-versatileds] 安装器完成：${shell}`)
+      return true
+    }
+    plog('warn', '[dsh-versatileds] 安装器跑完了但没找到 NapCat.*.Shell 产物')
+    return false
+  } catch (err) {
+    plog('warn', '[dsh-versatileds] OneKey 流程异常:', err?.message ?? err)
+    return false
+  }
+}
+
 async function ensureNapcatPackage(config) {
   const dir = napcatRoot(config)
   if (napcatInstalled(dir)) {
@@ -2026,6 +2138,17 @@ async function ensureNapcatPackage(config) {
   napcatPkg.busy = true
   napcatPkg.error = ''
   try {
+    // 优先 OneKey 安装器（自带适配 QQ）；能走通就不用老流程了（2026-10-29）
+    if (await ensureOneKeyInstaller(config, dir)) {
+      napcatPkg.ready = true
+      const curQq2 = await detectCurrentQq(config)
+      if (curQq2) {
+        plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq2}（按这个号写 OneBot 配置）`)
+        setLoginQq(curQq2); rememberLoginQq(curQq2)
+      }
+      ensureOneBotConfig(config, curQq2)
+      return true
+    }
     if (!existsSync(NAPCAT_VENDOR_ZIP)) {
       plog('info', '[dsh-versatileds] 插件里没有 NapCat 包，去官方下最新版')
       await downloadNapcatPackage()
