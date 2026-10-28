@@ -250,7 +250,9 @@ function clearAutoLastRun() {
 function startStatusServer(guard, config, biliClient) {
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
+    // 浏览器发 JSON POST 会先预检，没有这个头会被 CORS 挡掉（表现成「接口没响应」，2026-10-28）
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
     const url = new URL(req.url || '/', 'http://127.0.0.1')
     if (url.pathname === '/cookie') {
