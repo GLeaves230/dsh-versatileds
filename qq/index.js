@@ -1358,7 +1358,7 @@ async function initNotesMem() {
   notesMemLoaded = true
   // 先读小快照（appendNoteLine 每次都会更新）：小文件、不会卡
   try {
-    const snap = join(versatiledsBase(), 'qq', 'notes-snapshot.json')
+    const snap = qqStatePath('notes-snapshot')
     if (existsSync(snap)) {
       const arr = JSON.parse(readFileSync(snap, 'utf8'))
       if (Array.isArray(arr) && arr.length) {
@@ -2467,7 +2467,7 @@ function bundledFfmpegCandidates() {
 async function shrinkSticker(filePath, maxPx, config) {
   const px = Number(maxPx ?? 240)
   if (!(px > 0)) return null
-  const out = join(versatiledsBase(), 'qq', 'image', `.thumb-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`)
+  const out = join(imageDir(), `.thumb-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`)
   const args = [
     '-y', '-loglevel', 'error', '-i', filePath,
     '-vf', `scale=${px}:${px}:force_original_aspect_ratio=decrease`,
@@ -2515,7 +2515,7 @@ const PHASH_MAX_DISTANCE = 10
  * 借 ffmpeg 出灰度原始像素，零新依赖；失败返回空串。
  */
 async function perceptualHash(filePath, config) {
-  const out = join(versatiledsBase(), 'qq', 'image', `.phash-${Date.now()}-${Math.floor(Math.random() * 1e6)}.gray`)
+  const out = join(imageDir(), `.phash-${Date.now()}-${Math.floor(Math.random() * 1e6)}.gray`)
   const custom = ''
   const exes = [
     custom,
@@ -3523,7 +3523,7 @@ function appendNoteLine(line) {
       notesMem.push(`- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${line}`)
       while (notesMem.length > 800) notesMem.shift()
       // 顺手存一份小快照：重启/退出后再启动时优先读它（小文件快、不会卡）
-      writeFileSync(join(versatiledsBase(), 'qq', 'notes-snapshot.json'),
+      writeFileSync(qqStatePath('notes-snapshot'),
         JSON.stringify(notesMem.slice(-800)), 'utf8')
     } catch { /* ignore */ }
     withMemoryLock(() => {
@@ -4132,7 +4132,7 @@ function listLogFiles(config) {
 
   // 3) 聊天记录
   {
-    const dir = join(versatiledsBase(), 'qq', 'chat')
+    const dir = chatDir()
     const files = []
     let entries = []
     try { entries = readdirSync(dir) } catch { /* ignore */ }
@@ -4194,7 +4194,7 @@ function startStatusServer(config, napcat = null) {
         if (!on || !lastAt) return 0
         return Math.max(0, Math.ceil((Number(lastAt) + intervalMs - Date.now()) / 1000))
       }
-      const vs = loadJsonFile(join(versatiledsBase(), 'qq', 'video_share.state.json'))
+      const vs = loadJsonFile(qqStatePath('video_share.state'))
       const rs = loadRulesState()
       const bs = loadJsonFile(balanceStatePath())
       const payload = {
@@ -4256,8 +4256,8 @@ function startStatusServer(config, napcat = null) {
         state.forceNext = true
         saveProactiveState(state)
       } else if (action === 'videoShare') {
-        const vs = loadJsonFile(join(versatiledsBase(), 'qq', 'video_share.state.json'))
-        saveJsonFile(join(versatiledsBase(), 'qq', 'video_share.state.json'), {
+        const vs = loadJsonFile(qqStatePath('video_share.state'))
+        saveJsonFile(qqStatePath('video_share.state'), {
           lastAt: 0,
           shared: Array.isArray(vs.shared) ? vs.shared : [],
         })
@@ -7650,7 +7650,7 @@ export function apply(ctx, config) {
       const sharedPath = sharedMemoryPath()
       if (!existsSync(sharedPath)) return { ok: true, changed: false, note: '共享记忆还没建，跳过' }
       const shared = readFileSync(sharedPath, 'utf8')
-      const memFile = join(versatiledsBase(), 'qq', 'memory.md')
+      const memFile = memoryPath()
       if (!existsSync(memFile)) return
       const before = readFileSync(memFile, 'utf8')
       let mem = before
@@ -9169,7 +9169,7 @@ export function apply(ctx, config) {
         // NapCat 有时只给 base64（新消息文件还没落盘），解码写临时 wav 再转（2026-10-28）
         if (!wavPath && rd.base64) {
           try {
-            const out = join(versatiledsBase(), 'qq', 'voice-in', `rec-${Date.now()}.wav`)
+            const out = join(qqAccountDir(), 'voice-in', `rec-${Date.now()}.wav`)
             mkdirSync(dirname(out), { recursive: true })
             writeFileSync(out, Buffer.from(String(rd.base64), 'base64'))
             wavPath = out
@@ -9421,7 +9421,7 @@ export function apply(ctx, config) {
           appendNote({ kind: 'task-local', role: String(config.ownerLabel.get() || 'Admin'), from: sender, name: senderName, text, reply })
           return
         }
-        const taskStatePath = join(versatiledsBase(), 'qq', 'task.state.json')
+        const taskStatePath = qqStatePath('task.state')
         const st = loadJsonFile(taskStatePath)
         const today = new Date().toISOString().slice(0, 10)
         if (st.date !== today) {
@@ -10411,7 +10411,7 @@ export function apply(ctx, config) {
           tail(join(versatiledsBase(), 'qq', 'bili_log.md'), 'B站 日志 bili_log.md')
         }
         if (args.what === 'groups' || args.what === 'all') {
-          tail(join(versatiledsBase(), 'qq', 'group_rules.md'), '群规 group_rules.md', 8)
+          tail(rulesMdPath(), '群规 group_rules.md', 8)
         }
         if (args.what === 'quiet' || args.what === 'all') {
           const now = Date.now()
