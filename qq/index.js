@@ -6133,7 +6133,7 @@ export function apply(ctx, config) {
     }
     add(on.qqName)
     add(String(on.card || '').split(/[（(\s]/)[0])
-    // 长的先替换，免得「老黑（群第一闭嘴）」被短词替换掉一半
+    // 长的先替换，免得「小黑（群第一闭嘴）」被短词替换掉一半
     return terms.sort((a, b) => b.length - a.length)
   }
 
@@ -10045,7 +10045,7 @@ async function syncGroupRules(force = false) {
             || Boolean(ownerDisplayNow && reply.includes(`@${ownerDisplayNow}`))
           if (!askingOwner) {
             for (const t of await ownerTerms()) {
-              // 它自己的名字「老黑の大肥鱼」别被拆开替换
+              // 它自己的名字「老黑（QQ 昵称）」别被拆开替换
               reply = reply.replace(new RegExp(escReg(t) + '(?!の)', 'g'), '主人')
             }
             // 「我主人老黑」替换后会变成「我主人主人」，压一下
