@@ -35,18 +35,24 @@
 ```
 dsh-versatileds/
 ├── index.js            # 合并入口：Config = { bili, qq }，apply 调两个模块
-├── client.js           # 浏览器半侧：左侧栏「多功能DS插件」+ 两个模块页
+├── client.js           # 浏览器半侧：左侧栏「多功能DS插件」+ 三个模块页（B站/QQ/通用）
 ├── bili/index.js       # B站 模块入口（工具 + 配置）
-├── qq/index.js         # QQ 模块入口（工具 + 配置）
+├── qq/index.js         # QQ 模块入口（工具 + 配置；含 NapCat 通道与官方通道）
+├── qq/deploy-gsv.mjs   # GPT-SoVITS 一键部署脚本（随包，小文件）
 ├── lib/
 │   ├── bili.js         # B站 接口封装
 │   ├── live.js         # 直播 / 抓帧
 │   └── share-card.js   # QQ 分享卡片解析
 ├── cordis.patch.yml    # 插入 id: versatileds 的条目
-├── qq/deploy-gsv.mjs   # GPT-SoVITS 一键部署脚本（随包，小文件）
-├── vendor/             # 空目录占位：NapCat 改成首次启动自动下载（官方 → gh-proxy），不再随包
+├── assets/
+│   ├── icon.jpg        # 插件封面（标题封面 / README 页面显示的那张）
+│   └── cover.jpg       # 仓库封面
+├── README.md
+├── LICENSE-GLeaves.txt
 └── package.json
 ```
+
+> NapCat 不再随包：首次启动自动下载（官方 → gh-proxy 镜像）解压到 `<DSH_HOME>/versatileds/qq/napcat`。
 
 ## 依赖
 
