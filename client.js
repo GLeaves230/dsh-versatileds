@@ -1766,7 +1766,7 @@ window.__ModuleLoader__.load({
             .then(setPersonaInfo)
             .catch(() => {})
         }
-        React.useEffect(() => { if (moduleActive) loadPersona() }, [moduleActive])
+        React.useEffect(() => { loadPersona() }, [])
         // 全局偏好（AGENTS.md）：不存在就生成含语言设置的模板
         const [agentsInfo, setAgentsInfo] = React.useState(null)
         const [agentsMsg, setAgentsMsg] = React.useState('')
@@ -1998,13 +1998,18 @@ window.__ModuleLoader__.load({
               type: 'button', style: skipStyle, onClick: doMakePersona,
             }, personaInfo && personaInfo.exists ? '重新生成模板' : '生成模板'),
             React.createElement('span', { style: hintStyle },
-              personaInfo
-                ? (personaInfo.exists
-                  ? (personaInfo.sharedPath && personaInfo.sharedPath !== personaInfo.path
-                    ? `已有（${personaInfo.chars} 字）· QQ：${personaInfo.path} · 通用：${personaInfo.sharedPath}`
-                    : `已有（${personaInfo.chars} 字）· ${personaInfo.path}`)
-                  : '还没有 —— 点「生成模板」，照着骨架改成你自己的')
-                : '读取中…'),
+              (() => {
+                const scope = (options && options.personaScope) || 'qq'
+                if (!personaInfo) return '读取中…'
+                if (scope === 'common') {
+                  return personaInfo.sharedExists
+                    ? `已有（${personaInfo.sharedChars} 字）· ${personaInfo.sharedPath}`
+                    : '还没有 —— 点「生成模板」'
+                }
+                return personaInfo.exists
+                  ? `已有（${personaInfo.chars} 字）· ${personaInfo.path}`
+                  : '还没有 —— 点「生成模板」，照着骨架改成你自己的'
+              })()),
             personaMsg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, personaMsg) : null,
           ),
           React.createElement(
