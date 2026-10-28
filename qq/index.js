@@ -2089,6 +2089,8 @@ async function ensureOneKeyInstaller(config, dir) {
     const exe = join(dir, 'NapCatInstaller.exe')
     if (!existsSync(exe)) {
       plog('info', '[dsh-versatileds] 首次初始化：下载 NapCat 安装器（OneKey，自带适配 QQ）')
+      plog('info', '[dsh-versatileds] 提示：首次安装要下载 ~300MB 的 QQ 和 NapCat，大约 5-10 分钟；')
+      plog('info', '[dsh-versatileds] 提示：期间请不要关闭这个窗口，看到「Press any key」会自动跳过。')
       if (!(await downloadOneKeyZip(zip))) {
         plog('warn', '[dsh-versatileds] OneKey 下载失败，回退到老的 NapCat 包流程')
         return false
@@ -2100,6 +2102,7 @@ async function ensureOneKeyInstaller(config, dir) {
       }
     }
     plog('info', '[dsh-versatileds] 运行 NapCat 安装器（会下载 QQ/NapCat，输出在下面终端里）')
+    plog('info', '[dsh-versatileds] 装完会自动回到这里，识别到 NapCat.*.Shell 就继续出二维码。')
     const run = await runInherit(
       'cmd',
       ['/c', `cd /d "${dir}" && NapCatInstaller.exe < nul`],
@@ -2114,6 +2117,8 @@ async function ensureOneKeyInstaller(config, dir) {
       return true
     }
     plog('warn', '[dsh-versatileds] 安装器跑完了但没找到 NapCat.*.Shell 产物')
+    plog('warn', '[dsh-versatileds] 可手动装一次：解压 NapCat.Shell.Windows.OneKey.zip 后运行 NapCatInstaller.exe；')
+    plog('warn', '[dsh-versatileds] 装好把 napcatLauncher 指到 <安装目录>\napcat.bat，或 napcatDir 指到它的上一级。')
     return false
   } catch (err) {
     plog('warn', '[dsh-versatileds] OneKey 流程异常:', err?.message ?? err)
