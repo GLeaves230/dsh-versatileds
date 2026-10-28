@@ -1097,20 +1097,15 @@ function ensureAgentsTemplate() {
  * 前后端隔离 + 按号隔离关 → versatileds/qq/normal/
  * 前后端不隔离 → versatileds/normal/ */
 function qqDataDir() {
-  let hostIso = false
-  let acctIso = false
-  try {
-    hostIso = qqConfigRef?.isolateHostQq?.get?.() === true
-    acctIso = qqConfigRef?.isolateAccountMemory?.get?.() === true
-  } catch { /* ignore */ }
-  // 已退出登录：即使之前记着号，也回退到共享目录（2026-10-28 主人确认）
-  // 数据选择里显式挑了某个号：直接用那个号（2026-10-28）
+  // 数据选择直接决定用哪份（2026-10-28 主人选 B）：
+  //   normal → versatileds/normal（通用/共享）
+  //   具体号 → qq/<号>
+  //   auto   → 当前登录号 qq/<号>；没登录就用共享兜底
   const view = String(currentAccountView() || 'auto')
   if (view === 'normal') return join(versatiledsBase(), 'normal')
   if (view !== 'auto') return join(versatiledsBase(), 'qq', view)
-  const acct = effectiveAccount()
-  if (hostIso && acctIso && acct) return join(versatiledsBase(), 'qq', acct)
-  if (hostIso) return join(versatiledsBase(), 'qq', 'normal')
+  const acct = loginQqCache
+  if (acct && !napcatLoggedOut) return join(versatiledsBase(), 'qq', acct)
   return join(versatiledsBase(), 'normal')
 }
 
