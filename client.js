@@ -2055,8 +2055,11 @@ window.__ModuleLoader__.load({
                   ? `已有（${personaInfo.chars} 字）· ${personaInfo.path}`
                   : '还没有 —— 点「生成模板」，照着骨架改成你自己的'
               })()),
-            personaInfo && personaInfo.dataDir
-              ? React.createElement('span', { style: hintStyle }, `｜数据目录：${personaInfo.dataDir}`)
+            personaInfo && (personaInfo.dataDir || personaInfo.sharedDir)
+              ? React.createElement('span', { style: hintStyle },
+                  `｜数据目录：${(options && options.personaScope) === 'common'
+                    ? (personaInfo.sharedDir || personaInfo.dataDir)
+                    : personaInfo.dataDir}`)
               : null,
             personaMsg ? React.createElement('span', { style: { ...hintStyle, color: '#2e7d32' } }, personaMsg) : null,
           ),

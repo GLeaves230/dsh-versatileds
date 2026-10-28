@@ -4433,7 +4433,7 @@ function startStatusServer(config, napcat = null) {
       const sharedP = sharedPersonaPath()
       let sharedChars = 0
       try { if (existsSync(sharedP)) sharedChars = readFileSync(sharedP, 'utf8').replace(/\s+/g, '').length } catch { /* ignore */ }
-      res.end(JSON.stringify({ path: p, exists, chars, sharedPath: sharedP, sharedExists: existsSync(sharedP), sharedChars, dataDir: qqDataDir() }))
+      res.end(JSON.stringify({ path: p, exists, chars, sharedPath: sharedP, sharedExists: existsSync(sharedP), sharedChars, dataDir: qqDataDir(), sharedDir: join(versatiledsBase(), 'normal') }))
       return
     }
     if (url.pathname === '/balance_check') {
