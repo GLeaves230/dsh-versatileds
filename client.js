@@ -956,6 +956,9 @@ window.__ModuleLoader__.load({
           + (bili.level ? ` · Lv.${bili.level}` : '')
           + (bili.nextExp > 0 ? ` · 经验 ${bili.exp}/${bili.nextExp}` : (bili.exp ? ` · 经验 ${bili.exp}` : ''))
           + (bili.coins !== undefined ? ` · 硬币 ${bili.coins}` : '')
+          + (bili.follower !== null && bili.follower !== undefined ? ` · 粉丝 ${bili.follower}` : '')
+          + (bili.following !== null && bili.following !== undefined ? ` · 关注 ${bili.following}` : '')
+          + (bili.dynamics !== null && bili.dynamics !== undefined ? ` · 作品 ${bili.dynamics}` : '')
         : '当前B站账号未登录'
 
       return React.createElement('div', {

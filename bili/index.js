@@ -329,6 +329,9 @@ function startStatusServer(guard, config, biliClient) {
       let exp = 0
       let nextExp = 0
       let coins = 0
+      let follower = null
+      let following = null
+      let dynamics = null
       try {
         const nav = await biliClient.me()
         loggedIn = nav?.isLogin === true
@@ -338,6 +341,27 @@ function startStatusServer(guard, config, biliClient) {
         exp = Number(nav?.level_info?.current_exp || 0)
         nextExp = Number(nav?.level_info?.next_exp || 0)
         coins = Number(nav?.money || 0)
+        // 粉丝 / 关注 / 动态数（2026-10-28）
+        if (uid) {
+          try {
+            const rel = await (await fetch(`https://api.bilibili.com/x/relation/stat?vmid=${encodeURIComponent(uid)}`, { headers: { 'User-Agent': 'Mozilla/5.0' } })).json()
+            follower = Number(rel?.data?.follower ?? 0)
+            following = Number(rel?.data?.following ?? 0)
+          } catch { /* ignore */ }
+          try {
+            // navnum 现在要 wbi 签名：优先走 client（带 cookie/wbi），失败再裸请求
+            let d = {}
+            try {
+              d = await biliClient.get('/x/space/navnum', { mid: uid }, { check: false })
+            } catch {
+              const raw = await (await fetch(`https://api.bilibili.com/x/space/navnum?mid=${encodeURIComponent(uid)}`, { headers: { 'User-Agent': 'Mozilla/5.0' } })).json()
+              d = raw?.data || {}
+            }
+            const sum = ['video', 'drawing', 'article', 'text', 'audio']
+              .reduce((acc, k) => acc + (Number(d?.[k]) || 0), 0)
+            dynamics = sum
+          } catch { /* ignore */ }
+        }
       } catch {
         // 网络/接口失败时退回只看有没有 cookie
         try {
@@ -347,7 +371,7 @@ function startStatusServer(guard, config, biliClient) {
         } catch { /* 未登录 */ }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      res.end(JSON.stringify({ loggedIn, uid, name, level, exp, nextExp, coins }))
+      res.end(JSON.stringify({ loggedIn, uid, name, level, exp, nextExp, coins, follower, following, dynamics }))
       return
     }
     if (url.pathname === '/cooldowns') {
