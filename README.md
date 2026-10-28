@@ -64,7 +64,8 @@ dsh-versatileds/
 
 | 依赖 | 用在哪 | 缺了会怎样 |
 |---|---|---|
-| NapCat（OneBot 11） | QQ 模块全部功能 | 连不上 `3000` / `3011`，`versatileds_qq` 会提示 NapCat 没在跑 |
+| NapCat（OneBot 11） | QQ 模块 NapCat 通道的全部功能 | 连不上 `3000` / `3011`，`versatileds_qq` 会提示 NapCat 没在跑；官方通道模式不需要它 |
+| `@tencent-connect/dsh-qqbot`（可选） | QQ 官方机器人通道（`qqChannel: official`） | 官方通道收发由它负责；没装时切官方模式会提示安装 |
 | ffmpeg | B站 抓帧、直播帧、表情包缩图、语音前后处理 | 抓帧和缩图失败，纯文字功能不受影响（缺失会自动下载） |
 | GPT-SoVITS（可选） | QQ 模块的本地语音（`voiceBackend: gpt-sovits`） | 自动退回 QQ 官方 AI 语音；首次用可在设置页「语音」点「一键部署」 |
 | Python 3.11（可选） | 跑 GPT-SoVITS 用 | 同上，部署脚本会自动装到 `versatileds/python311` |
@@ -82,6 +83,52 @@ ffmpeg 的查找顺序：配置项 `ffmpegPath` → PATH 里的 `ffmpeg` → `<D
 | `<DSH_HOME>/versatileds/bilibili/` | 抓帧图片、观看记录、自动刷状态 |
 | `<DSH_HOME>/versatileds/memory/` | 记忆目录（AGENTS.md 里的索引指向这里，含 `lock.mjs` / `memwrite.mjs`） |
 | `<DSH_HOME>/versatileds/qq/napcat/` | 解压后的 NapCat（`launcher.bat`、二维码缓存、配置） |
+
+## QQ 通道：NapCat 与官方机器人
+
+插件支持两种 QQ 通道，在设置页「QQ 模块 → 连接 → **QQ 通道**」下拉切换：
+
+| 通道 | 适用 | 说明 |
+|---|---|---|
+| `napcat`（默认） | 小号当机器人 | 插件自己连 NapCat（OneBot 11），功能全：自动回复、主动搭话、群规、戳一戳、合并转发、引用、群管理… |
+| `official` | 官方 QQ 机器人 | 收发交给 `dsh-qqbot` 插件，本插件只留工具（语音/记忆/官方发送），不连 NapCat |
+
+### 官方机器人模式怎么开
+
+1. 装官方插件：`@tencent-connect/dsh-qqbot`（插件页搜索安装；本插件检测到缺依赖会尝试自动安装）；
+2. 绑定：点左下角账号（头像）→ 设置 →「QQ 机器人」→ 扫码绑定；
+3. 白名单（建议）：官方插件配置里的 `access.c2cAllow` / `groupAllow` 填你的 openid / 群 openid——**空白名单等于全部放行**，注意安全；
+4. 切到 `official` 后，本插件会自动启用 `im-qqbot`、停掉 NapCat 进程（只杀 launcher.pid / 启动记录里的，不碰你自己开的 QQ）。
+
+### 两种通道的能力差异
+
+| 能力 | NapCat | 官方 |
+|---|---|---|
+| 私聊 / 群聊收发 | ✅ | ✅（群聊需 @） |
+| 主动消息 | ✅ 无限制 | 单聊 1000 条/天；**群聊无权限**（只能被动回复） |
+| 发引用 | ✅ | ❌（只能收） |
+| 合并转发 | ✅ | ❌ |
+| 戳一戳 / 群管理 / 群公告 | ✅ | ❌ |
+| 图片 / 语音 / 文件 | ✅ | ✅ |
+| Markdown 排版 | ❌ | ✅（单聊/群聊） |
+| B站 分享 | json 卡片 | Markdown 卡片（封面+数据+链接） |
+
+### 官方通道的工具
+
+切到 `official` 后插件额外提供：
+
+| 工具 | 作用 |
+|---|---|
+| `versatileds_qq_send` | 官方 API 发文字（主动/回复） |
+| `versatileds_qq_markdown` | 官方 Markdown（群里带 msg_id 才是被动回复） |
+| `versatileds_qq_share` | B站 视频分享（封面卡片） |
+| `versatileds_voice` | GPT-SoVITS 合成 AMR 语音文件（配合 `qqbot_send_file` 发） |
+| `versatileds_memory` | 查记忆/群规/反思状态 |
+| `qqbot_send_file` | 官方自带：发语音/图片/文件 |
+
+### 关于官方插件的补丁
+
+官方模式的前台收发日志、输出文本清洗，是 vds **注入到 `dsh-qqbot/dist`** 的（官方升级会覆盖）。vds 每次启动会检查并自动补回，不需要手动处理。
 
 ## 登录模块
 
