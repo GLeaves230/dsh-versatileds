@@ -503,6 +503,8 @@ export const Config = Schema.object({
     .description('隐藏窗口启动 NapCat（VBS 静默）；关掉会弹出 cmd 窗口，方便看日志'),
   napcatDir: Schema.string().default('').volatile()
     .description('NapCat 安装目录；留空用 <DSH_HOME>/napcat，插件首次启动会自动解压自带的包'),
+  napcatAppDir: Schema.string().default('').volatile()
+    .description('NapCat 应用目录（含 config/cache）；留空自动识别（兼容 OneKey 的 versions/…/app/napcat）'),
   napcatLauncher: Schema.string().default('').volatile()
     .description('launcher.bat 路径；留空用 <napcatDir>/napcat/launcher.bat'),
   napcatQrPath: Schema.string().default('').volatile()
@@ -1579,12 +1581,36 @@ function napcatInstalled(dir) {
   }
 }
 
+/** NapCat 应用目录（含 config/、cache/）：兼容 OneKey 的 versions/<ver>/resources/app/napcat 结构。 */
+function napcatAppDir(config) {
+  const custom = String(config?.napcatAppDir?.get?.() || '').trim()
+  if (custom) return custom
+  const root = napcatRoot(config)
+  try {
+    const versDir = join(root, 'versions')
+    if (existsSync(versDir)) {
+      for (const v of readdirSync(versDir)) {
+        const p = join(versDir, v, 'resources', 'app', 'napcat')
+        if (existsSync(p) && existsSync(join(p, 'napcat.mjs'))) return p
+      }
+    }
+  } catch { /* ignore */ }
+  return join(root, 'napcat')
+}
+
 function napcatLauncherPath(config) {
   const custom = String(config.napcatLauncher.get() || '').trim()
   if (custom) return custom
-  const dir = join(napcatRoot(config), 'napcat')
-  // NapCat 官方：Windows 10 要用 launcher-win10.bat（Win11 用 launcher.bat）。
-  // 之前一律用 launcher.bat，Win10 上容易注入失败（2026-10-29）。
+  const root = napcatRoot(config)
+  // OneKey 包：根目录直接放 napcat.bat / napcat.quick.bat（自带 QQ，2026-10-29）
+  const oneKey = join(root, 'napcat.bat')
+  if (existsSync(oneKey)) {
+    const quickBat = join(root, 'napcat.quick.bat')
+    if (String(config?.napcatQuickLogin?.get?.() || '').trim() && existsSync(quickBat)) return quickBat
+    return oneKey
+  }
+  const dir = join(root, 'napcat')
+  // NapCat 官方：Windows 10 要用 launcher-win10.bat（Win11 用 launcher.bat）
   try {
     const parts = String(os.release() || '').split('.').map((x) => Number(x) || 0)
     const build = parts[2] || 0
@@ -1597,7 +1623,7 @@ function napcatLauncherPath(config) {
 function napcatQrPath(config) {
   const custom = String(config.napcatQrPath.get() || '').trim()
   if (custom) return custom
-  return join(napcatRoot(config), 'napcat', 'cache', 'qrcode.png')
+  return join(napcatAppDir(config), 'cache', 'qrcode.png')
 }
 
 /** 从注册表拿 QQ.exe 的路径（NapCat 注入器需要它）。 */
@@ -1738,7 +1764,7 @@ function ensureOneBotConfig(config, qqOverride) {
   try {
     const qq = String(qqOverride || config.napcatQuickLogin.get() || '').trim()
     if (!qq) return false
-    const cfgDir = join(napcatRoot(config), 'napcat', 'config')
+    const cfgDir = join(napcatAppDir(config), 'config')
     if (!existsSync(cfgDir)) return false
     // 顺手把 NapCat 自己的日志开成文件：窗口是隐藏启动的，出问题只能翻 logs
     try {
