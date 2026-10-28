@@ -631,6 +631,62 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 聚焦聊天：从群/好友里选（按当前账号保存），而不是手填群号（2026-10-28 主人要求）。 */
+    function FocusSelectRow({ form, value: initial, pending, setPending, disabled }) {
+      const [contacts, setContacts] = React.useState({ groups: [], friends: [] })
+      React.useEffect(() => {
+        let alive = true
+        fetch(`${QQ_STATUS_URL}/contacts`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (alive) setContacts({ groups: d.groups || [], friends: d.friends || [] }) })
+          .catch(() => {})
+        return () => { alive = false }
+      }, [])
+      const value = 'focusChatTarget' in pending ? pending.focusChatTarget : initial
+      const save = (next) => {
+        setPending((p) => ({ ...p, focusChatTarget: next }))
+        const settle = () => setPending((p) => { const c = { ...p }; delete c.focusChatTarget; return c })
+        Promise.resolve(form.set('focusChatTarget', next)).then(settle, settle)
+        // 同时写按账号文件（vds 读取时文件优先）
+        try {
+          fetch(`${QQ_STATUS_URL}/focus`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: next }),
+          }).catch(() => {})
+        } catch { /* ignore */ }
+      }
+      return React.createElement('div', { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, '聚焦聊天（手动指定）'),
+        React.createElement('select', {
+          value: String(value || ''),
+          disabled,
+          onChange: (e) => save(e.target.value),
+          style: {
+            padding: '4px 8px',
+            borderRadius: '6px',
+            background: 'transparent',
+            color: 'inherit',
+            border: '1px solid rgba(128,128,128,0.3)',
+            fontSize: '13px',
+            minWidth: '260px',
+            maxWidth: '100%',
+          },
+        },
+        React.createElement('option', { value: '' }, '自动（按活跃度挑）'),
+        contacts.groups.length
+          ? React.createElement('optgroup', { label: '群' },
+              contacts.groups.map((g) => React.createElement('option', { key: 'g' + g.id, value: g.id }, `群 ${g.name || g.id}`)))
+          : null,
+        contacts.friends.length
+          ? React.createElement('optgroup', { label: '好友' },
+              contacts.friends.map((f) => React.createElement('option', { key: 'f' + f.id, value: f.id }, `好友 ${f.name || f.id}`)))
+          : null,
+        ),
+        React.createElement('span', { style: hintStyle }, '留空＝自动按活跃度挑；选中后只盯这一个会话（按当前登录账号保存）'),
+      )
+    }
+
     // ================================================================= B站模块
     const BILI_GROUPS = [
       ['write', '写操作'],
@@ -1518,7 +1574,6 @@ window.__ModuleLoader__.load({
       ['liveUrl', '直播间链接', ''],
       ['liveFramePath', '抓图路径覆盖', ''],
       ['videoShareTarget', '分享视频的目标', '留空＝发主人私聊；*＝当前聚焦的 QQ 会话；也可以填群号或 QQ 号'],
-      ['focusChatTarget', '聚焦聊天（手动指定）', '填群号或 QQ 号就只盯这一个会话：主动搭话不去别处、这个窗口的消息都跟上。留空＝按活跃度自动挑（大肥鱼自己的玩法，别的用户不用动）'],
       ['videoShareCardStyle', '分享样式', 'text＝封面图+标题+b23 短链（手机端样式）；link＝纯文本+标题+完整 bilibili.com 链接（电脑端样式）'],
       ['taskSessionName', 'DSH 会话名', '主人派活时新会话叫什么'],
       ['taskDefaultModel', '派活默认模型', 'flash 或 pro'],
@@ -1947,6 +2002,20 @@ window.__ModuleLoader__.load({
               pending,
               setPending,
               value: v.qqChannel || 'napcat',
+              disabled: !snap.writable,
+            }),
+          )
+        }
+
+        // 聚焦聊天（主动页）：下拉选群/好友，保存到当前账号（2026-10-28 主人要求）
+        if (activeTab === 'proactive') {
+          children.push(
+            React.createElement(FocusSelectRow, {
+              key: 'focusChatTarget',
+              form,
+              value: v.focusChatTarget || '',
+              pending,
+              setPending,
               disabled: !snap.writable,
             }),
           )
