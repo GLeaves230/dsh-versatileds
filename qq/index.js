@@ -4613,6 +4613,10 @@ function startStatusServer(config, napcat = null) {
         hasQr,
         qrAt,
         pkgReady: napcatInstalled(napcatRoot(config)),
+        // 诊断（Win10 排障用，2026-10-28）：目录/启动器/二维码新鲜度
+        dirExists: existsSync(join(napcatRoot(config), 'napcat')),
+        launcherExists: existsSync(napcatLauncherPath(config)),
+        qrAgeSec: hasQr ? Math.round((Date.now() - qrAt) / 1000) : -1,
         pkgBusy: napcatPkg.busy,
         pkgError: napcatPkg.error,
         dir: join(napcatRoot(config), 'napcat'),
