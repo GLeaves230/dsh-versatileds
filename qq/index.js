@@ -10045,7 +10045,7 @@ async function syncGroupRules(force = false) {
             || Boolean(ownerDisplayNow && reply.includes(`@${ownerDisplayNow}`))
           if (!askingOwner) {
             for (const t of await ownerTerms()) {
-              // 它自己的名字「老黑（QQ 昵称）」别被拆开替换
+              // 它自己的名字「大肥鱼」别被拆开替换
               reply = reply.replace(new RegExp(escReg(t) + '(?!の)', 'g'), '主人')
             }
             // 「我主人老黑」替换后会变成「我主人主人」，压一下
