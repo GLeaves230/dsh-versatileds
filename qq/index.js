@@ -7156,7 +7156,78 @@ export function apply(ctx, config) {
   }
 
   /** 把所有目标群的群规同步一遍，写 json 和 md。 */
-  async function syncGroupRules(force = false) {
+  /** 从群规文本里找「自由发言时段」（AI 可以说话的时段），支持 9:00-12:00 / 上午9点到12点 / 下午2点-6点。 */
+function parseFreeTalkRanges(text) {
+  const t = String(text || '')
+  const KEY = /(自由发言|自由聊天|发言时段|发言时间|活跃时段|可发言|允许发言|可以说话|说话时间|说话时段|聊天时间|AI\s*发言|机器人发言)/
+  const idx = t.search(KEY)
+  if (idx < 0) return []
+  const seg = t.slice(Math.max(0, idx - 20), idx + 200)
+  const out = []
+  // 1) 数字时间：9:00-12:00 / 09：30~14：00
+  const re1 = /(\d{1,2})\s*[:：]\s*(\d{2})\s*(?:-|~|～|到|至)\s*(?:次日|第二天)?\s*(\d{1,2})\s*[:：]\s*(\d{2})/g
+  let m
+  while ((m = re1.exec(seg)) !== null) {
+    const a = Number(m[1]) * 60 + Number(m[2])
+    const b = Number(m[3]) * 60 + Number(m[4])
+    if (a >= 0 && a < 1440 && b >= 0 && b <= 1440) out.push({ a, b })
+  }
+  // 2) 中文：上午9点到12点 / 下午2点至6点
+  const re2 = /(上午|下午|晚上|凌晨|中午|早上|清晨|早晨|白天)?\s*(\d{1,2})\s*[点时](?:\s*(?:半|30分)?\s*)?(?:-|~|～|到|至)\s*(上午|下午|晚上|凌晨|中午|早上|清晨|早晨|白天)?\s*(\d{1,2})\s*[点时]/g
+  while ((m = re2.exec(seg)) !== null) {
+    const fix = (prefix, hour) => {
+      let h = Number(hour)
+      if (prefix === '下午' || prefix === '晚上') { if (h < 12) h += 12 }
+      if (prefix === '中午' && h < 12) h = 12
+      if (prefix === '凌晨' && h === 12) h = 0
+      return h * 60
+    }
+    const a = fix(m[1], m[2])
+    let b = fix(m[3], m[4])
+    // 结束没写「上午/下午」时沿用起始的半天（下午2点至6点 = 14:00-18:00）
+    if (!m[3]) {
+      const aH = Math.floor(a / 60)
+      if ((aH >= 12) && (Math.floor(b / 60) < 12)) b += 12 * 60
+      if (m[1] === '晚上' && b > a) b -= 12 * 60 // 晚上8点到早上6点：结束已是次日
+    }
+    if (a >= 0 && a < 1440 && b >= 0 && b <= 1440) out.push({ a, b })
+  }
+  // 去重 + 转 HH:MM
+  const seen = new Set()
+  const ranges = []
+  for (const r of out) {
+    const key = r.a + '-' + r.b
+    if (seen.has(key) || r.a === r.b) continue
+    seen.add(key)
+    const fmt = (mins) => `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+    ranges.push({ start: fmt(r.a), end: fmt(r.b) })
+  }
+  return ranges.slice(0, 4)
+}
+
+/** 按群规自动生成免打扰配置：全天静默 + 群规里的自由发言时段做反向集（2026-10-28）。 */
+function autoQuietFromRules(config, gid, text) {
+  try {
+    const free = parseFreeTalkRanges(text)
+    if (!free.length) return null
+    const obj = readGroupProfiles(config)
+    const cur = obj[String(gid)] || {}
+    // 用户手改过（没有 quietAuto 标记）就不覆盖
+    if (Array.isArray(cur.quietRanges) && cur.quietRanges.length && cur.quietAuto !== true) return null
+    obj[String(gid)] = {
+      ...cur,
+      quietAuto: true,
+      quietRanges: [
+        { start: '00:00', end: '00:00', mode: 'in' },
+        ...free.map((r) => ({ start: r.start, end: r.end, mode: 'out' })),
+      ],
+    }
+    writeGroupProfiles(obj)
+    return free
+  } catch { return null }
+}
+
+async function syncGroupRules(force = false) {
     if (rulesSyncing) return { skipped: '正在同步' }
     if (!force && config.ruleSyncEnabled.get() === false) return { skipped: '开关关着' }
     rulesSyncing = true
@@ -7192,6 +7263,15 @@ export function apply(ctx, config) {
           rec.changedAt = prev.changedAt || 0
         }
         state.groups[gid] = rec
+        // 群规里写了「自由发言时段」就自动生成免打扰配置（2026-10-28）
+        try {
+          const ruleText = [rec.intro, ...(rec.pinned || []).map((x) => x?.text), ...(rec.notices || []).map((x) => x?.text)]
+            .filter(Boolean).join('\n')
+          const auto = autoQuietFromRules(config, gid, ruleText)
+          if (auto && auto.length) {
+            plog('info', `[dsh-versatileds] 群 ${gid} 群规里有自由发言时段：${auto.map((r) => r.start + '-' + r.end).join('、')}（已自动生成免打扰配置）`)
+          }
+        } catch { /* ignore */ }
       }
       state.history = state.history.slice(-200)
       state.lastSyncAt = Date.now()
