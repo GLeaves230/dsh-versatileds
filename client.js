@@ -254,6 +254,17 @@ window.__ModuleLoader__.load({
               }).catch(() => {})
             } catch { /* ignore */ }
           }
+          // 主动搭话目标也按账号存一份（2026-10-28）
+          if (field === 'proactiveTargets') {
+            try {
+              const ids = next ? next.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) : []
+              fetch(`${QQ_STATUS_URL}/proactive-targets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids }),
+              }).catch(() => {})
+            } catch { /* ignore */ }
+          }
         }
       }
       return React.createElement(
@@ -539,6 +550,17 @@ window.__ModuleLoader__.load({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ owner: next }),
+              }).catch(() => {})
+            } catch { /* ignore */ }
+          }
+          // 主动搭话目标也按账号存一份（2026-10-28）
+          if (field === 'proactiveTargets') {
+            try {
+              const ids = next ? next.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) : []
+              fetch(`${QQ_STATUS_URL}/proactive-targets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids }),
               }).catch(() => {})
             } catch { /* ignore */ }
           }

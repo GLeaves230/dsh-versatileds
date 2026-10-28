@@ -3566,6 +3566,16 @@ function appendTopicLine(line) {
   } catch { /* ignore */ }
 }
 
+/** 主动搭话目标按账号：qq/<qq>/proactive-targets.json 优先，没文件用配置（2026-10-28） */
+function proactiveTargetsOf(config) {
+  try {
+    const j = JSON.parse(readFileSync(join(qqAccountDir(), 'proactive-targets.json'), 'utf8'))
+    if (Array.isArray(j?.ids)) return j.ids.map(String).filter(Boolean)
+  } catch { /* 没文件用配置 */ }
+  const raw = String(config?.proactiveTargets?.get?.() || '').trim()
+  return raw ? raw.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) : []
+}
+
 function proactiveStatePath() {
   return qqStatePath('proactive.state', 'json')
 }
@@ -4465,6 +4475,24 @@ function startStatusServer(config, napcat = null) {
           saveJsonFile(ownerFilePath(), { owner: String(j.owner || '').trim(), at: Date.now() })
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
           res.end(JSON.stringify({ ok: true }))
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false }))
+        }
+      })
+      return
+    }
+    if (url.pathname === '/proactive-targets' && req.method === 'POST') {
+      // 按账号写主动搭话目标（qq/<qq>/proactive-targets.json，2026-10-28）
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        try {
+          const j = JSON.parse(body || '{}')
+          const ids = Array.isArray(j.ids) ? j.ids.map(String).filter(Boolean) : []
+          writeFileSync(join(qqAccountDir(), 'proactive-targets.json'), JSON.stringify({ ids }, null, 2), 'utf8')
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify({ ok: true, ids }))
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false }))
@@ -8162,7 +8190,7 @@ export function apply(ctx, config) {
         list.push({ type: 'group', id: String(gid) })
       }
     }
-    const friends = parseIds(config.proactiveTargets.get())
+    const friends = proactiveTargetsOf(config)
     if (friends.length) {
       for (const uid of friends) list.push({ type: 'private', id: String(uid) })
     } else {
