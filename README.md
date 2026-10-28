@@ -346,6 +346,16 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
 
 两块都是 `volatile()` 字段：普通字段改完即时生效；两个总开关（`bili.enabled` / `qq.enabled`）约 **2 秒内热启停**——工具注册/注销、WS、定时器都跟着停/起，不用重启 DSH。**关掉 QQ 模块时「启动登录服务」「退出登录」仍然可用**（关的只是聊天自动化）。
 
+几个字段的生效方式要注意：
+
+| 字段 | 改完怎么生效 |
+|---|---|
+| `qqChannel` | 约 5 秒内检测到并自动执行切换（装/禁用官方插件、注入补丁） |
+| `isolateHostQq` / `isolateAccountMemory` | 立即生效；设置页「人设文件」路径也会跟着刷新 |
+| `sttModel` | 下一次转写就用新模型（没下载过会自动下载） |
+| `voiceBackend` | 下一次发语音就按新方案走 |
+| `napcatQuickLogin` | 下次启动 NapCat 生效；检测到换号时插件会**自动清空**它 |
+
 ### 配置示例
 
 下面全是占位值，换成自己的就行（**不用改代码**）：
@@ -355,17 +365,24 @@ profile 里用 `link:` 指向本目录（改源码即生效），或用 `plugin_
   config:
     qq:
       enabled: true
+      qqChannel: napcat              # napcat＝小号走 NapCat；official＝走官方机器人插件
       ownerQQ: "1000000001"          # 主人的 QQ 号
       napcatQuickLogin: "1000000002" # 机器人 QQ 号（免扫码快速登录）
       onebotToken: "换成一个随机串"   # NapCat OneBot token
       autoStartNapCat: true          # DSH 起来自动拉 NapCat
       napcatHiddenLaunch: true       # 隐藏窗口启动
       proactiveGroups: "123456789"   # 想主动搭话的群号
+      voiceBackend: gpt-sovits       # qq＝QQ 官方 AI 语音；gpt-sovits＝本地合成
+      sttModel: onnx-community/whisper-base   # 听语音用的转写模型
+      isolateHostQq: false           # 前后端记忆隔离（DSH 与 QQ 各用各的）
+      isolateAccountMemory: false    # 账号记忆隔离（不同 QQ 号各用各的）
     bili:
       enabled: true
       ownerUid: "1000000003"         # 主人的 B站 UID（评论里 @ 你时用）
       perActionGapSec: 360
 ```
+
+> 官方机器人通道（`qqChannel: official`）的 `appId` / `appSecret` 不在这里填——那是 `@tencent-connect/dsh-qqbot` 的条目配置，vds 只负责启用/注入补丁。
 
 **关于身份**：插件认的是 **QQ 号 / B站 UID**，不是昵称——主人改名字、改群名片都不影响。
 
