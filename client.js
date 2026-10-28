@@ -1046,7 +1046,8 @@ window.__ModuleLoader__.load({
           })
           const d = await r.json()
           if (d && d.ok) {
-            setMsg(`已保存（${d.keys} 个字段）`)
+            setMsg(`已保存 ${d.keys} 个字段（${(d.saved || []).join(' / ')}）`
+              + (d.missing && d.missing.length ? `，缺：${d.missing.join(' / ')}` : '，字段齐全'))
             setDraft('')
             setDirty(false)
             load()
@@ -1085,7 +1086,7 @@ window.__ModuleLoader__.load({
           value: draft,
           placeholder: status && status.exists
             ? '已保存过，不回显；要换就把新的 cookie 粘进来再点保存'
-            : '把 B站 cookie 粘进来（支持 k=v; k=v 或 JSON）',
+            : '粘贴网页端整串 cookie（k=v; k=v，多出来的字段会自动忽略）或 JSON',
           onChange: (e) => { setDraft(e.target.value); setDirty(Boolean(e.target.value.trim())) },
           style: boxStyle,
           spellCheck: false,

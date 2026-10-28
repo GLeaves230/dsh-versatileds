@@ -265,18 +265,32 @@ function startStatusServer(guard, config, biliClient) {
               res.end(JSON.stringify({ ok: false, error: 'empty' }))
               return
             }
+            // 两种来源都先解析成对象，再只挑 B站 需要的那几个字段存 JSON（2026-10-28 主人要求）：
+            // 1) 网页端整串 "k=v; k=v"（含 _uuid/b_nut 等一堆无关字段）→ 解析后挑
+            // 2) JSON（可能带别的键）→ 也挑
             let obj = {}
-            try { obj = JSON.parse(raw) } catch {
+            try {
+              obj = JSON.parse(raw)
+            } catch {
               for (const part of raw.split(/[;\n]+/)) {
                 const m = part.match(/^\s*([^=]+?)\s*=\s*(.+?)\s*$/)
-                if (m) obj[m[1]] = m[2]
+                if (m) obj[m[1].trim()] = m[2].trim()
               }
             }
-            const keep = Object.fromEntries(Object.entries(obj).filter(([k]) => k))
+            const keep = {}
+            for (const key of COOKIE_KEYS) {
+              if (obj && obj[key]) keep[key] = String(obj[key])
+            }
+            const missing = COOKIE_KEYS.filter((k) => !keep[k])
+            if (!Object.keys(keep).length) {
+              res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+              res.end(JSON.stringify({ ok: false, error: '没解析出 B站 需要的 cookie 字段（SESSDATA/bili_jct/buvid3/buvid4/DedeUserID）', missing: COOKIE_KEYS }))
+              return
+            }
             mkdirSync(dirname(file), { recursive: true })
             writeFileSync(file, JSON.stringify(keep, null, 2), 'utf8')
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: true, keys: Object.keys(keep).length }))
+            res.end(JSON.stringify({ ok: true, keys: Object.keys(keep).length, saved: Object.keys(keep), missing }))
           } catch (err) {
             res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
             res.end(JSON.stringify({ ok: false, error: String(err?.message ?? err) }))
