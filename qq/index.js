@@ -728,14 +728,12 @@ const PERSONA_TEMPLATE = `# 人设（persona）
 
 /** 本地自动认下的主人（没配 ownerQQ 时，第一条私聊的人）。按账号隔离。 */
 function localOwnerPath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `local-owner-${loginQqCache}.json`) : join(base, 'local-owner.json')
+  return join(qqAccountDir(), 'local-owner.json')
 }
 
 /** 主人 QQ 按账号：owner-<qq>.json 优先，其次全局配置，最后本地自动认主（2026-10-28）。 */
 function ownerFilePath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `owner-${loginQqCache}.json`) : join(base, 'owner.json')
+  return join(qqAccountDir(), 'owner.json')
 }
 
 function ownerQQOf(config) {
@@ -1264,13 +1262,18 @@ function disableImQqbotEntry() {
   }
 }
 
-function qqStatePath(name, ext = 'json') {
+/** 账号数据目录：qq/<QQ号>/（一个账号一个目录，2026-10-28 主人要求）。没探测到账号时退回 qq/ 根。 */
+function qqAccountDir() {
   const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `${name}-${loginQqCache}.${ext}`) : join(base, `${name}.${ext}`)
+  return loginQqCache ? join(base, loginQqCache) : base
+}
+
+function qqStatePath(name, ext = 'json') {
+  return join(qqAccountDir(), `${name}.${ext}`)
 }
 
 function memoryPath() {
-  return qqStatePath('memory', 'md')
+  return join(qqAccountDir(), 'memory.md')
 }
 
 function loadMemory() {
@@ -1322,14 +1325,12 @@ function setLoginQq(qq) {
 }
 
 function notesPath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `notes-${loginQqCache}.md`) : join(base, 'notes.md')
+  return join(qqAccountDir(), 'notes.md')
 }
 
 /** 聚焦目标按账号隔离：文件 focus-<qq>.json 优先，没文件再用配置（全局兜底）。 */
 function focusPath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `focus-${loginQqCache}.json`) : join(base, 'focus.json')
+  return join(qqAccountDir(), 'focus.json')
 }
 function readFocusTarget(config) {
   try {
@@ -2181,7 +2182,15 @@ function collectSticker(filePath, desc, meta = {}, maxCount = 300) {
  */
 function pickSticker(text, allowRandom = false, favoriteOnlyFallback = false) {
   const index = loadStickerIndex()
-  const list = Object.values(index).filter((s) => s && s.file && existsSync(s.file))
+  let list = Object.values(index).filter((s) => s && s.file && existsSync(s.file))
+  if (!list.length) {
+    // 索引还没建（没识图过）：直接扫目录，别让「发个表情包」落空（2026-10-28）
+    try {
+      list = readdirSync(stickerDir())
+        .filter((f) => /\.(jpe?g|png|gif|webp)$/i.test(f))
+        .map((f) => ({ file: join(stickerDir(), f) }))
+    } catch { /* ignore */ }
+  }
   if (!list.length) return ''
   const hay = String(text || '')
   const matched = list.filter((s) => {
@@ -2974,14 +2983,12 @@ function rulesStatePath() {
 }
 
 function rulesMdPath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `group-rules-${loginQqCache}.md`) : join(base, 'group_rules.md')
+  return join(qqAccountDir(), 'group_rules.md')
 }
 
 /** 群偏好（groupProfiles）也按账号：文件 groups-<qq>.json 优先，没文件用配置（2026-10-28）。 */
 function groupProfilesPath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `groups-${loginQqCache}.json`) : join(base, 'groups.json')
+  return join(qqAccountDir(), 'groups.json')
 }
 function readGroupProfiles(config) {
   try {
@@ -3635,8 +3642,7 @@ const quietState = new Map()
  * （2026-10-26 主人发现：热重载后它又在反思期里接话）。
  */
 function quietFilePath() {
-  const base = join(versatiledsBase(), 'qq')
-  return loginQqCache ? join(base, `quiet-${loginQqCache}.json`) : join(base, 'quiet.json')
+  return join(qqAccountDir(), 'quiet.json')
 }
 
 function loadQuietState() {
@@ -8206,14 +8212,33 @@ export function apply(ctx, config) {
     } catch {
       history = []
     }
-    const text = await generateProactive(history)
+    let text = await generateProactive(history)
     if (!text) return false
+    // 主动搭话也支持语音（2026-10-28：之前只有文本，模型打了 [语音] 会变成字面）
+    let voiceWanted = false
+    if (config.voiceEnabled.get() === true && String(text).includes('[语音]')) {
+      voiceWanted = true
+      text = String(text).replace(/\[语音[^\]]*\]/g, '').trim()
+      if (!text) return false
+    }
     // 私聊反思期（p:key）不主动搭话，别的会话各管各的（2026-10-26 主人要求）
     if (inQuiet(`p:${target}`)) return false
     try {
       const ownerQq = String(config.ownerQQ.get() || '').trim()
       const ownerOpenid = String(config.qqbotOwnerOpenid?.get?.() || '').trim()
-      if (ownerQq && String(target) === ownerQq && ownerOpenid) {
+      if (voiceWanted) {
+        // 主动搭话用语音：本地 GPT-SoVITS 合成后按 record 发
+        const useGsv = String(config.voiceBackend.get() || 'qq') === 'gpt-sovits' && gsvStatus(config).ok
+        if (useGsv && !(ownerQq && String(target) === ownerQq && ownerOpenid)) {
+          const wav = await gsvSynthesize(text, config)
+          await ob.call('send_private_msg', {
+            user_id: Number(target),
+            message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+          })
+        } else {
+          await ob.sendPrivate(target, text)
+        }
+      } else if (ownerQq && String(target) === ownerQq && ownerOpenid) {
         // 2026-10-28：主人的私聊主动搭话走官方通道（单聊主动 1000 条/天，不依赖 NapCat）
         await qqbotSendText(text, `c2c:${ownerOpenid}`)
       } else {
@@ -9278,6 +9303,7 @@ export function apply(ctx, config) {
 
       // 明确让它发一张表情包：直接发图，别用文字或 emoji 糊弄
       if (config.stickerEnabled.get() === true && wantsStickerImage(text)) {
+        plog('info', `[dsh-versatileds] 表情包请求命中：${String(text).slice(0, 30)}`)
         const file = pickSticker(`${text}\n${text}`, true)
         if (file) {
           try {
