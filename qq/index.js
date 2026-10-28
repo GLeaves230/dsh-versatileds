@@ -19,7 +19,7 @@ const VERSION = (() => {
 })()
 
 /** 当前版本 tag（硬编码，每次源码更新后一起改这里；更新自检拿它跟远端比）。 */
-const CURRENT_TAG = 'v0.4.4'
+const CURRENT_TAG = 'v0.4.5'
 
 /** 带时间戳的日志：DSH 终端里插件输出没时间，排查时对不上先后顺序；顺带带上版本号。 */
 function plog(level, ...args) {

@@ -6,3 +6,4 @@ vendor/
 _merge_tmp/
 .DS_Store
 .git-bak/
+*.tgz
