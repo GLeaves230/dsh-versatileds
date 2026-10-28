@@ -387,6 +387,12 @@ export const Config = Schema.object({
     .description('分享样式：text＝封面图+标题+b23 短链（手机端样式）；link＝纯文本+标题+完整 bilibili.com 链接（电脑端样式）'),
   voiceEnabled: Schema.boolean().default(true).volatile()
     .description('允许发语音（群里可用；私聊受 NapCat 限制，见 README）'),
+  sttModel: Schema.union([
+    'onnx-community/whisper-base',
+    'onnx-community/whisper-small',
+    'onnx-community/whisper-large-v3-turbo',
+  ]).default('onnx-community/whisper-base').volatile()
+    .description('语音转文字模型：base＝快但中文一般；small＝较准；large-v3-turbo＝最准但慢（首次使用自动下载）'),
   voiceBackend: Schema.string().default('qq').volatile()
     .description('语音方案：qq＝QQ 官方 AI 语音（零依赖）；gpt-sovits＝本地 GPT-SoVITS（要装 Python 3.11 + torch + 模型，显存 ≥4GB）'),
   voiceCharacter: Schema.string().default('lucy-voice-female1').volatile()
@@ -1398,18 +1404,26 @@ function loadBiliLog(limit = 8) {
  * 归属来自 appendNote 写的 〔g:群号〕/〔p:QQ号〕，B（群与个人隔离）靠它生效。
  */
 function loadNotes(limit = 30, scope = '', isolate = false) {
+  console.log(`[loadNotes] enter size=${notesMem.length} isolate=${isolate}`)
   try {
     // 只读内存镜像（2026-10-26 读文件会卡死）：为空就当没笔记
     const lines = notesMem
     if (!lines.length) return ''
-    if (!isolate || !scope) return lines.slice(-limit).join('\n')
+    if (!isolate || !scope) {
+      const picked = lines.slice(-limit)
+      console.log(`[loadNotes] picked=${picked.length}`)
+      const out = picked.join('\n')
+      console.log(`[loadNotes] joined len=${out.length}`)
+      return out
+    }
     const mine = lines.filter((l) => {
       const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
       if (!m) return true          // 老记录 / 公共记录：两边都能看
       return m[1] === scope
     })
     return mine.slice(-limit).join('\n')
-  } catch {
+  } catch (err) {
+    console.log(`[loadNotes] catch ${err?.message ?? err}`)
     return ''
   }
 }
@@ -3129,7 +3143,7 @@ function renderGroupRulesText(rec) {
  * 语音转文字：调本地 whisper（<DSH_HOME>/versatileds/models/stt/stt.mjs）。
  * 跟识图一个路子——先把语音变成内容，再当普通消息处理；没装 STT 就返回空串。
  */
-function transcribeVoice(wavPath) {
+function transcribeVoice(wavPath, model) {
   return new Promise((resolve) => {
     const script = join(versatiledsBase(), 'models', 'stt', 'stt.mjs')
     if (!existsSync(script) || !wavPath || !existsSync(wavPath)) {
@@ -3145,7 +3159,9 @@ function transcribeVoice(wavPath) {
     }
     let child
     try {
-      child = spawn(process.execPath, [script, String(wavPath)], { stdio: ['ignore', 'pipe', 'pipe'] })
+      const args = [script, String(wavPath)]
+      if (model) args.push(String(model))
+      child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     } catch {
       finish('')
       return
@@ -5232,8 +5248,9 @@ async function noteTakeoverFromHistory(msgs, self, config, scope = {}, ob = null
       if (recSeg.data?.file && ob && typeof ob.call === 'function') {
         try {
           const r = await ob.call('get_record', { file: recSeg.data.file, out_format: 'wav' })
-          const wav = r?.data?.file || r?.data?.url || ''
-          if (wav) text = await transcribeVoice(String(wav))
+          const rd2 = r?.data || r || {}
+          const wav = rd2.file || rd2.url || ''
+          if (wav) text = await transcribeVoice(String(wav), String(config.sttModel.get() || ''))
         } catch { /* 转不出来就记 [语音] */ }
       }
       if (!text) text = '[语音]'
@@ -6720,7 +6737,12 @@ export function apply(ctx, config) {
       const memory = loadMemory()
       qqProbe('gen: l3 notes')
       // 恢复「小本本」上下文：只读内存镜像（启动时后台灌，不碰磁盘），2026-10-26
-      const notes = loadNotes(30, `p:${sender}`, config.isolateGroupPrivate.get() === true)
+      qqProbe(`gen: notes mem size=${notesMem.length}`)
+      qqProbe('gen: before loadNotes call')
+      const isolateFlag = config.isolateGroupPrivate.get() === true
+      qqProbe(`gen: isolateFlag=${isolateFlag}`)
+      // 临时绕过 loadNotes，验证卡点（2026-10-28）
+      const notes = ''
       qqProbe(`gen: notes got len=${String(notes || '').length}`)
       qqProbe('gen: l4 bili')
       const biliLog = loadBiliLog(8)
@@ -9104,8 +9126,19 @@ export function apply(ctx, config) {
     if (recordSeg && recordSeg.data?.file) {
       try {
         const rec = await ob.call('get_record', { file: recordSeg.data.file, out_format: 'wav' })
-        const wavPath = rec?.data?.file || rec?.data?.url || ''
-        const heard = wavPath ? await transcribeVoice(String(wavPath)) : ''
+        // ob.call 返回的已经是 data（2026-10-28：之前写成 rec.data 拿不到 wav）
+        const rd = rec?.data || rec || {}
+        let wavPath = rd.file || rd.url || ''
+        // NapCat 有时只给 base64（新消息文件还没落盘），解码写临时 wav 再转（2026-10-28）
+        if (!wavPath && rd.base64) {
+          try {
+            const out = join(versatiledsBase(), 'qq', 'voice-in', `rec-${Date.now()}.wav`)
+            mkdirSync(dirname(out), { recursive: true })
+            writeFileSync(out, Buffer.from(String(rd.base64), 'base64'))
+            wavPath = out
+          } catch { /* 解码失败就当没拿到 */ }
+        }
+        const heard = wavPath ? await transcribeVoice(String(wavPath), String(config.sttModel.get() || '')) : ''
         if (heard) {
           text = heard
           plog('info', `[dsh-versatileds] 语音转文字：${heard.slice(0, 40)}`)
@@ -9782,6 +9815,8 @@ export function apply(ctx, config) {
       if (!String(reply || '').trim()) {
         plog('warn', `[dsh-versatileds] 回复为空（${data.message_type}，` +
           `${data.group_id || sender}）：${String(text).slice(0, 40)}`)
+        // 空回复兜底（2026-10-28：上下文太长时模型偶尔空，别让主人干等，也别发空白）
+        reply = '嗯，在呢'
       }
 
       try {
@@ -9792,6 +9827,44 @@ export function apply(ctx, config) {
           .replace(/^\s*\[语音\]\s*/g, '')
           .trim() || reply
         if (data.message_type === 'private') {
+          // 私聊语音（2026-10-28：主人要语音，私聊分支之前只有文字）
+          const wantsVoiceP = /发[条个]?语音|语音|声音|听听你|说句话/.test(String(text || ''))
+          if (wantsVoiceP && String(reply).includes('[语音]') === false) reply = `[语音]${reply}`
+          if (config.voiceEnabled.get() === true && String(reply).includes('[语音]')) {
+            const useGsvP = String(config.voiceBackend.get() || 'qq') === 'gpt-sovits' && gsvStatus(config).ok
+            if (useGsvP) {
+              try {
+                const voiceText = String(reply)
+                  .replace(/\[语音[^\]]*\]/g, '')
+                  .replace(/\[[^\]]{1,10}\]/g, '')
+                  .replace(/彳亍/g, '行')
+                  .replace(/\s{2,}/g, ' ')
+                  .trim() || '嗯'
+                const wav = await gsvSynthesize(voiceText, config)
+                await ob.call('send_private_msg', {
+                  user_id: Number(sender),
+                  message: [{ type: 'record', data: { file: `file:///${wav}` } }],
+                })
+                recordSelfSent(config, { kind: 'sent-voice', peer: String(sender), text: `[语音/gpt-sovits] ${voiceText}` })
+                appendNote({
+                  kind: 'auto',
+                  role: String(config.selfLabel.get() || 'DS'),
+                  from: sender,
+                  name: senderName,
+                  text,
+                  reply: `（语音）${voiceText}`,
+                  extra: '',
+                })
+                plog('info', `[dsh-versatileds] 私聊发语音：${voiceText}`)
+                return
+              } catch (err) {
+                reply = String(reply).replace(/\[语音[^\]]*\]/g, '').trim() || '嗯'
+                plog('warn', '[dsh-versatileds] 私聊语音发送失败，回退文本:', err?.message ?? err)
+              }
+            } else {
+              reply = String(reply).replace(/\[语音[^\]]*\]/g, '').trim() || '嗯'
+            }
+          }
           // 私聊轮数记着，到点提醒归档/换会话
           const cst = loadJsonFile(contextStatePath())
           cst.rounds = Number(cst.rounds ?? 0) + 1
@@ -9845,6 +9918,11 @@ export function apply(ctx, config) {
           if (atUid) reply = reply.replace(/^主人[，,、\s]*/, '').trim() || reply
           // 要不要发语音，交给模型判断（它在上下文里看得出对方是不是想听声音），
           // 这里只认它打的 [语音] 标记，不再拿词表硬匹配。
+          // 例外：对方明确要语音时强制补标记（2026-10-28：模型偶尔不打，主人要语音结果回了文字）
+          const wantsVoice = /发[条个]?语音|语音|声音|听听你|说句话/.test(String(text || ''))
+          if (wantsVoice && String(reply).includes('[语音]') === false) {
+            reply = `[语音]${reply}`
+          }
           const wantVoice = config.voiceEnabled.get() === true && reply.includes('[语音]')
           // 念出来的东西不能带 QQ 表情（[白眼][偷笑][表情 #32] 这些念出来就是「白眼」两个字）；
           // 拆字梗也得还原——「彳亍」念出来是 chì chù，得念「行」（2026-10-26 主人要求）
@@ -9881,7 +9959,8 @@ export function apply(ctx, config) {
               try {
                 if (useGsv) {
                   const wav = await gsvSynthesize(voiceText, config)
-                  const sendFile = await toAmrVoice(wav)
+                  // 直接发 wav（2026-10-28：QQ NT 客户端对 amr record 显示「该消息类型暂不支持查看」）
+                  const sendFile = wav
                   await ob.call(isGroup ? 'send_group_msg' : 'send_private_msg', {
                     ...(isGroup ? { group_id: Number(data.group_id) } : { user_id: Number(sender) }),
                     message: [{ type: 'record', data: { file: `file:///${sendFile}` } }],
@@ -9920,6 +9999,10 @@ export function apply(ctx, config) {
                 plog('warn', '[dsh-versatileds] 语音发送失败，回退文本:', err?.message ?? err)
               }
             }
+          }
+          // 没发成语音（私聊 useGsv=false / 语音服务没就绪）就别把「[语音]」字面发出去（2026-10-28）
+          if (String(reply).includes('[语音]')) {
+            reply = String(reply).replace(/\[语音[^\]]*\]/g, '').trim() || '嗯'
           }
           // 分段发：一句长话拆成两三条短消息，像人一段一段打
           // 发之前再查一次反思：这条回复可能是「生成期间才进入反思」的（2026-10-26 竞态，

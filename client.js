@@ -711,6 +711,39 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 语音转文字模型：base/small/large-v3-turbo，选后首次识别自动下载（2026-10-28）。 */
+    function SttModelRow({ form, value: initial, pending, setPending, disabled }) {
+      const value = 'sttModel' in pending ? pending.sttModel : initial
+      const save = (next) => {
+        setPending((p) => ({ ...p, sttModel: next }))
+        const settle = () => setPending((p) => { const c = { ...p }; delete c.sttModel; return c })
+        Promise.resolve(form.set('sttModel', next)).then(settle, settle)
+      }
+      return React.createElement('div', { style: rowStyle },
+        React.createElement('span', { style: labelStyle }, '语音转文字模型'),
+        React.createElement('select', {
+          value: String(value || 'onnx-community/whisper-base'),
+          disabled,
+          onChange: (e) => save(e.target.value),
+          style: {
+            padding: '4px 8px',
+            borderRadius: '6px',
+            background: 'transparent',
+            color: 'inherit',
+            border: '1px solid rgba(128,128,128,0.3)',
+            fontSize: '13px',
+            minWidth: '260px',
+            maxWidth: '100%',
+          },
+        },
+        React.createElement('option', { value: 'onnx-community/whisper-base' }, 'whisper-base（快，中文一般）'),
+        React.createElement('option', { value: 'onnx-community/whisper-small' }, 'whisper-small（较准）'),
+        React.createElement('option', { value: 'onnx-community/whisper-large-v3-turbo' }, 'whisper-large-v3-turbo（最准，慢）'),
+        ),
+        React.createElement('span', { style: hintStyle }, '选后首次识别会自动下载模型（base 已内置，small ~500MB，large-v3-turbo ~1.5GB）'),
+      )
+    }
+
     // ================================================================= B站模块
     const BILI_GROUPS = [
       ['write', '写操作'],
@@ -2038,6 +2071,20 @@ window.__ModuleLoader__.load({
               key: 'focusChatTarget',
               form,
               value: v.focusChatTarget || '',
+              pending,
+              setPending,
+              disabled: !snap.writable,
+            }),
+          )
+        }
+
+        // 语音转文字模型（语音页）：选 base/small/large-v3-turbo（2026-10-28）
+        if (activeTab === 'voice') {
+          children.push(
+            React.createElement(SttModelRow, {
+              key: 'sttModel',
+              form,
+              value: v.sttModel || 'onnx-community/whisper-base',
               pending,
               setPending,
               disabled: !snap.writable,
