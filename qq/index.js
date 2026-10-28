@@ -1088,9 +1088,9 @@ function ensureAgentsTemplate() {
 }
 
 function personaPath() {
-  return qqConfigRef?.isolateHostQq?.get?.() === true
-    ? join(qqAccountDir(), 'persona.md')
-    : join(versatiledsBase(), 'qq', 'persona.md')
+  const per = join(qqAccountDir(), 'persona.md')
+  if (loginQqCache && existsSync(per)) return per
+  return join(versatiledsBase(), 'qq', 'persona.md')
 }
 
 function loadPersona() {
@@ -1263,9 +1263,9 @@ function qqStatePath(name, ext = 'json') {
 }
 
 function memoryPath() {
-  return qqConfigRef?.isolateHostQq?.get?.() === true
-    ? join(qqAccountDir(), 'memory.md')
-    : join(versatiledsBase(), 'qq', 'memory.md')
+  const per = join(qqAccountDir(), 'memory.md')
+  if (loginQqCache && existsSync(per)) return per
+  return join(versatiledsBase(), 'qq', 'memory.md')
 }
 
 function loadMemory() {
@@ -1317,9 +1317,9 @@ function setLoginQq(qq) {
 }
 
 function notesPath() {
-  return qqConfigRef?.isolateHostQq?.get?.() === true
-    ? join(qqAccountDir(), 'notes.md')
-    : join(versatiledsBase(), 'qq', 'notes.md')
+  const per = join(qqAccountDir(), 'notes.md')
+  if (loginQqCache && existsSync(per)) return per
+  return join(versatiledsBase(), 'qq', 'notes.md')
 }
 
 /** 聚焦目标按账号隔离：文件 focus-<qq>.json 优先，没文件再用配置（全局兜底）。 */
