@@ -69,6 +69,7 @@ dsh-versatileds/
 | ffmpeg | B站 抓帧、直播帧、表情包缩图、语音前后处理 | 抓帧和缩图失败，纯文字功能不受影响（缺失会自动下载） |
 | GPT-SoVITS（可选） | QQ 模块的本地语音（`voiceBackend: gpt-sovits`） | 自动退回 QQ 官方 AI 语音；首次用可在设置页「语音」点「一键部署」 |
 | Python 3.11（可选） | 跑 GPT-SoVITS 用 | 同上，部署脚本会自动装到 `versatileds/python311` |
+| Whisper + Transformers.js（可选） | QQ 侧「听语音」：语音转文字 | 语音消息只记成 `[语音]`，大肥鱼听不到内容；首次用自动装依赖并下载模型（base ≈ 100MB，small ≈ 500MB，large-v3-turbo ≈ 1.5GB） |
 
 ffmpeg 的查找顺序：配置项 `ffmpegPath` → PATH 里的 `ffmpeg` → `<DSH_HOME>/versatileds/ffmpeg/imageio_ffmpeg/binaries/...`。
 **缺失时自动从清华 PyPI 镜像下载 `imageio-ffmpeg` wheel（约 22MB）解压到 `versatileds/ffmpeg`**，不再随包塞 ffmpeg。
@@ -79,7 +80,7 @@ ffmpeg 的查找顺序：配置项 `ffmpegPath` → PATH 里的 `ffmpeg` → `<D
 |---|---|
 | `<DSH_HOME>/versatileds/bilibili/cookies.json` | B站 登录态（`SESSDATA` / `bili_jct` / `buvid3` / `buvid4` / `DedeUserID`） |
 | `profiles/web/cordis.patch.yml` 的 `versatileds.qq.onebotToken` | NapCat 的 OneBot token（HTTP 和 WS 共用） |
-| `<DSH_HOME>/versatileds/qq/` | 人设、聊天日志、群规、识图备注、搜索请求、表情包库 |
+| `<DSH_HOME>/versatileds/qq/` | QQ 侧数据：`<账号>/`（按号隔离的记录/设置/表情包/图片/聊天）和 `normal/`（共享模式的人设/记忆）；规则见「数据目录：按账号 / 按模块隔离」一节 |
 | `<DSH_HOME>/versatileds/bilibili/` | 抓帧图片、观看记录、自动刷状态 |
 | `<DSH_HOME>/versatileds/memory/` | 记忆目录（AGENTS.md 里的索引指向这里，含 `lock.mjs` / `memwrite.mjs`） |
 | `<DSH_HOME>/versatileds/qq/napcat/` | 解压后的 NapCat（`launcher.bat`、二维码缓存、配置） |
