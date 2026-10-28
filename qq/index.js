@@ -1390,6 +1390,17 @@ function markAccountHeartbeat(qq) {
     const f = accountSessionPath(id)
     const j = loadJsonFile(f) || {}
     const now = Date.now()
+    // 之前被记成离线、但其实已经登回来了：结算离线时长并清掉下线时间（2026-10-28）
+    if (Number(j.lastOfflineAt || 0) > 0) {
+      saveJsonFile(f, {
+        ...j,
+        lastOnlineAt: now,
+        offlineMs: Math.max(0, now - Number(j.lastOfflineAt)),
+        lastOfflineAt: 0,
+        heartbeatAt: now,
+      })
+      return
+    }
     if (now - Number(j.heartbeatAt || 0) < 120_000) return
     saveJsonFile(f, { ...j, lastOnlineAt: now, heartbeatAt: now })
   } catch { /* ignore */ }
