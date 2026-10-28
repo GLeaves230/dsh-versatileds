@@ -1502,8 +1502,24 @@ function rememberLoginQq(cur) {
   } catch { /* ignore */ }
 }
 
-/** 探测当前登录的 QQ 号（QQ.exe 命令行里的 -q <号>）：登录谁就给谁写 OneBot 配置（2026-10-28 不硬编码）。 */
-async function detectCurrentQq() {
+/** 探测当前登录的 QQ 号：优先问 OneBot（登录后最准），未登录时退回 QQ.exe 的 -q 参数。 */
+async function detectCurrentQq(config) {
+  // 1) OneBot 的 get_login_info（真正登录的号；进程 -q 参数可能和实际登录号不一致）
+  try {
+    const base = String(config?.napcatHttp?.get?.() || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+    const token = String(config?.onebotToken?.get?.() || '')
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+    const res = await fetch(`${base}/get_login_info`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+      signal: AbortSignal.timeout(3000),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (j?.status === 'ok' && j?.data?.user_id) return String(j.data.user_id)
+  } catch { /* 没登录就继续用进程参数 */ }
+  // 2) 进程参数兜底（未登录时）
   try {
     const r = await runAsync('powershell', ['-NoProfile', '-Command', "Get-CimInstance Win32_Process -Filter \"Name='QQ.exe'\" | Select-Object -ExpandProperty CommandLine"], 10000)
     const lines = String(r?.stdout || '').split(/\r?\n/)
@@ -1773,7 +1789,7 @@ async function ensureNapcatPackage(config) {
   if (napcatInstalled(dir)) {
     napcatPkg.ready = true
     // 已经装过也要补 OneBot 配置（自带包解压出来 network 可能是空的）；按当前登录的号写
-    const curQq = await detectCurrentQq()
+    const curQq = await detectCurrentQq(config)
     if (curQq) {
       plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
       rememberLoginQq(curQq)
@@ -1799,7 +1815,7 @@ async function ensureNapcatPackage(config) {
     )
     napcatPkg.ready = napcatInstalled(dir)
     if (napcatPkg.ready) {
-      const curQq = await detectCurrentQq()
+      const curQq = await detectCurrentQq(config)
       if (curQq) {
         plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
         rememberLoginQq(curQq)
