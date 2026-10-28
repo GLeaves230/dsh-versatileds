@@ -1582,7 +1582,16 @@ function napcatInstalled(dir) {
 function napcatLauncherPath(config) {
   const custom = String(config.napcatLauncher.get() || '').trim()
   if (custom) return custom
-  return join(napcatRoot(config), 'napcat', 'launcher.bat')
+  const dir = join(napcatRoot(config), 'napcat')
+  // NapCat 官方：Windows 10 要用 launcher-win10.bat（Win11 用 launcher.bat）。
+  // 之前一律用 launcher.bat，Win10 上容易注入失败（2026-10-29）。
+  try {
+    const parts = String(os.release() || '').split('.').map((x) => Number(x) || 0)
+    const build = parts[2] || 0
+    const win10 = join(dir, 'launcher-win10.bat')
+    if (build > 0 && build < 22000 && existsSync(win10)) return win10
+  } catch { /* ignore */ }
+  return join(dir, 'launcher.bat')
 }
 
 function napcatQrPath(config) {
