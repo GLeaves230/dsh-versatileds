@@ -1094,13 +1094,12 @@ function sharedPersonaPath() {
 
 /** QQ 侧人设：隔离模式按账号（qq/<qq>/persona.md），共享模式用 normal/persona.md。 */
 function personaPath() {
+  // 隔离：按账号（不存在就新建/回退共享）；共享：统一用 normal/persona.md（2026-10-28）
   if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) {
-    const per = join(qqAccountDir(), 'persona.md')
-    if (existsSync(per)) return per
+    return join(qqAccountDir(), 'persona.md')
   }
   const shared = sharedPersonaPath()
   if (existsSync(shared)) return shared
-  // 老数据回退
   return join(versatiledsBase(), 'qq', 'persona.md')
 }
 
@@ -1274,8 +1273,8 @@ function qqStatePath(name, ext = 'json') {
 }
 
 function memoryPath() {
-  const per = join(qqAccountDir(), 'memory.md')
-  if (loginQqCache && existsSync(per)) return per
+  // 隔离：按账号各自一份；共享：DSH 与 QQ 读同一份 qq/memory.md（2026-10-28）
+  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) return join(qqAccountDir(), 'memory.md')
   return join(versatiledsBase(), 'qq', 'memory.md')
 }
 
@@ -1371,6 +1370,19 @@ function setLoginQq(qq) {
   const prevQq = loginQqCache
   loginQqCache = next
   markAccountSwitch(prevQq, next)
+  // 新账号第一次出现：把人设复制一份到它自己的目录（记忆不复制）
+  try {
+    const perPersona = join(qqAccountDir(), 'persona.md')
+    if (!existsSync(perPersona)) {
+      const sharedP = sharedPersonaPath()
+      const fallbackP = join(versatiledsBase(), 'qq', 'persona.md')
+      const src = existsSync(sharedP) ? sharedP : (existsSync(fallbackP) ? fallbackP : '')
+      if (src) {
+        mkdirSync(dirname(perPersona), { recursive: true })
+        copyFileSync(src, perPersona)
+      }
+    }
+  } catch { /* ignore */ }
   // 换了号：清空内存镜像，重新按新账号的文件加载
   try {
     notesMem.length = 0
@@ -1385,8 +1397,7 @@ function setLoginQq(qq) {
 }
 
 function notesPath() {
-  const per = join(qqAccountDir(), 'notes.md')
-  if (loginQqCache && existsSync(per)) return per
+  if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) return join(qqAccountDir(), 'notes.md')
   return join(versatiledsBase(), 'qq', 'notes.md')
 }
 
@@ -1979,8 +1990,7 @@ function sharedMemoryPath() {
   // 「共享记忆」默认就是 DSH 与 QQ 共用一份（memory/shared-memory.md）；
   // 只有开了「前后端记忆隔离」才按账号各存一份（qq/<qq>/shared-memory.md，2026-10-28）
   if (qqConfigRef?.isolateHostQq?.get?.() === true && loginQqCache) {
-    const perAccount = join(qqAccountDir(), 'shared-memory.md')
-    if (existsSync(perAccount)) return perAccount
+    return join(qqAccountDir(), 'shared-memory.md')
   }
   // 2026-10-25 记忆目录迁到 <DSH_HOME>/versatileds/memory/ 并改英文名（shared-memory.md）。
   // 老路径 <工作区>/tool/记忆/共享记忆.md 只作为回退。
