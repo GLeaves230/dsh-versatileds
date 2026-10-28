@@ -4260,12 +4260,17 @@ function startStatusServer(config, napcat = null) {
       const rs = loadRulesState()
       const bs = loadJsonFile(balanceStatePath())
       const session = loadJsonFile(accountSessionPath(loginQqCache)) || {}
+      const sessionNow = Date.now()
+      const offAt = Number(session.lastOfflineAt || 0)
       const payload = {
         account: loginQqCache || '',
         session: {
           lastOnlineAt: Number(session.lastOnlineAt || 0),
-          lastOfflineAt: Number(session.lastOfflineAt || 0),
-          offlineMs: Number(session.offlineMs || 0),
+          lastOfflineAt: offAt,
+          // 已下线：从下线时刻算起，会随时间涨；在线：显示上次离线时长（固定）
+          offlineMs: offAt > 0 ? Math.max(0, sessionNow - offAt) : Number(session.offlineMs || 0),
+          online: offAt === 0,
+          offlineSince: offAt,
         },
         proactive: left, exhausted, used, limit, unlimited: limit <= 0,
         videoShare: leftOf(vs.lastAt, Math.max(60, Number(config.videoShareIntervalSec.get() ?? 300)) * 1000, config.videoShareEnabled.get() === true),

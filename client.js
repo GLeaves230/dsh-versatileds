@@ -870,17 +870,22 @@ window.__ModuleLoader__.load({
             .catch(() => { if (alive) setBili({ loggedIn: false }) })
         }
         loadQq(); loadBili()
-        const t = setInterval(() => { loadQq(); loadBili() }, 30000)
+        const t = setInterval(() => { loadQq(); loadBili() }, 5000)
         return () => { alive = false; clearInterval(t) }
       }, [])
 
       const sess = (qq && qq.session) || {}
       const qqLine = qq && qq.account
-        ? `当前QQ账号：${qq.account}`
-          + (sess.lastOnlineAt
-            ? ` · 上线 ${new Date(sess.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
-              + ` · 离线 ${Math.round((sess.offlineMs || 0) / 60000)} 分钟（倒计时已更新）`
-            : '')
+        ? (sess.online === false
+          // 已下线：显示「已离线 X 分钟」，数字随轮询增长
+          ? `当前QQ账号：${qq.account}`
+            + (sess.lastOfflineAt ? ` · 已于 ${new Date(sess.lastOfflineAt).toLocaleString('zh-CN', { hour12: false })} 下线` : '')
+            + ` · 已离线 ${Math.max(1, Math.round((sess.offlineMs || 0) / 60000))} 分钟`
+          : `当前QQ账号：${qq.account}`
+            + (sess.lastOnlineAt
+              ? ` · 上线 ${new Date(sess.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
+                + ` · 上次离线 ${Math.round((sess.offlineMs || 0) / 60000)} 分钟（倒计时已更新）`
+              : ''))
         : 'QQ账号未登录'
       const biliLine = bili && bili.loggedIn
         ? `B站账号：${bili.name || bili.uid || '已登录'}`
