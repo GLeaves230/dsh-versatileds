@@ -943,7 +943,7 @@ window.__ModuleLoader__.load({
           ? `当前QQ账号：${qq.accountName ? `${qq.accountName}（${qq.account}）` : qq.account}`
             + (sess.lastOfflineAt ? ` · 已于 ${new Date(sess.lastOfflineAt).toLocaleString('zh-CN', { hour12: false })} 下线` : '')
             + ` · 已离线 ${Math.max(1, Math.round((sess.offlineMs || 0) / 60000))} 分钟`
-          : `当前QQ账号：${qq.account}`
+          : `当前QQ账号：${qq.accountName ? `${qq.accountName}（${qq.account}）` : qq.account}`
             + (sess.lastOnlineAt
               ? ` · 上线 ${new Date(sess.lastOnlineAt).toLocaleString('zh-CN', { hour12: false })}`
                 + ` · 上次离线 ${Math.round((sess.offlineMs || 0) / 60000)} 分钟（倒计时已更新）`
