@@ -399,7 +399,7 @@ export const Config = Schema.object({
     .description('QQ 官方 AI 语音的音色 id（get_ai_characters 返回的 character_id），默认「邻家小妹」= lucy-voice-female1'),
   voiceChance: Schema.number().default(5).volatile()
     .description('闲聊时主动用语音回复的概率（0-100），0 表示只在被要求时才发语音；长回复不转语音'),
-  // ---- 唱歌（Seed-VC 翻唱；说话模型不变）----
+  // ---- GPT-SoVITS（本地语音合成）----
   gsvApiUrl: Schema.string().default('http://127.0.0.1:9880').volatile()
     .description('GPT-SoVITS API 地址（api_v2.py，默认 9880 端口）'),
   gsvDir: Schema.string().default('').volatile()
@@ -3431,43 +3431,6 @@ function inGroupQuiet(config, gid, now = new Date()) {
   return inTimeRange(p.quietStart, p.quietEnd, now)
 }
 
-/**
- * 点歌曲库：提前用 Seed-VC 做好的翻唱，放在 <DSH_HOME>/versatileds/models/seed-vc/library/。
- * 做歌流程：B站 下原曲 → demucs 分人声/伴奏 → Seed-VC 换音色（f0-condition） → 混伴奏 → 转 AMR。
- */
-function songLibraryDir() {
-  return join(versatiledsBase(), 'models', 'seed-vc', 'library')
-}
-
-/** 这句是不是在点曲库里的歌：是就返回曲目，交回模型正常聊。 */
-function pickSongFor(text) {
-  const t = String(text || '')
-  if (!/唱|来一首|来一段|点歌|听听|吼一|整一/.test(t)) return null
-  const dir = songLibraryDir()
-  const songs = [
-    { title: '云原神司凤版', keys: ['司凤版', '司凤'], file: join(dir, 'sifeng.amr') },
-    { title: '朋友的酒', keys: ['朋友的酒', '朋友的洒'], file: join(dir, 'ptdj.amr') },
-    { title: '叹云兮', keys: ['叹云兮'], file: join(dir, 'tyx.amr') },
-    { title: '云原神之歌', keys: ['云原神', '云·原神', '云朵之歌'], file: join(dir, 'yyy.amr') },
-  ]
-  const hit = songs.find((s) => s.keys.some((k) => t.includes(k)))
-  return hit && existsSync(hit.file) ? hit : null
-}
-
-/** 从「唱一首 XX」「来段《XX》」里抠歌名；抠不出就返回空，别拿整句去搜。 */
-function pickSongName(text) {
-  const t = String(text || '').trim()
-  if (!t) return ''
-  const q = t.match(/[《「『“"]([^》」』”"]{1,20})[》」』”"]/)
-  if (q) return q[1].trim()
-  const m = t.match(/(?:唱|来|点|放)(?:一)?(?:首|段|个)?\s*([^\s，,。！？!?~～]{2,15})/)
-  if (!m) return ''
-  const name = m[1].trim()
-  if (/^(歌|歌曲|一段|一下|个|点|什么|啥|吧|呗|啊|呀|的|这首|那首|试试|看看)$/.test(name)) return ''
-  return name
-}
-
-/** 自动渲染一次只跑一首，别几个人同时点歌把 GPU 排爆。 */
 
 /**
  * 念之前把文本收拾成人话：
