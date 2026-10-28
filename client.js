@@ -242,7 +242,19 @@ window.__ModuleLoader__.load({
       React.useEffect(() => { setDraft(String(value ?? '')) }, [value])
       const commit = () => {
         const next = draft.trim()
-        if (next !== String(value ?? '')) form.set(field, next)
+        if (next !== String(value ?? '')) {
+          form.set(field, next)
+          // 主人 QQ 也按账号存一份（vds 读取时文件优先，2026-10-28）
+          if (field === 'ownerQQ') {
+            try {
+              fetch(`${QQ_STATUS_URL}/owner`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner: next }),
+              }).catch(() => {})
+            } catch { /* ignore */ }
+          }
+        }
       }
       return React.createElement(
         'label',
@@ -518,7 +530,19 @@ window.__ModuleLoader__.load({
       React.useEffect(() => { setDraft(String(value ?? '')) }, [value])
       const commit = () => {
         const next = draft.trim()
-        if (next !== String(value ?? '')) form.set(field, next)
+        if (next !== String(value ?? '')) {
+          form.set(field, next)
+          // 主人 QQ 也按账号存一份（vds 读取时文件优先，2026-10-28）
+          if (field === 'ownerQQ') {
+            try {
+              fetch(`${QQ_STATUS_URL}/owner`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner: next }),
+              }).catch(() => {})
+            } catch { /* ignore */ }
+          }
+        }
       }
       return React.createElement(
         'div',

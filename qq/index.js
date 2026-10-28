@@ -720,13 +720,23 @@ const PERSONA_TEMPLATE = `# 人设（persona）
 - 拿不准就说拿不准，别编一个像真的答案。
 `;
 
-/** 本地自动认下的主人（没配 ownerQQ 时，第一条私聊的人）。 */
+/** 本地自动认下的主人（没配 ownerQQ 时，第一条私聊的人）。按账号隔离。 */
 function localOwnerPath() {
-  return join(versatiledsBase(), 'qq', 'local-owner.json')
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `local-owner-${loginQqCache}.json`) : join(base, 'local-owner.json')
 }
 
-/** 主人 QQ：配置优先，其次本地自动认主的记录。 */
+/** 主人 QQ 按账号：owner-<qq>.json 优先，其次全局配置，最后本地自动认主（2026-10-28）。 */
+function ownerFilePath() {
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `owner-${loginQqCache}.json`) : join(base, 'owner.json')
+}
+
 function ownerQQOf(config) {
+  try {
+    const j = loadJsonFile(ownerFilePath())
+    if (j?.owner) return String(j.owner).trim()
+  } catch { /* ignore */ }
   const fromConfig = String(config?.ownerQQ?.get?.() || '').trim()
   if (fromConfig) return fromConfig
   try {
@@ -4384,6 +4394,23 @@ function startStatusServer(config, napcat = null) {
           const ok = writeFocusTarget(j.target ?? '')
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
           res.end(JSON.stringify({ ok, target: String(j.target || '') }))
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false }))
+        }
+      })
+      return
+    }
+    if (url.pathname === '/owner' && req.method === 'POST') {
+      // 按账号写主人 QQ（owner-<qq>.json），设置页调用（2026-10-28）
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        try {
+          const j = JSON.parse(body || '{}')
+          saveJsonFile(ownerFilePath(), { owner: String(j.owner || '').trim(), at: Date.now() })
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify({ ok: true }))
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false }))
