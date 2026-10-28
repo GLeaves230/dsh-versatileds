@@ -852,7 +852,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 账号选择：通用设置 / 自动选择当前号 / 历史登录过的号（2026-10-28） */
-    function AccountPickerRow({ onChanged }) {
+    function AccountPickerRow({ onChanged, onLoaded }) {
       const [info, setInfo] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
       const load = () => {
@@ -861,7 +861,13 @@ window.__ModuleLoader__.load({
           .then(setInfo)
           .catch(() => setInfo(null))
       }
-      React.useEffect(() => { load() }, [])
+      React.useEffect(() => {
+        load()
+        fetch(`${QQ_STATUS_URL}/account-config`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (onLoaded) onLoaded(d) })
+          .catch(() => {})
+      }, [])
       const save = (view) => {
         setSaving(true)
         fetch(`${QQ_STATUS_URL}/account-view`, {
@@ -869,14 +875,22 @@ window.__ModuleLoader__.load({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ view }),
         })
-          .then(() => { load(); if (onChanged) onChanged() })
+          .then(() => {
+            load()
+            if (onChanged) onChanged()
+            // 切完把该数据自己的配置拉回来，输入框据此同步（2026-10-28）
+            fetch(`${QQ_STATUS_URL}/account-config`, { cache: 'no-store' })
+              .then((r) => r.json())
+              .then((d) => { if (onLoaded) onLoaded(d) })
+              .catch(() => {})
+          })
           .catch(() => {})
           .finally(() => setSaving(false))
       }
       const view = (info && info.view) || 'auto'
       const accounts = (info && info.accounts) || []
       return React.createElement('div', { style: rowStyle },
-        React.createElement('span', { style: labelStyle }, '账号选择'),
+        React.createElement('span', { style: labelStyle }, '数据选择'),
         React.createElement('select', {
           value: view,
           disabled: saving,
@@ -895,7 +909,7 @@ window.__ModuleLoader__.load({
         React.createElement('option', { value: 'auto' }, `自动选择当前号${info && info.current ? `（${info.current}）` : ''}`),
         ...accounts.map((id) => React.createElement('option', { key: id, value: id }, `QQ ${id}`)),
         ),
-        React.createElement('span', { style: hintStyle }, '选择要看/改哪个账号的数据；「自动」跟着当前登录号，「通用」是共享的那份'),
+        React.createElement('span', { style: hintStyle }, '选择要看/改哪份数据；「自动」跟着当前登录号，「通用」是共享的那份'),
       )
     }
 
@@ -1905,6 +1919,13 @@ window.__ModuleLoader__.load({
         // 人设文件状态：没有就提示生成模板（主人 2026-10-25 要求）
         const [personaInfo, setPersonaInfo] = React.useState(null)
         const [personaMsg, setPersonaMsg] = React.useState('')
+        // 数据选择拉回来的按号配置：输入框优先显示它（2026-10-28）
+        const [acctCfg, setAcctCfg] = React.useState(null)
+        const acctVal = (field) => {
+          if (!acctCfg) return undefined
+          const v = acctCfg[field]
+          return v === undefined || v === null || v === '' ? undefined : String(v)
+        }
         const loadPersona = () => {
           fetch(`${QQ_STATUS_URL}/persona`, { cache: 'no-store' })
             .then((r) => r.json())
@@ -2142,7 +2163,7 @@ window.__ModuleLoader__.load({
               return '改完立即生效。自动回复要 NapCat 正在运行并连上（WebSocket 地址要对）；切官方机器人通道后，对话由 QQ 机器人插件负责，这里主要配工具和记忆。'
             })()),
           ),
-          React.createElement(AccountPickerRow, { key: 'account-picker', onChanged: () => loadPersona() }),
+          React.createElement(AccountPickerRow, { key: 'account-picker', onChanged: () => loadPersona(), onLoaded: (d) => setAcctCfg(d) }),
           React.createElement(
             'div',
             { key: 'persona', style: rowStyle },
@@ -2239,7 +2260,7 @@ window.__ModuleLoader__.load({
             React.createElement(FocusSelectRow, {
               key: 'focusChatTarget',
               form,
-              value: v.focusChatTarget || '',
+              value: acctVal('focusChatTarget') !== undefined ? acctVal('focusChatTarget') : (v.focusChatTarget || ''),
               pending,
               setPending,
               disabled: !snap.writable,
@@ -2317,7 +2338,7 @@ window.__ModuleLoader__.load({
           children.push(
             React.createElement(TextRow, {
               key: field, form, field, label, hint,
-              value: v[field] ?? '',
+              value: (acctVal(field) !== undefined ? acctVal(field) : (v[field] ?? '')),
               disabled: !snap.writable,
               // 敏感字段（token / cookie / key）用密码框，避免录屏截屏直接泄露
               secret: /(token|cookie|key|password|secret)/i.test(field),
@@ -2332,7 +2353,7 @@ window.__ModuleLoader__.load({
         // 群聊页最下面的空位：群级独立设置（折叠，默认收起）
         if (activeTab === 'group') {
           children.push(React.createElement(GroupProfilesPanel, {
-            key: 'group-profiles', form, value: v.groupProfiles, disabled: !snap.writable,
+            key: 'group-profiles', form, value: acctVal('groupProfiles') !== undefined ? acctVal('groupProfiles') : v.groupProfiles, disabled: !snap.writable,
           }))
         }
 

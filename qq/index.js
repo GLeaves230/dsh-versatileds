@@ -1104,6 +1104,10 @@ function qqDataDir() {
     acctIso = qqConfigRef?.isolateAccountMemory?.get?.() === true
   } catch { /* ignore */ }
   // 已退出登录：即使之前记着号，也回退到共享目录（2026-10-28 主人确认）
+  // 数据选择里显式挑了某个号：直接用那个号（2026-10-28）
+  const view = String(currentAccountView() || 'auto')
+  if (view === 'normal') return join(versatiledsBase(), 'normal')
+  if (view !== 'auto') return join(versatiledsBase(), 'qq', view)
   const acct = effectiveAccount()
   if (hostIso && acctIso && acct) return join(versatiledsBase(), 'qq', acct)
   if (hostIso) return join(versatiledsBase(), 'qq', 'normal')
@@ -1279,10 +1283,21 @@ function disableImQqbotEntry() {
 }
 
 /** 账号数据目录：qq/<QQ号>/（一个账号一个目录，2026-10-28 主人要求）。没探测到账号时退回 qq/ 根。 */
+/** 账号选择存独立文件：<qq>/account-view.json（不写 config，config 里只留默认 auto） */
+function accountViewFile() {
+  return join(versatiledsBase(), 'qq', 'account-view.json')
+}
+function currentAccountView() {
+  try {
+    const j = JSON.parse(readFileSync(accountViewFile(), 'utf8'))
+    if (j && typeof j.view === 'string' && j.view) return j.view
+  } catch { /* 没文件用 auto */ }
+  try { return String(qqConfigRef?.accountView?.get?.() || 'auto') } catch { return 'auto' }
+}
+
 /** 设置页当前操作的账号：auto 跟登录号，normal 表示通用，其余是历史号（2026-10-28） */
 function effectiveAccount() {
-  let view = 'auto'
-  try { view = String(qqConfigRef?.accountView?.get?.() || 'auto').trim() || 'auto' } catch { /* ignore */ }
+  const view = String(currentAccountView() || 'auto').trim() || 'auto'
   if (view === 'auto') return loginQqCache
   if (view === 'normal') return ''
   return view
@@ -4408,7 +4423,7 @@ function startStatusServer(config, napcat = null) {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({
         current: loginQqCache || '',
-        view: String(config.accountView.get() || 'auto'),
+        view: currentAccountView(),
         accounts: accounts.sort(),
         normalExists: existsSync(join(versatiledsBase(), 'normal', 'persona.md')) || existsSync(join(versatiledsBase(), 'qq', 'normal', 'persona.md')),
         dataDir: qqDataDir(),
@@ -4422,7 +4437,8 @@ function startStatusServer(config, napcat = null) {
         try {
           const j = JSON.parse(body || '{}')
           const view = String(j.view || 'auto')
-          config.accountView = view
+          mkdirSync(dirname(accountViewFile()), { recursive: true })
+          writeFileSync(accountViewFile(), JSON.stringify({ view }, null, 2), 'utf8')
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
           res.end(JSON.stringify({ ok: true, view, dataDir: qqDataDir() }))
         } catch {
@@ -4430,6 +4446,37 @@ function startStatusServer(config, napcat = null) {
           res.end(JSON.stringify({ ok: false }))
         }
       })
+      return
+    }
+    if (url.pathname === '/account-config') {
+      // 数据选择：返回所选账号的按号配置（输入框据此同步显示，2026-10-28）
+      const readOr = (file, key) => {
+        try {
+          const j = JSON.parse(readFileSync(join(qqAccountDir(), file), 'utf8'))
+          if (j && j[key] !== undefined && j[key] !== '') return j[key]
+        } catch { /* 没文件 */ }
+        return undefined
+      }
+      const owner = readOr('owner.json', 'owner')
+      const focus = readOr('focus.json', 'target')
+      let targets = undefined
+      try {
+        const j = JSON.parse(readFileSync(join(qqAccountDir(), 'proactive-targets.json'), 'utf8'))
+        if (Array.isArray(j?.ids)) targets = j.ids.join(',')
+      } catch { /* ignore */ }
+      let groupProfiles = undefined
+      try {
+        groupProfiles = readFileSync(join(qqAccountDir(), 'groups.json'), 'utf8')
+      } catch { /* ignore */ }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({
+        account: effectiveAccount(),
+        dataDir: qqDataDir(),
+        ownerQQ: owner,
+        focusChatTarget: focus,
+        proactiveTargets: targets,
+        groupProfiles,
+      }))
       return
     }
     if (url.pathname === '/persona') {
