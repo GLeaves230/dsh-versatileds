@@ -3444,7 +3444,8 @@ function groupProfileOf(config, gid) {
 
 /** "23:30" → 分钟数；非法返回 -1。 */
 function hhmmToMin(s) {
-  const m = String(s || '').match(/^(\d{1,2}):(\d{2})$/)
+  // 同时接受 "HH:MM" 和 "HH:MM:SS"（浏览器 time 输入有时带秒，2026-10-28）
+  const m = String(s || '').match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
   if (!m) return -1
   const h = Number(m[1]), mi = Number(m[2])
   if (h > 23 || mi > 59) return -1

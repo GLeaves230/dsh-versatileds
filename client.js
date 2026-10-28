@@ -19,14 +19,15 @@ window.__ModuleLoader__.load({
     const React = require('react')
 
     // ---------------------------------------------------------------- 公共样式
-    const rowStyle = { display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0' }
+    const rowStyle = { display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0' }
     const labelStyle = { minWidth: '210px', opacity: 0.9 }
     const hintStyle = { opacity: 0.55, fontSize: '12px' }
     const inputStyle = { flex: 1, maxWidth: '320px', padding: '3px 6px' }
     const numStyle = { width: '110px', padding: '3px 6px' }
     const cdStyle = { minWidth: '64px', fontSize: '12px', fontVariantNumeric: 'tabular-nums', opacity: 0.8 }
     const skipStyle = {
-      fontSize: '12px', padding: '2px 8px', cursor: 'pointer',
+      fontSize: '12px', padding: '4px 12px', cursor: 'pointer', lineHeight: 1.4,
+      minHeight: '26px', whiteSpace: 'nowrap',
       border: '1px solid rgba(128,128,128,0.4)', borderRadius: '4px', background: 'transparent',
     }
     const tabStyle = (active) => ({
