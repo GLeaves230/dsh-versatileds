@@ -935,7 +935,7 @@ window.__ModuleLoader__.load({
           React.createElement(
             'p',
             { key: 'hint', style: { opacity: 0.7, marginBottom: '8px' } },
-            '改完立即生效，写操作还要在调用时传 live=true 才会真正发出。',
+            '改完立即生效。这些开关决定插件能用你的 B站 账号做哪些事；AI 真正点赞/投币/发评论前会按这里允许的范围来，不会绕过。',
           ),
           React.createElement(
             'div',
@@ -2033,7 +2033,11 @@ window.__ModuleLoader__.load({
           React.createElement(
             'p',
             { key: 'hint', style: { opacity: 0.7, marginBottom: '8px' } },
-            '改完立即生效。自动回复需要 NapCat 开 WebSocket，地址填对才会连。',
+            ((() => {
+              const scope = (options && options.personaScope) || 'qq'
+              if (scope === 'common') return '改完立即生效。这里放两边共用的东西：人设、全局偏好、记忆和余额。'
+              return '改完立即生效。自动回复要 NapCat 正在运行并连上（WebSocket 地址要对）；切官方机器人通道后，对话由 QQ 机器人插件负责，这里主要配工具和记忆。'
+            })()),
           ),
           React.createElement(
             'div',
@@ -2322,9 +2326,9 @@ window.__ModuleLoader__.load({
             { key: 'mem-intro', style: { ...rowStyle, flexDirection: 'column', alignItems: 'flex-start', gap: '3px' } },
             React.createElement('strong', { style: { fontSize: '13px' } }, '记忆布局'),
             React.createElement('span', { style: hintStyle },
-              '底座＝共享：DS 侧和大肥鱼共用一份记忆（shared-memory.md 双向）。下面两个隔离开关都能叠在底座上：一个管前后端，一个管群与个人。'),
+              '默认 DSH 和 QQ 共用一份记忆（shared-memory.md，双向同步）。'),
             React.createElement('span', { style: hintStyle },
-              '两个都不开＝全共享；打开前后端隔离，两边各记各的；打开群与个人隔离，群里和私聊各记各的。'),
+              '打开「前后端记忆隔离」→ 两边各记各的；打开「群与个人记忆隔离」→ 群里和私聊各记各的；两个都开就是全分开。'),
           ))
           children.push(React.createElement(
             'div',
