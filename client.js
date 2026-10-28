@@ -918,7 +918,7 @@ window.__ModuleLoader__.load({
     /** 账号状态：QQ 与 B站 各一行，未登录直说；B站顺带显示等级/经验（2026-10-28） */
     function AccountStatusPanel() {
       const [qq, setQq] = React.useState(null)
-      const [bili, setBili] = React.useState(null)
+      const [bili, setBili] = React.useState(undefined) // undefined=还没读到，null=读取失败
       React.useEffect(() => {
         let alive = true
         const loadQq = () => {
@@ -931,7 +931,7 @@ window.__ModuleLoader__.load({
           fetch(`${BILI_STATUS_URL}/account`, { cache: 'no-store' })
             .then((r) => r.json())
             .then((d) => { if (alive) setBili(d) })
-            .catch(() => { if (alive) setBili({ loggedIn: false }) })
+            .catch(() => { if (alive) setBili((prev) => (prev === undefined ? null : prev)) })
         }
         loadQq(); loadBili()
         const t = setInterval(() => { loadQq(); loadBili() }, 5000)
@@ -951,7 +951,9 @@ window.__ModuleLoader__.load({
                 + ` · 上次离线 ${Math.round((sess.offlineMs || 0) / 60000)} 分钟（倒计时已更新）`
               : ''))
         : 'QQ账号未登录'
-      const biliLine = bili && bili.loggedIn
+      const biliLine = bili === undefined
+        ? 'B站账号读取中…'
+        : bili && bili.loggedIn
         ? `当前B站账号：${bili.name || bili.uid || '已登录'}`
           + (bili.uid ? `（UID ${bili.uid}）` : '')
           + (bili.level ? ` · Lv.${bili.level}` : '')

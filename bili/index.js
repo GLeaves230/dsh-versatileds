@@ -25,6 +25,8 @@ import { fetchLiveInfo, grabLiveFrame, grabVideoFrames, parseLiveRoom } from '..
 
 /** 当前 B站 client 引用：保存 cookie 后热更新，不用重载插件（2026-10-28） */
 let biliClientRef = null
+/** /account 结果缓存（15 秒） */
+const accountCache = { at: 0, data: null }
 
 const COOKIE_KEYS = ['SESSDATA', 'bili_jct', 'buvid3', 'buvid4', 'DedeUserID']
 
@@ -323,6 +325,12 @@ function startStatusServer(guard, config, biliClient) {
       return
     }
     if (url.pathname === '/account') {
+      // 15 秒缓存：B站 nav/relation/navnum 三个接口较慢，面板每 5 秒刷也不至于打爆（2026-10-28）
+      if (accountCache.data && Date.now() - accountCache.at < 15_000) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(JSON.stringify({ ...accountCache.data, cached: true }))
+        return
+      }
       // B站 账号状态（设置页「账号状态」用，走 lib 的 me()，2026-10-28）
       let loggedIn = false
       let uid = ''
@@ -373,7 +381,10 @@ function startStatusServer(guard, config, biliClient) {
         } catch { /* 未登录 */ }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      res.end(JSON.stringify({ loggedIn, uid, name, level, exp, nextExp, coins, follower, following, dynamics }))
+      const payload = { loggedIn, uid, name, level, exp, nextExp, coins, follower, following, dynamics }
+      accountCache.data = payload
+      accountCache.at = Date.now()
+      res.end(JSON.stringify(payload))
       return
     }
     if (url.pathname === '/cooldowns') {
