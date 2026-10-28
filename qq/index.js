@@ -1280,8 +1280,43 @@ function personaForGroup(text) {
     .trim()
 }
 
+/** 当前登录的 QQ（用于按账号隔离记录/聚焦目标）；由探测逻辑更新（2026-10-28 主人要求一个账号一份记录）。 */
+let loginQqCache = ''
+function setLoginQq(qq) {
+  const next = String(qq || '').trim()
+  if (!next) return
+  if (next === loginQqCache) return
+  loginQqCache = next
+  // 换了号：清空内存镜像，重新按新账号的文件加载
+  try {
+    notesMem.length = 0
+    notesMemLoaded = false
+    initNotesMem().catch(() => {})
+  } catch { /* ignore */ }
+}
+
 function notesPath() {
-  return join(versatiledsBase(), 'qq', 'notes.md')
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `notes-${loginQqCache}.md`) : join(base, 'notes.md')
+}
+
+/** 聚焦目标按账号隔离：文件 focus-<qq>.json 优先，没文件再用配置（全局兜底）。 */
+function focusPath() {
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `focus-${loginQqCache}.json`) : join(base, 'focus.json')
+}
+function readFocusTarget(config) {
+  try {
+    const j = JSON.parse(readFileSync(focusPath(), 'utf8'))
+    if (j && typeof j.target === 'string') return j.target.trim()
+  } catch { /* 没文件就用配置 */ }
+  return String(config?.focusChatTarget?.get?.() || '').trim()
+}
+function writeFocusTarget(target) {
+  try {
+    writeFileSync(focusPath(), JSON.stringify({ target: String(target || '').trim(), at: Date.now() }, null, 2), 'utf8')
+    return true
+  } catch { return false }
 }
 
 /**
@@ -1792,7 +1827,7 @@ async function ensureNapcatPackage(config) {
     const curQq = await detectCurrentQq(config)
     if (curQq) {
       plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
-      rememberLoginQq(curQq)
+      setLoginQq(curQq); rememberLoginQq(curQq)
     }
     ensureOneBotConfig(config, curQq)
     return true
@@ -1818,7 +1853,7 @@ async function ensureNapcatPackage(config) {
       const curQq = await detectCurrentQq(config)
       if (curQq) {
         plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
-        rememberLoginQq(curQq)
+        setLoginQq(curQq); rememberLoginQq(curQq)
       }
       ensureOneBotConfig(config, curQq)
     }
@@ -4309,9 +4344,26 @@ function startStatusServer(config, napcat = null) {
       res.end(JSON.stringify({ enabled: config.enabled.get() !== false }))
       return
     }
+    if (url.pathname === '/focus' && req.method === 'POST') {
+      // 按账号写聚焦目标（focus-<qq>.json），设置页调用（2026-10-28）
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        try {
+          const j = JSON.parse(body || '{}')
+          const ok = writeFocusTarget(j.target ?? '')
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify({ ok, target: String(j.target || '') }))
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false }))
+        }
+      })
+      return
+    }
     if (url.pathname === '/focus_status') {
       // 设置页「主动」页用：手动指定 or 自动挑；把自动挑的结果也告诉前端，输入框可以一键填
-      const pinned = String(config.focusChatTarget.get() || '').trim()
+      const pinned = readFocusTarget(config)
       const now = Date.now()
       const active = []
       for (const [key, until] of focusChat.entries()) {
@@ -7931,7 +7983,7 @@ export function apply(ctx, config) {
   /** 重新扫目标：配置里的群 + 好友；群会跟群列表核对，退掉的群自动剔除。 */
   async function refreshProactiveQueue() {
     // 手动指定了聚焦聊天（可填多个：群号、QQ 号用逗号分隔；群和私聊都能手动聚焦）
-    const pinnedRaw = String(config.focusChatTarget.get() || '').trim()
+    const pinnedRaw = readFocusTarget(config)
     if (pinnedRaw) {
       const pinnedIds = parseIds(pinnedRaw)
       let aliveGroups = null
