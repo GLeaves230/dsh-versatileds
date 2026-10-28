@@ -1088,7 +1088,9 @@ function ensureAgentsTemplate() {
 }
 
 function personaPath() {
-  return join(qqAccountDir(), 'persona.md')
+  return qqConfigRef?.isolateHostQq?.get?.() === true
+    ? join(qqAccountDir(), 'persona.md')
+    : join(versatiledsBase(), 'qq', 'persona.md')
 }
 
 function loadPersona() {
@@ -1261,7 +1263,9 @@ function qqStatePath(name, ext = 'json') {
 }
 
 function memoryPath() {
-  return join(qqAccountDir(), 'memory.md')
+  return qqConfigRef?.isolateHostQq?.get?.() === true
+    ? join(qqAccountDir(), 'memory.md')
+    : join(versatiledsBase(), 'qq', 'memory.md')
 }
 
 function loadMemory() {
@@ -1313,7 +1317,9 @@ function setLoginQq(qq) {
 }
 
 function notesPath() {
-  return join(qqAccountDir(), 'notes.md')
+  return qqConfigRef?.isolateHostQq?.get?.() === true
+    ? join(qqAccountDir(), 'notes.md')
+    : join(versatiledsBase(), 'qq', 'notes.md')
 }
 
 /** 聚焦目标按账号隔离：文件 focus-<qq>.json 优先，没文件再用配置（全局兜底）。 */
@@ -5743,7 +5749,11 @@ function fmtMessage(msg, config, selfId, target = '') {
 export const name = 'qq-agent'
 export const inject = ['tools']
 
+/** 近期配置引用：路径函数据此判断「前后端记忆隔离」开没开（2026-10-28）。 */
+let qqConfigRef = null
+
 export function apply(ctx, config) {
+  qqConfigRef = config
   // 首次启动初始化（人设模板、记忆目录、AGENTS 模板）放后台跑：
   // 都是写文件/建目录，同步做会拖慢 DSH 启动；失败也不影响插件主流程。
   setTimeout(() => {
