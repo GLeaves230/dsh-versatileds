@@ -2940,7 +2940,31 @@ function rulesStatePath() {
 }
 
 function rulesMdPath() {
-  return join(versatiledsBase(), 'qq', 'group_rules.md')
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `group-rules-${loginQqCache}.md`) : join(base, 'group_rules.md')
+}
+
+/** 群偏好（groupProfiles）也按账号：文件 groups-<qq>.json 优先，没文件用配置（2026-10-28）。 */
+function groupProfilesPath() {
+  const base = join(versatiledsBase(), 'qq')
+  return loginQqCache ? join(base, `groups-${loginQqCache}.json`) : join(base, 'groups.json')
+}
+function readGroupProfiles(config) {
+  try {
+    const j = JSON.parse(readFileSync(groupProfilesPath(), 'utf8'))
+    if (j && typeof j === 'object') return j
+  } catch { /* 没文件用配置 */ }
+  try {
+    const j = JSON.parse(String(config?.groupProfiles?.get?.() || '{}'))
+    if (j && typeof j === 'object') return j
+  } catch { /* ignore */ }
+  return {}
+}
+function writeGroupProfiles(obj) {
+  try {
+    writeFileSync(groupProfilesPath(), JSON.stringify(obj || {}, null, 2), 'utf8')
+    return true
+  } catch { return false }
 }
 
 function loadRulesState() {
@@ -3232,7 +3256,7 @@ async function toAmrVoice(wavPath) {
  */
 function groupProfileOf(config, gid) {
   try {
-    const obj = JSON.parse(String(config?.groupProfiles?.get?.() || '{}'))
+    const obj = readGroupProfiles(config)
     const p = obj[String(gid)]
     return p && typeof p === 'object' ? p : null
   } catch { return null }
