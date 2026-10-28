@@ -3452,10 +3452,11 @@ function hhmmToMin(s) {
   return h * 60 + mi
 }
 
-/** 当前时间是否落在 start-end 区间（跨午夜：start>end 时按两段算）。 */
+/** 当前时间是否落在 start-end 区间（跨午夜按两段算；00:00-00:00 表示全天）。 */
 function inTimeRange(start, end, now = new Date()) {
   const a = hhmmToMin(start), b = hhmmToMin(end)
-  if (a < 0 || b < 0 || a === b) return false
+  if (a < 0 || b < 0) return false
+  if (a === b) return a === 0 // 00:00-00:00 = 全天（2026-10-28）
   const cur = now.getHours() * 60 + now.getMinutes()
   return a < b ? (cur >= a && cur < b) : (cur >= a || cur < b)
 }
