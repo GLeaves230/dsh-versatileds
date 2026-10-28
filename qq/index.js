@@ -1567,12 +1567,16 @@ function runPsAsync(command, timeoutMs) {
   })
 }
 
-/** 通用异步跑命令（netstat/taskkill 这类），返回 {status, stdout}；不阻塞事件循环。 */
-function runAsync(exe, args, timeoutMs) {
+/** 通用异步跑命令（netstat/taskkill 这类），返回 {status, stdout}；不阻塞事件循环。cwd/shell 可选。 */
+function runAsync(exe, args, timeoutMs, cwd, useShell) {
   return new Promise((resolve) => {
     let child
     try {
-      child = spawn(exe, args, { windowsHide: true })
+      child = spawn(exe, args, {
+        windowsHide: true,
+        ...(cwd ? { cwd } : {}),
+        ...(useShell ? { shell: true } : {}),
+      })
     } catch (err) {
       resolve({ status: -2, stdout: '', stderr: String(err?.message ?? err) })
       return
@@ -9972,7 +9976,7 @@ export function apply(ctx, config) {
       }
       try {
         plog('info', '[dsh-versatileds] 开始自动安装（pnpm add，约 20-60 秒）…')
-        const r = await runAsync('cmd', ['/c', `cd /d "${pdir}" && pnpm add @tencent-connect/dsh-qqbot@latest --registry=https://registry.npmjs.org`], 300000)
+        const r = await runAsync('pnpm', ['add', '@tencent-connect/dsh-qqbot@latest', '--registry=https://registry.npmjs.org'], 300000, pdir, true)
         if (!r || r.status !== 0) {
           throw new Error(`pnpm add 返回 status=${r?.status ?? '?'}：${String(r?.stderr || r?.stdout || '').slice(0, 300)}`)
         }
