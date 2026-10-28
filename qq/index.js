@@ -313,6 +313,8 @@ export const Config = Schema.object({
     .description('QQ 模块启用：关掉后不连 NapCat、不注册 qq 工具，自动回复和主动搭话全停'),
   qqChannel: Schema.union(['napcat', 'official']).default('napcat').volatile()
     .description('QQ 通道：napcat＝小号走 NapCat（插件自己收发）；official＝官方机器人走 dsh-qqbot 插件（需要安装官方插件；插件只保留语音/记忆/发送工具，不连 NapCat）'),
+  qqbotOwnerOpenid: Schema.string().default('').volatile()
+    .description('官方机器人模式下主人的 openid（主动搭话用）：QQ 官方机器人体系里的用户 ID（32 位大写十六进制），留空则不主动私聊'),
   napcatHttp: Schema.string().default('http://127.0.0.1:3000').volatile()
     .description('NapCat 的 OneBot HTTP 地址'),
   napcatWs: Schema.string().default('ws://127.0.0.1:3011').volatile()
@@ -7955,10 +7957,11 @@ export function apply(ctx, config) {
     // 私聊反思期（p:key）不主动搭话，别的会话各管各的（2026-10-26 主人要求）
     if (inQuiet(`p:${target}`)) return false
     try {
-      const ownerQq = String(config.ownerUid.get() || '').trim()
-      if (ownerQq && String(target) === ownerQq) {
+      const ownerQq = String(config.ownerQQ.get() || '').trim()
+      const ownerOpenid = String(config.qqbotOwnerOpenid?.get?.() || '').trim()
+      if (ownerQq && String(target) === ownerQq && ownerOpenid) {
         // 2026-10-28：主人的私聊主动搭话走官方通道（单聊主动 1000 条/天，不依赖 NapCat）
-        await qqbotSendText(text, 'c2c:5AEFDD0F5E94148E2668BF30F6F31817')
+        await qqbotSendText(text, `c2c:${ownerOpenid}`)
       } else {
         await ob.sendPrivate(target, text)
       }

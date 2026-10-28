@@ -1501,6 +1501,7 @@ window.__ModuleLoader__.load({
 
     const QQ_TEXT_FIELDS = [
       ['qqChannel', 'QQ 通道（napcat / official）', 'napcat＝小号走 NapCat（插件自己收发）；official＝官方机器人走 dsh-qqbot 插件（需要安装官方插件；插件只保留语音/记忆/发送工具，不连 NapCat）'],
+      ['qqbotOwnerOpenid', '官方机器人·主人 openid', '官方模式下主动搭话用：你的 openid（32 位大写十六进制）；留空则不主动私聊'],
       ['napcatHttp', 'NapCat HTTP 地址', 'http://127.0.0.1:3000'],
       ['napcatWs', 'NapCat WebSocket 地址', 'ws://127.0.0.1:3011，留空关闭自动回复'],
       ['ownerQQ', '主人 QQ 号', '必填：不填就认不出主人（没人叫得上「主人」、也不会 @ 主人）。留空时插件会把第一条私聊它的人自动当主人，之后在这儿改；多个号用逗号分隔'],
