@@ -1370,10 +1370,13 @@ function setLoginQq(qq) {
   const prevQq = loginQqCache
   loginQqCache = next
   markAccountSwitch(prevQq, next)
-  // 新账号第一次出现：把人设复制一份到它自己的目录（记忆不复制）
+  // 新账号（存档目录为空）第一次出现：把人设复制一份做初始化；记忆不复制（2026-10-28 主人要求）
+  // 人设被删（存档非空但没 persona）不自动补，交由设置页「生成模板」由号主自己决定
   try {
-    const perPersona = join(qqAccountDir(), 'persona.md')
-    if (!existsSync(perPersona)) {
+    const acctDir = qqAccountDir()
+    const empty = !existsSync(acctDir) || (readdirSync(acctDir).length === 0)
+    if (empty) {
+      const perPersona = join(acctDir, 'persona.md')
       const sharedP = sharedPersonaPath()
       const fallbackP = join(versatiledsBase(), 'qq', 'persona.md')
       const src = existsSync(sharedP) ? sharedP : (existsSync(fallbackP) ? fallbackP : '')

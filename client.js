@@ -2033,7 +2033,7 @@ window.__ModuleLoader__.load({
             React.createElement('span', { style: labelStyle }, '人设文件'),
             React.createElement('button', {
               type: 'button', style: skipStyle, onClick: doMakePersona,
-            }, personaInfo && personaInfo.exists ? '重新生成模板' : '生成模板'),
+            }, personaInfo && personaInfo.exists ? '重新生成模板' : '初始化人设'),
             React.createElement('span', { style: hintStyle },
               (() => {
                 const scope = (options && options.personaScope) || 'qq'
