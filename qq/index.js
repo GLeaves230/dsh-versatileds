@@ -2045,7 +2045,7 @@ function livePath() {
 // ---------- 图片 / 表情 ----------
 
 function imageDir() {
-  return join(versatiledsBase(), 'qq', 'image')
+  return join(qqAccountDir(), 'image')
 }
 
 function imageNotesPath() {
@@ -2100,7 +2100,7 @@ function saveImageNote(filePath, desc) {
 // ---------- 表情包库 ----------
 
 function stickerDir() {
-  return join(versatiledsBase(), 'qq', 'sticker')
+  return join(qqAccountDir(), 'sticker')
 }
 
 function stickerIndexPath() {
@@ -3439,7 +3439,7 @@ async function gsvSynthesize(text, config) {
   }
   const buf = Buffer.from(await res.arrayBuffer())
   if (buf.length < 1000) throw new Error('GPT-SoVITS 返回的音频太小')
-  const dir = join(versatiledsBase(), 'qq', 'voice-out')
+  const dir = join(qqAccountDir(), 'voice-out')
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `gsv-${Date.now()}.wav`)
   writeFileSync(file, buf)
@@ -4977,7 +4977,7 @@ function saveProactiveState(state) {
 const sentIds = new Map()
 
 function chatDir() {
-  return join(versatiledsBase(), 'qq', 'chat')
+  return join(qqAccountDir(), 'chat')
 }
 
 function chatIndexPath() {
