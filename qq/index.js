@@ -2612,7 +2612,12 @@ async function ensureNapcatPackage(config) {
       plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
       setLoginQq(curQq); rememberLoginQq(curQq)
     }
-    ensureOneBotConfig(config, curQq)
+    // 没登录时用「上次登录的号」也补一份，免得扫码前端口永远不通
+    let cfgQq = curQq
+    if (!cfgQq) {
+      try { cfgQq = String(readFileSync(join(versatiledsBase(), 'qq', 'last-login-qq.txt'), 'utf8')).trim() } catch { /* ignore */ }
+    }
+    ensureOneBotConfig(config, cfgQq)
     return true
   }
   if (napcatPkg.busy) return false
@@ -8783,6 +8788,17 @@ async function syncGroupRules(force = false) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
           plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
+          // 登录后立刻补齐 OneBot 配置（HTTP 3000 / WS 3011 + token），否则服务端不会起
+          try {
+            const q = await detectCurrentQq(config)
+            if (q) {
+              setLoginQq(q); rememberLoginQq(q)
+              const okCfg = ensureOneBotConfig(config, q)
+              plog('info', `[dsh-versatileds] OneBot 配置已写入 ${q}（${okCfg ? 'HTTP/WS 就绪' : '未写入或已存在'}）`)
+            } else {
+              plog('warn', '[dsh-versatileds] 登录成功但没识别到 QQ 号，OneBot 配置等下次启动再补')
+            }
+          } catch { /* ignore */ }
           // 只有「扫码登录」才重算时效；免登录期间不续期（2026-10-29 主人澄清）
           try { if (!napcatStartedQuick) consumePendingQuickLogin() } catch { /* ignore */ }
           // 把这次拉起来的 pid 记下来：下次点「登录服务」先按它清旧进程（2026-10-28）
