@@ -1669,7 +1669,16 @@ window.__ModuleLoader__.load({
           .then((d) => {
             setSt(d)
             setAccount(String(d.account || ''))
-            if (d.expireAt === null || d.expireAt === undefined) setMode('permanent')
+            // 下拉档位：待生效优先（pending），其次已生效的 expireAt
+            if (d.pendingPermanent) setMode('permanent')
+            else if (Number(d.pendingDays || 0) > 0) {
+              const pd = Number(d.pendingDays)
+              if ([30, 60, 90, 120].includes(pd)) setMode(String(pd))
+              else {
+                setMode('custom')
+                setCustomDate(new Date(Date.now() + pd * 86400_000).toISOString().slice(0, 10))
+              }
+            } else if (d.expireAt === null || d.expireAt === undefined) setMode('permanent')
             else {
               const days = Math.max(1, Math.round((Number(d.expireAt) - Date.now()) / 86400_000))
               if ([30, 60, 90, 120].includes(days)) setMode(String(days))
