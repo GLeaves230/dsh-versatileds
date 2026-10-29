@@ -1653,6 +1653,94 @@ window.__ModuleLoader__.load({
     }
 
     /** 登录子页面：状态 + 二维码 + 启动按钮，全在模块页里操作，不弹独立网页。 */
+    /** 快速登录（免扫码）+ 免登录时效：30/60/90/120 天、自定义日期、永久（2026-10-29） */
+    function QuickLoginPanel() {
+      const [st, setSt] = React.useState(null)
+      const [accounts, setAccounts] = React.useState([])
+      const [account, setAccount] = React.useState('')
+      const [mode, setMode] = React.useState('permanent')
+      const [customDate, setCustomDate] = React.useState('')
+      const [msg, setMsg] = React.useState('')
+      const load = () => {
+        fetch(`${QQ_STATUS_URL}/quick-login`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => {
+            setSt(d)
+            setAccount(String(d.account || ''))
+            if (d.expireAt === null || d.expireAt === undefined) setMode('permanent')
+            else {
+              const days = Math.max(1, Math.round((Number(d.expireAt) - Date.now()) / 86400_000))
+              if ([30, 60, 90, 120].includes(days)) setMode(String(days))
+              else {
+                setMode('custom')
+                setCustomDate(new Date(Number(d.expireAt)).toISOString().slice(0, 10))
+              }
+            }
+          })
+          .catch(() => setSt(null))
+        fetch(`${QQ_STATUS_URL}/accounts`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => setAccounts((d.accounts || []).map((a) => a.id || a)))
+          .catch(() => {})
+      }
+      React.useEffect(() => { load() }, [])
+      const save = () => {
+        const body = { account, permanent: mode === 'permanent' }
+        if (mode === 'custom') {
+          if (!customDate) { setMsg('先选一个到期日期'); return }
+          body.expireAt = new Date(`${customDate}T23:59:59`).getTime()
+        } else if (mode !== 'permanent') body.days = Number(mode)
+        fetch(`${QQ_STATUS_URL}/quick-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+          .then((r) => r.json())
+          .then((d) => { setMsg(d && d.ok ? '已保存' : '保存失败'); load() })
+          .catch(() => setMsg('接口没响应'))
+      }
+      const expireText = !st
+        ? '读取中…'
+        : st.permanent
+          ? '永久免登录'
+          : (st.expired ? '已过期，需要重新扫码' : `还剩 ${st.remainingDays} 天（${new Date(Number(st.expireAt)).toLocaleDateString('zh-CN')} 到期）`)
+      return React.createElement('div', { style: { ...rowStyle, flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: '10px', marginTop: '6px' } },
+        React.createElement('span', { style: labelStyle }, '快速登录 QQ'),
+        React.createElement('select', {
+          value: account,
+          onChange: (e) => setAccount(e.target.value),
+          style: { padding: '4px 8px', borderRadius: '6px', background: 'transparent', color: 'inherit', border: '1px solid rgba(128,128,128,0.3)', fontSize: '13px', minWidth: '200px' },
+        },
+          React.createElement('option', { value: '' }, '不启用（每次扫码）'),
+          ...accounts.map((id) => React.createElement('option', { key: id, value: id }, `QQ ${id}`)),
+        ),
+        React.createElement('span', { style: labelStyle }, '免登录时效'),
+        React.createElement('select', {
+          value: mode,
+          onChange: (e) => setMode(e.target.value),
+          style: { padding: '4px 8px', borderRadius: '6px', background: 'transparent', color: 'inherit', border: '1px solid rgba(128,128,128,0.3)', fontSize: '13px' },
+        },
+          React.createElement('option', { value: '30' }, '30 天'),
+          React.createElement('option', { value: '60' }, '60 天'),
+          React.createElement('option', { value: '90' }, '90 天'),
+          React.createElement('option', { value: '120' }, '120 天'),
+          React.createElement('option', { value: 'custom' }, '自定义日期'),
+          React.createElement('option', { value: 'permanent' }, '永久'),
+        ),
+        mode === 'custom'
+          ? React.createElement('input', {
+            type: 'date', value: customDate, onChange: (e) => setCustomDate(e.target.value),
+            style: { padding: '3px 6px', borderRadius: '6px', background: 'transparent', color: 'inherit', border: '1px solid rgba(128,128,128,0.3)' },
+          })
+          : null,
+        React.createElement('button', { type: 'button', style: skipStyle, onClick: save }, '保存'),
+        React.createElement('span', { style: hintStyle }, `当前：${expireText}`),
+        msg ? React.createElement('span', { style: hintStyle }, msg) : null,
+        React.createElement('div', { style: { ...hintStyle, width: '100%' } },
+          '要本机这个号成功扫码登录过一次才有登录态；到期后自动取消快速登录，会要求重新扫码。'),
+      )
+    }
+
     function LoginPanel({ channel }) {
       const [st, setSt] = React.useState({ phase: 'loading' })
       const [busy, setBusy] = React.useState(false)
@@ -1842,6 +1930,7 @@ window.__ModuleLoader__.load({
           React.createElement('div', { style: { marginTop: '4px', opacity: 0.8 } },
             'NapCat 目录：', React.createElement('code', null, st.dir || '<DSH_HOME>/versatileds/qq/napcat')),
         ),
+        React.createElement(QuickLoginPanel, { key: 'quick-login' }),
       )
     }
 
@@ -1996,7 +2085,6 @@ window.__ModuleLoader__.load({
 
       ['napcatLauncher', 'launcher.bat 路径', '留空用 <napcatDir>/napcat/launcher.bat'],
       ['napcatQrPath', '登录二维码路径', '留空用 <napcatDir>/napcat/cache/qrcode.png'],
-      ['napcatQuickLogin', '快速登录 QQ 号', '填了启动时带这个号免扫码；留空扫码登录'],
       ['taskKeywords', '额外任务关键词', '逗号分隔，留空用内置'],
       ['taskResultNotify', '任务完成通知', '干完私聊告诉主人'],
       ['taskMaxPerDay', '每天任务上限', '0 不限'],

@@ -1660,6 +1660,35 @@ function napcatAppDir(config) {
   return join(root, 'napcat')
 }
 
+/** 快速登录（免扫码）状态：qq/<号>/quick-login.json，{ account, expireAt|null, at }（2026-10-29）。 */
+function quickLoginStatePath() {
+  return qqStatePath('quick-login', 'json')
+}
+function loadQuickLoginState() {
+  try {
+    const j = JSON.parse(readFileSync(quickLoginStatePath(), 'utf8'))
+    return j && typeof j === 'object' ? j : {}
+  } catch { return {} }
+}
+/** 现在能不能免扫码：配了号 + 未过期（expireAt 为 null 表示永久）。 */
+function quickLoginUsable(config) {
+  const want = String(config?.napcatQuickLogin?.get?.() || '').trim()
+  if (!want) return ''
+  const st = loadQuickLoginState()
+  if (String(st.account || '') !== want) {
+    // 还没登记过这个号的时效：按「永久」先放行（老用户不受影响）
+    return want
+  }
+  const exp = st.expireAt
+  if (exp === null || exp === undefined || exp === '') return want
+  const ms = Number(exp)
+  if (!Number.isFinite(ms) || ms <= 0) return want
+  if (Date.now() > ms) {
+    return '' // 过期：要求重新扫码
+  }
+  return want
+}
+
 function napcatLauncherPath(config) {
   const custom = String(config.napcatLauncher.get() || '').trim()
   if (custom) return custom
@@ -1670,7 +1699,7 @@ function napcatLauncherPath(config) {
   if (existsSync(oneKey)) {
     // OneKey 的 napcat.quick.bat 里 QQ 号是写死的（10086），不吃参数；
     // 配了快速登录号就现场生成一个带号的脚本（2026-10-29）
-    const quick = String(config?.napcatQuickLogin?.get?.() || '').trim()
+    const quick = quickLoginUsable(config)
     if (quick && /^\d{5,12}$/.test(quick)) {
       const gen = join(shell, `napcat-quick-${quick}.bat`)
       try {
@@ -5113,6 +5142,47 @@ function startStatusServer(config, napcat = null) {
           res.end(JSON.stringify({ ok: false }))
         }
       })
+      return
+    }
+    if (url.pathname === '/quick-login') {
+      // 快速登录（免扫码）设置：时效到期后自动取消，要求重新扫码（2026-10-29）
+      if (req.method === 'POST') {
+        let body = ''
+        req.on('data', (c) => { body += c })
+        req.on('end', () => {
+          try {
+            const j = JSON.parse(body || '{}')
+            const account = String(j.account || '').trim()
+            const permanent = j.permanent === true
+            const days = Number(j.days || 0)
+            const expireAt = permanent
+              ? null
+              : (Number(j.expireAt) > 0 ? Number(j.expireAt) : (days > 0 ? Date.now() + days * 86400_000 : null))
+            const next = { account, expireAt, at: Date.now() }
+            mkdirSync(dirname(quickLoginStatePath()), { recursive: true })
+            writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
+            try { config.napcatQuickLogin.set(account) } catch { /* 老框架没有 set 就算了 */ }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+            res.end(JSON.stringify({ ok: true, ...next }))
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: false }))
+          }
+        })
+        return
+      }
+      const st = loadQuickLoginState()
+      const now = Date.now()
+      const expired = st.expireAt !== null && st.expireAt !== undefined && Number(st.expireAt) > 0 && now > Number(st.expireAt)
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({
+        account: String(st.account || ''),
+        expireAt: st.expireAt === undefined ? null : st.expireAt,
+        permanent: st.expireAt === null || st.expireAt === undefined,
+        remainingDays: (st.expireAt && Number(st.expireAt) > 0) ? Math.max(0, Math.ceil((Number(st.expireAt) - now) / 86400_000)) : null,
+        expired,
+        usable: Boolean(quickLoginUsable(config)),
+      }))
       return
     }
     if (url.pathname === '/account-settings') {
