@@ -1297,7 +1297,15 @@ function currentAccountView() {
 /** 设置页当前操作的账号：auto 跟登录号，normal 表示通用，其余是历史号（2026-10-28） */
 function effectiveAccount() {
   const view = String(currentAccountView() || 'auto').trim() || 'auto'
-  if (view === 'auto') return loginQqCache
+  if (view === 'auto') {
+    if (loginQqCache) return loginQqCache
+    // 没登录时用上次登录的号，避免数据落到 normal 造成「聊天记录没跟着账号」
+    try {
+      const v = String(readFileSync(join(versatiledsBase(), 'qq', 'last-login-qq.txt'), 'utf8')).trim()
+      if (v) return v
+    } catch { /* 没记录 */ }
+    return ''
+  }
   if (view === 'normal') return ''
   return view
 }
@@ -1305,7 +1313,8 @@ function effectiveAccount() {
 function qqAccountDir() {
   const base = join(versatiledsBase(), 'qq')
   const acct = effectiveAccount()
-  return acct ? join(base, acct) : base
+  // 没登录时落到 qq/normal（之前退回 qq/ 根，聊天记录会写偏，2026-10-29）
+  return acct ? join(base, acct) : join(base, 'normal')
 }
 
 function qqStatePath(name, ext = 'json') {
