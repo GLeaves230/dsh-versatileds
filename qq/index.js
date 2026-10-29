@@ -1699,11 +1699,13 @@ function consumePendingQuickLogin() {
   try {
     const st = loadQuickLoginState()
     const pending = Number(st.pendingDays || 0)
-    if (!st.account || !(pending > 0)) return false
+    // 本次登录前选过天数就用它；否则沿用已记录的档位（退出后重新扫码 = 刷新 ts）
+    const days = pending > 0 ? pending : Number(st.days || 0)
+    if (!st.account || !(days > 0)) return false
     const next = {
       ...st,
-      days: pending,
-      expireAt: Date.now() + pending * 86400_000,
+      days,
+      expireAt: Date.now() + days * 86400_000,
       pendingDays: 0,
       renewedAt: Date.now(),
     }
@@ -8698,14 +8700,26 @@ async function syncGroupRules(force = false) {
       // 以前这里会无条件清标志 + rearm，等于退出后又自己连回去了（2026-10-27 主人要求关掉）。
       // 只有 force（设置页点「登录」）才恢复；点登录时如果已经登录着，这里会直接检测到并接上。
       if (napcatLoggedOut) {
-        if (!force) return true
+        if (!force) {
+          // 退出登录只是这次不连；免登录时效还在的话，下次启动照样快速登录（2026-10-29）
+          if (quickLoginUsable(config)) {
+            setNapcatLoggedOut(false)
+            try { wsControl.rearm?.() } catch { /* ignore */ }
+            return true
+          }
+          return true
+        }
         setNapcatLoggedOut(false)
         try { wsControl.rearm?.() } catch { /* ignore */ }
       }
       return true
     }
     // 主人点过「退出登录」：别再自作主张拉起来，除非这次是设置页明确要启动（force）
-    if (!force && napcatLoggedOut) return false
+    if (!force && napcatLoggedOut) {
+      // 退出登录只是这次不连；免登录时效还在 → 下次启动照常快速登录（2026-10-29）
+      if (!quickLoginUsable(config)) return false
+      setNapcatLoggedOut(false)
+    }
     if (!force && config.autoStartNapCat.get() !== true) return false
     if (napcatStarting) return false
     if (Date.now() - lastQrCloseAt < 5 * 60_000) return false
