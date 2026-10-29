@@ -1681,10 +1681,14 @@ window.__ModuleLoader__.load({
           .finally(() => setTimeout(() => setBusy(false), 4000))
       }
       const openDir = () => {
+        setNote('正在打开目录…')
         fetch(`${QQ_STATUS_URL}/login/open`, { method: 'POST' })
           .then((r) => r.json())
-          .then((d) => { if (d && d.dir) setSt((s) => ({ ...s, dir: d.dir })) })
-          .catch(() => {})
+          .then((d) => {
+            if (d && d.dir) setSt((s) => ({ ...s, dir: d.dir }))
+            setNote(d && d.ok ? `已打开：${d.dir}` : (d && d.exists ? '自动打开失败，手动打开下面的目录' : '目录不存在，先启动一次登录服务'))
+          })
+          .catch(() => setNote('打开失败（接口没响应）'))
       }
       /** 退出登录 = 让插件把 NapCat 进程杀掉。两次点击确认，防手滑。 */
       const stopLogin = () => {

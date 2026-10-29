@@ -5559,14 +5559,15 @@ function startStatusServer(config, napcat = null) {
       const exists = existsSync(dir)
       let opened = false
       if (exists) {
+        // DSH 是隐藏会话，cmd start 有时返回 0 但窗口不可见；改用 Start-Process explorer.exe（2026-10-29）
         try {
           const q = (x) => String(x).replace(/'/g, "''")
-          // 两种都试：cmd start 最稳，explorer 兜底
-          const r = await runAsync('cmd', ['/c', 'start', '', `${dir}`], 8000)
-          opened = r.status === 0
+          const ps = `Start-Process -FilePath 'explorer.exe' -ArgumentList '${q(dir)}' -ErrorAction Stop; Write-Output 'ok'`
+          const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 15000)
+          opened = r.status === 0 && String(r.stdout || '').includes('ok')
           if (!opened) {
-            await runAsync('explorer.exe', [dir], 8000)
-            opened = true
+            const r2 = await runAsync('cmd', ['/c', 'start', '', `${dir}`], 8000)
+            opened = r2.status === 0
           }
         } catch { opened = false }
       }
