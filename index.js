@@ -90,7 +90,7 @@ function depSpecs(home) {
 
 /** 从镜像下载依赖；返回 { ok, why }。wheel 的（imageio-ffmpeg）下载后解压出 exe。 */
 // GitHub 下载统一走镜像候选（2026-10-29）：直连 → gh-proxy → ghfast → gh.monlor
-const GH_MIRRORS = ['', 'https://gh-proxy.com/', 'https://ghfast.top/', 'https://gh.monlor.com/']
+const GH_MIRRORS = ['', 'https://gh-proxy.com/', 'https://ghfast.top/', 'https://ghproxy.net/', 'https://gh.monlor.com/', 'https://github.dpik.top/', 'https://ghm.078465.xyz/']
 let preferredMirror = ''
 /** 把 GitHub 原始地址展开成镜像候选（记住上次成功的那个）。 */
 function mirrorCandidates(ghUrl) {

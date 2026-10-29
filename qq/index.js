@@ -1931,18 +1931,14 @@ async function checkUpdate(config) {
   try { lastAt = Number(JSON.parse(readFileSync(stateFile, 'utf8')).lastAt || 0) } catch { /* 没记录过 */ }
   if (lastAt && Date.now() - lastAt < hours * 3600_000) return
   const api = 'https://api.github.com/repos/GLeaves230/dsh-versatileds/releases/latest'
-  const sources = [
-    {
-      name: 'GitHub 官方',
-      api,
-      download: 'https://github.com/GLeaves230/dsh-versatileds/releases',
-    },
-    {
-      name: 'gh-proxy 镜像',
-      api: 'https://gh-proxy.com/' + api,
-      download: 'https://gh-proxy.com/https://github.com/GLeaves230/dsh-versatileds/releases',
-    },
-  ]
+  // 自检也走镜像（GitHub API 在国内经常连不上）：官方 + 全部镜像逐个试
+  const sources = GH_MIRROR_PREFIXES.map((prefix) => ({
+    name: prefix ? prefix : 'GitHub 官方',
+    api: prefix ? prefix + api : api,
+    download: prefix
+      ? prefix + 'https://github.com/GLeaves230/dsh-versatileds/releases'
+      : 'https://github.com/GLeaves230/dsh-versatileds/releases',
+  }))
   for (const s of sources) {
     try {
       const r = await runPsAsync(
@@ -1998,6 +1994,147 @@ function runInherit(cmd, args, timeoutMs = 30 * 60_000) {
 }
 
 /** 下载 OneKey 安装器 zip（GitHub releases latest，走 NapCat 同款镜像链）。 */
+// ---------- GitHub 下载镜像管理（2026-10-29 主人要求）----------
+// 策略：直连先试；失败 → 测一轮镜像取最快 → 记住它（下一批也用）→ 失败换下一个 → 全挂再测一轮
+const GH_MIRROR_PREFIXES = [
+  '', // 直连
+  'https://gh-proxy.com/',
+  'https://ghfast.top/',
+  'https://ghproxy.net/',
+  'https://gh.monlor.com/',
+  'https://github.dpik.top/',
+  'https://ghm.078465.xyz/',
+]
+const mirrorState = { active: '', failures: new Set() }
+const ghq = (x) => String(x).replace(/'/g, "''")
+
+/** 一轮镜像测速（HEAD，顺序 + 短超时），返回 [{prefix, ms}] 按快慢排序。 */
+async function probeMirrors(ghUrl, perTimeoutSec = 6) {
+  const cands = GH_MIRROR_PREFIXES.map((p) => ({ prefix: p, url: p ? p + ghUrl : ghUrl }))
+  const ps = [
+    "$ProgressPreference='SilentlyContinue';",
+    '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;',
+    '$cands = @(' + cands.map((c) => "@{ prefix='" + ghq(c.prefix) + "'; url='" + ghq(c.url) + "' }").join(',') + ');',
+    'foreach ($c in $cands) {',
+    '  $sw=[Diagnostics.Stopwatch]::StartNew();',
+    '  try { $r = Invoke-WebRequest -Uri $c.url -Method Head -TimeoutSec ' + perTimeoutSec + ' -UseBasicParsing -MaximumRedirection 3; if ($r.StatusCode -lt 400) { Write-Output ($c.prefix + "|" + $sw.ElapsedMilliseconds) } } catch { }',
+    '}',
+  ].join(' ')
+  const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], (perTimeoutSec + 4) * 1000 * cands.length)
+  const out = []
+  for (const line of String(r.stdout || '').split('\n')) {
+    const t = line.trim()
+    if (!t.includes('|')) continue
+    const parts = t.split('|')
+    const ms = Number(parts[1])
+    if (Number.isFinite(ms)) out.push({ prefix: String(parts[0] || ''), ms })
+  }
+  out.sort((a, b) => a.ms - b.ms)
+  return out
+}
+
+/** 校验 zip 能不能正常打开（镜像可能返回截断文件）。 */
+async function verifyZipFile(file) {
+  try {
+    const ps = "$ProgressPreference='SilentlyContinue'; Add-Type -AssemblyName System.IO.Compression.FileSystem; " +
+      "try { $z = [System.IO.Compression.ZipFile]::OpenRead('" + ghq(file) + "'); $n = $z.Entries.Count; $z.Dispose(); if ($n -gt 5) { exit 0 } else { exit 3 } } catch { exit 4 }"
+    const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 60000)
+    return r.status === 0
+  } catch { return false }
+}
+
+/** 轻量链：node fetch 直接试镜像（小文件快）。 */
+async function downloadLight(ghUrl, dest) {
+  const order = []
+  if (mirrorState.active && !mirrorState.failures.has(mirrorState.active)) order.push(mirrorState.active)
+  for (const m of GH_MIRROR_PREFIXES) if (!order.includes(m)) order.push(m)
+  for (const prefix of order) {
+    if (mirrorState.failures.has(prefix)) continue
+    const url = prefix ? prefix + ghUrl : ghUrl
+    try {
+      const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(180_000) })
+      if (!res.ok) continue
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length < 1000) continue
+      mkdirSync(dirname(dest), { recursive: true })
+      writeFileSync(dest, buf)
+      mirrorState.active = prefix
+      mirrorState.failures.delete(prefix)
+      plog('info', '[dsh-versatileds] 轻量下载成功（' + Math.round(buf.length / 1024) + ' KB），镜像=' + (prefix || '直连'))
+      return true
+    } catch { /* 试下一个 */ }
+  }
+  return false
+}
+
+/** 带镜像回退的下载：小文件先轻量链，再 PowerShell 链；失败换下一个，全挂再测一轮。 */
+async function downloadViaMirrors(ghUrl, dest, opts = {}) {
+  const minBytes = opts.minBytes ?? 100_000
+  const officialTimeoutSec = opts.officialTimeoutSec ?? 90
+  const mirrorTimeoutSec = opts.mirrorTimeoutSec ?? 1500
+  const validateZip = opts.validateZip === true
+  const round = opts.round ?? 1
+  mkdirSync(dirname(dest), { recursive: true })
+  // 小文件先走轻量链（2026-10-29 主人要求）
+  if (round === 1 && minBytes <= 8 * 1024 * 1024) {
+    if (await downloadLight(ghUrl, dest)) {
+      let size = 0
+      try { size = statSync(dest).size } catch { size = 0 }
+      if (size >= minBytes && (!validateZip || (await verifyZipFile(dest)))) {
+        plog('info', '[dsh-versatileds] 下载完成（' + Math.round(size / 1024) + ' KB），当前镜像=' + (mirrorState.active || '直连'))
+        return true
+      }
+      plog('info', '[dsh-versatileds] 轻量链拿到的文件不完整，换 PowerShell 链')
+    } else {
+      plog('info', '[dsh-versatileds] 轻量链没通，换 PowerShell 链')
+    }
+  }
+  const order = []
+  if (mirrorState.active && !mirrorState.failures.has(mirrorState.active)) order.push(mirrorState.active)
+  try {
+    const probed = await probeMirrors(ghUrl)
+    if (probed.length) {
+      plog('info', '[dsh-versatileds] 镜像测速：' + probed.map((x) => (x.prefix || '直连') + ' ' + x.ms + 'ms').join(' / '))
+    }
+    for (const x of probed) if (!order.includes(x.prefix)) order.push(x.prefix)
+  } catch { /* 探测失败就按固定顺序 */ }
+  for (const m of GH_MIRROR_PREFIXES) if (!order.includes(m)) order.push(m)
+
+  for (const prefix of order) {
+    if (mirrorState.failures.has(prefix)) continue
+    const url = prefix ? prefix + ghUrl : ghUrl
+    const isOfficial = !prefix
+    const t = isOfficial ? officialTimeoutSec : mirrorTimeoutSec
+    plog('info', '[dsh-versatileds] 下载：' + url)
+    const ps = "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
+      "Invoke-WebRequest -Uri '" + ghq(url) + "' -OutFile '" + ghq(dest) + "' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec " + t
+    const r = await runPsAsync(ps, (t + 15) * 1000)
+    let size = 0
+    try { size = statSync(dest).size } catch { size = 0 }
+    if (r.status === 0 && size >= minBytes) {
+      if (validateZip && !(await verifyZipFile(dest))) {
+        plog('warn', '[dsh-versatileds] 该源给的 zip 打不开，换下一个')
+      } else {
+        mirrorState.active = prefix
+        mirrorState.failures.delete(prefix)
+        plog('info', '[dsh-versatileds] 下载完成（' + Math.round(size / 1048576) + ' MB），当前镜像=' + (prefix || '直连'))
+        return true
+      }
+    } else {
+      plog('info', '[dsh-versatileds] 该源失败（exit ' + r.status + '），换下一个')
+    }
+    mirrorState.failures.add(prefix)
+  }
+
+  if (round < 2) {
+    plog('warn', '[dsh-versatileds] 这一轮镜像全失败，重新测速再跑一轮')
+    mirrorState.failures.clear()
+    return downloadViaMirrors(ghUrl, dest, { ...opts, round: round + 1 })
+  }
+  return false
+}
+
+/** 下载 OneKey 安装器 zip（GitHub releases latest）。 */
 async function downloadOneKeyZip(dest) {
   // 先问 GitHub API 拿 OneKey 资产的官方地址，再交给镜像管理器下载（2026-10-29）
   const api = 'https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest'
