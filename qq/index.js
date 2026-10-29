@@ -1559,9 +1559,6 @@ function loadNotes(limit = 30, scope = '', isolate = false) {
 /** 插件根目录（qq/ 的上一级），带包解压时用。 */
 const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** 插件自带的 NapCat 发布包（有就用它，不下载）。 */
-const NAPCAT_VENDOR_ZIP = join(pluginRoot, 'vendor', 'napcat.zip')
-
 /** 下载回来的压缩包统一放 versatileds/normal/download/（英文名），解压产物进 qq/napcat/。 */
 function napcatDownloadZip() {
   return join(versatiledsBase(), 'normal', 'download', 'napcat-shell.zip')
@@ -5290,12 +5287,21 @@ function startStatusServer(config, napcat = null) {
           return age < 10 * 60_000 ? 3 : age < 3600_000 ? 2 : age < 6 * 3600_000 ? 1 : 0
         } catch { return 0 }
       }
+      // 名字只给 UI 显示用（聊天记录/路径仍然只用号码）
+      const groupNames = new Map()
+      const friendNames = new Map()
+      try {
+        for (const g of (napcat ? await napcat.groups() : []) || []) groupNames.set(String(g.group_id), String(g.group_name || ''))
+      } catch { /* ignore */ }
+      try {
+        for (const f of (napcat ? await napcat.friends() : []) || []) friendNames.set(String(f.user_id), String(f.nickname || f.remark || ''))
+      } catch { /* ignore */ }
       const candidates = []
       for (const gid of proactiveGroupsOf(config)) {
-        candidates.push({ id: gid, kind: 'group', key: `group-${gid}`, act: actOf(`group-${gid}`) })
+        candidates.push({ id: gid, kind: 'group', name: groupNames.get(gid) || '', key: `group-${gid}`, act: actOf(`group-${gid}`) })
       }
       for (const uid of proactiveTargetsOf(config)) {
-        candidates.push({ id: uid, kind: 'private', key: `private-${uid}`, act: actOf(`private-${uid}`) })
+        candidates.push({ id: uid, kind: 'private', name: friendNames.get(uid) || '', key: `private-${uid}`, act: actOf(`private-${uid}`) })
       }
       candidates.sort((a, b) => b.act - a.act)
       const picked = candidates.find((c) => c.act > 0)?.id || candidates[0]?.id || ''

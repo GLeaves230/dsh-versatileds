@@ -315,7 +315,7 @@ window.__ModuleLoader__.load({
         ? (status.mode === 'manual' ? '手动指定' : '自动挑（大肥鱼自己找活跃的）')
         : '读取中…'
       const html = status
-        ? `当前聚焦：${status.effective || '（还没有）'} · ${modeText}` +
+        ? `当前聚焦：${(() => { const c = (status.candidates || []).find((x) => x.id === status.effective); return c && c.name ? `${c.name}（${c.id}）` : (status.effective || '（还没有）') })()} · ${modeText}` +
           (status.picked && status.mode === 'auto' ? ` · 自动挑的是 ${status.picked}` : '')
         : '正在读取当前聚焦…'
       return React.createElement(
@@ -749,11 +749,11 @@ window.__ModuleLoader__.load({
         React.createElement('option', { value: '' }, '自动（从主动搭话列表按活跃度挑）'),
         candidates.filter((c) => c.kind === 'group').length
           ? React.createElement('optgroup', { label: '群（主动搭话列表）' },
-              candidates.filter((c) => c.kind === 'group').map((c) => React.createElement('option', { key: 'g' + c.id, value: c.id }, `群 ${c.id}${c.act >= 3 ? ' · 刚刚活跃' : c.act === 2 ? ' · 1小时内' : c.act === 1 ? ' · 今天' : ' · 冷'}`)))
+              candidates.filter((c) => c.kind === 'group').map((c) => React.createElement('option', { key: 'g' + c.id, value: c.id }, `群 ${c.name ? c.name + '（' + c.id + '）' : c.id}${c.act >= 3 ? ' · 刚刚活跃' : c.act === 2 ? ' · 1小时内' : c.act === 1 ? ' · 今天' : ' · 冷'}`)))
           : null,
         candidates.filter((c) => c.kind === 'private').length
           ? React.createElement('optgroup', { label: '私聊（主动搭话列表）' },
-              candidates.filter((c) => c.kind === 'private').map((c) => React.createElement('option', { key: 'p' + c.id, value: c.id }, `私聊 ${c.id}${c.act >= 3 ? ' · 刚刚活跃' : c.act === 2 ? ' · 1小时内' : c.act === 1 ? ' · 今天' : ' · 冷'}`)))
+              candidates.filter((c) => c.kind === 'private').map((c) => React.createElement('option', { key: 'p' + c.id, value: c.id }, `私聊 ${c.name ? c.name + '（' + c.id + '）' : c.id}${c.act >= 3 ? ' · 刚刚活跃' : c.act === 2 ? ' · 1小时内' : c.act === 1 ? ' · 今天' : ' · 冷'}`)))
           : null,
         ),
         React.createElement('span', { style: hintStyle }, '留空＝从主动搭话列表里按活跃度自动挑；选中后只盯这一个会话（按当前登录账号保存）'),
