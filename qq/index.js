@@ -1999,22 +1999,20 @@ function runInherit(cmd, args, timeoutMs = 30 * 60_000) {
 
 /** 下载 OneKey 安装器 zip（GitHub releases latest，走 NapCat 同款镜像链）。 */
 async function downloadOneKeyZip(dest) {
-  const q = (x) => String(x).replace(/'/g, "''")
-  const ps = [
-    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;",
-    "$r = Invoke-RestMethod -Uri 'https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 30;",
-    "$a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.Windows.OneKey.zip' } | Select-Object -First 1;",
-    "if (-not $a) { throw 'no asset OneKey' };",
-    "$url = $a.browser_download_url;",
-    `$out = '${q(dest)}';`,
-    "$mirrors = @($url, ('https://gh-proxy.com/' + $url), ('https://ghfast.top/' + $url));",
-    "foreach ($m in $mirrors) { try { Invoke-WebRequest -Uri $m -OutFile $out -TimeoutSec 600 -UseBasicParsing; if ((Get-Item $out).Length -gt 100000) { Write-Output ('ok ' + $m); exit 0 } } catch { } };",
-    'exit 1',
-  ].join(' ')
-  const r = await runPsAsync(ps, 900000)
-  return r.status === 0
+  // 先问 GitHub API 拿 OneKey 资产的官方地址，再交给镜像管理器下载（2026-10-29）
+  const api = 'https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest'
+  const psApi = "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
+    "$r = Invoke-RestMethod -Uri '" + api + "' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec 30; " +
+    "$a = $r.assets | Where-Object { $_.name -eq 'NapCat.Shell.Windows.OneKey.zip' } | Select-Object -First 1; " +
+    "if (-not $a) { Write-Error 'no asset'; exit 2 }; Write-Output $a.browser_download_url"
+  const meta = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psApi], 60000)
+  const officialUrl = String(meta.stdout || '').trim().split('\n').pop().trim()
+  if (meta.status !== 0 || !officialUrl.startsWith('http')) {
+    plog('warn', '[dsh-versatileds] 查 OneKey 下载地址失败：' + String(meta.stderr || '').trim().slice(0, 160))
+    return false
+  }
+  return downloadViaMirrors(officialUrl, dest, { minBytes: 100_000, officialTimeoutSec: 120, mirrorTimeoutSec: 900 })
 }
-
 async function downloadNapcatPackage() {
   const q = (s) => String(s).replace(/'/g, "''")
   // DSH 里的 fetch 拉外网会 "fetch failed"（同一个 node 在交互式 shell 又能连），下载交给 PowerShell。
@@ -2032,47 +2030,16 @@ async function downloadNapcatPackage() {
   const [tag, assetName, officialUrl] = line.split('|')
   if (!officialUrl) throw new Error(`没解析到 NapCat 下载地址：${line.slice(0, 120)}`)
 
-  // 主人定的顺序：官方优先 → gh-proxy.com → 都不行就提示手动下载并关掉插件
-  const candidates = [
-    officialUrl,
-    `https://gh-proxy.com/${officialUrl}`,
-  ]
-  mkdirSync(dirname(NAPCAT_VENDOR_ZIP), { recursive: true })
-  let lastErr = ''
-  for (const url of candidates) {
-    plog('info', `[dsh-versatileds] 下载 NapCat ${tag}：${url}`)
-    const isOfficial = url === officialUrl
-    // 官方直连：90 秒内下不完就当「太慢」换镜像；镜像给足 25 分钟
-    const psTimeout = isOfficial ? 90 : 1500
-    const psDl = `$ProgressPreference = 'SilentlyContinue'; ` +
-      `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
-      `Invoke-WebRequest -Uri '${q(url)}' -OutFile '${q(NAPCAT_VENDOR_ZIP)}' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec ${psTimeout}`
-    const r = await runPsAsync(psDl, (psTimeout + 15) * 1000)
-    let size = 0
-    try { size = statSync(NAPCAT_VENDOR_ZIP).size } catch { size = 0 }
-    if (r.status === 0 && size > 5 * 1024 * 1024) {
-      // 镜像可能返回截断的 zip，验一下能不能读目录
-      let ok = false
-      try {
-        const q2 = (s) => String(s).replace(/'/g, "''")
-        const chk = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
-          `$ProgressPreference = 'SilentlyContinue'; ` +
-          `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
-          `try { $z = [System.IO.Compression.ZipFile]::OpenRead('${q2(NAPCAT_VENDOR_ZIP)}'); $n = $z.Entries.Count; $z.Dispose(); if ($n -gt 100) { exit 0 } else { exit 3 } } catch { exit 4 }`], 60000)
-        ok = chk.status === 0
-      } catch { ok = false }
-      if (ok) {
-        plog('info', `[dsh-versatileds] NapCat 已存到 ${NAPCAT_VENDOR_ZIP}（${Math.round(size / 1048576)} MB）`)
-        return tag
-      }
-      lastErr = `zip 校验失败（${Math.round(size / 1048576)} MB），可能被截断`
-      plog('info', `[dsh-versatileds] ${lastErr}，换下一个源`)
-      continue
-    }
-    lastErr = `下载失败（exit ${r.status}）：${String(r.stderr || '').trim().slice(0, 160)}`
-    plog('info', `[dsh-versatileds] ${lastErr}`)
-  }
-  throw new Error(`NapCat 下载失败：${lastErr}`)
+  // 走统一的镜像管理器（直连 → 测速选最快 → 记住 → 失败换下一个 → 全挂再测一轮）
+  const ok = await downloadViaMirrors(officialUrl, NAPCAT_VENDOR_ZIP, {
+    minBytes: 5 * 1024 * 1024,
+    validateZip: true,
+    officialTimeoutSec: 90,
+    mirrorTimeoutSec: 1500,
+  })
+  if (!ok) throw new Error('NapCat 下载失败：所有镜像都试过了')
+  plog('info', `[dsh-versatileds] NapCat 已存到 ${NAPCAT_VENDOR_ZIP}`)
+  return tag
 }
 
 /**
