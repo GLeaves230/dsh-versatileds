@@ -2628,7 +2628,7 @@ window.__ModuleLoader__.load({
             React.createElement('button', {
               type: 'button',
               style: skipStyle,
-              onClick: () => { setStickerOpen(true); loadStickers() },
+              onClick: () => { setStickerSelected(new Set()); setStickerOpen(true); loadStickers() },
             }, '表情包设置'),
             React.createElement('span', { style: hintStyle }, '★ = 常用（优先发）；点进去能删/标常用/看来源，张数上限在「表情包库最多保留张数」'),
             React.createElement('span', { style: hintStyle }, `${stickers.length} 张 · ★ 常用会优先发`),
@@ -2920,6 +2920,7 @@ window.__ModuleLoader__.load({
                     Array.from(stickerSelected).forEach((n) => {
                       const s = stickers.find((x) => x.name === n)
                       if (s) toggleStickerFav(n, true)
+              setStickerSelected(new Set())
                     })
                   },
                 }, '设为常用'),
@@ -2930,6 +2931,7 @@ window.__ModuleLoader__.load({
                     Array.from(stickerSelected).forEach((n) => {
                       const s = stickers.find((x) => x.name === n)
                       if (s) toggleStickerFav(n, false)
+              setStickerSelected(new Set())
                     })
                   },
                 }, '设为普通'),
