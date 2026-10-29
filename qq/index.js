@@ -8739,6 +8739,8 @@ async function syncGroupRules(force = false) {
       if (!quickLoginUsable(config)) return false
       setNapcatLoggedOut(false)
     }
+    // 「免登录自动化」关掉时：不自动拉起，需要手动点「启动登录服务」（2026-10-29）
+    if (!force && acctCfg(config, 'quickLoginAutoEnabled', true) === false) return false
     if (!force && config.autoStartNapCat.get() !== true) return false
     if (napcatStarting) return false
     if (Date.now() - lastQrCloseAt < 5 * 60_000) return false

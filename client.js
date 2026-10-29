@@ -1680,7 +1680,10 @@ window.__ModuleLoader__.load({
           .catch(() => setSt(null))
         fetch(`${QQ_STATUS_URL}/account-settings`, { cache: 'no-store' })
           .then((r) => r.json())
-          .then((d) => setClearOnLogout(Boolean(d && d.settings && d.settings.quickLoginClearOnLogout)))
+          .then((d) => {
+            setClearOnLogout(Boolean(d && d.settings && d.settings.quickLoginClearOnLogout))
+            setAutoEnabled(!(d && d.settings && d.settings.quickLoginAutoEnabled === false))
+          })
           .catch(() => {})
         fetch(`${QQ_STATUS_URL}/accounts`, { cache: 'no-store' })
           .then((r) => r.json())
@@ -1705,7 +1708,7 @@ window.__ModuleLoader__.load({
             fetch(`${QQ_STATUS_URL}/account-settings`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ quickLoginClearOnLogout: clearOnLogout }),
+              body: JSON.stringify({ quickLoginClearOnLogout: clearOnLogout, quickLoginAutoEnabled: autoEnabled }),
             }).catch(() => {})
             load()
           })
@@ -1745,6 +1748,13 @@ window.__ModuleLoader__.load({
             style: { padding: '3px 6px', borderRadius: '6px', background: 'transparent', color: 'inherit', border: '1px solid rgba(128,128,128,0.3)' },
           })
           : null,
+        React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' } },
+          React.createElement('input', {
+            type: 'checkbox', checked: autoEnabled,
+            onChange: (e) => setAutoEnabled(e.target.checked),
+          }),
+          '免登录自动化（关掉后不自动拉起，需要手动点「启动登录服务」；登录态还在，不用扫码）',
+        ),
         React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' } },
           React.createElement('input', {
             type: 'checkbox', checked: clearOnLogout,
