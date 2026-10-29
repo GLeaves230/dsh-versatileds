@@ -1317,6 +1317,26 @@ function qqAccountDir() {
   return acct ? join(base, acct) : join(base, 'normal')
 }
 
+/** 按号设置文件：qq/<账号>/settings.json（优先于全局 config，2026-10-29）。 */
+function accountSettingsPath() {
+  return join(qqAccountDir(), 'settings.json')
+}
+function loadAccountSettings() {
+  try {
+    const j = JSON.parse(readFileSync(accountSettingsPath(), 'utf8'))
+    return j && typeof j === 'object' ? j : {}
+  } catch { return {} }
+}
+/** 读一个设置：按号文件优先，没有就用全局 config。 */
+function acctCfg(config, key, fallback) {
+  const s = loadAccountSettings()
+  if (Object.prototype.hasOwnProperty.call(s, key)) return s[key]
+  try {
+    const v = config?.[key]?.get?.()
+    return v === undefined ? fallback : v
+  } catch { return fallback }
+}
+
 function qqStatePath(name, ext = 'json') {
   return join(qqAccountDir(), `${name}.${ext}`)
 }
@@ -4882,9 +4902,9 @@ function startStatusServer(config, napcat = null) {
           offlineSince: offAt,
         },
         proactive: left, exhausted, used, limit, unlimited: limit <= 0,
-        videoShare: leftOf(vs.lastAt, Math.max(60, Number(config.videoShareIntervalSec.get() ?? 300)) * 1000, config.videoShareEnabled.get() === true),
+        videoShare: leftOf(vs.lastAt, Math.max(60, Number(acctCfg(config, 'videoShareIntervalSec', 300) ?? 300)) * 1000, config.videoShareEnabled.get() === true),
         webSearch: leftOf(lastWebSearchAt, Math.max(10, Number(config.webSearchCooldownSec.get() ?? 90)) * 1000, config.webSearchEnabled.get() === true),
-        ruleSync: leftOf(rs.lastSyncAt, Math.max(1, Number(config.ruleSyncHours.get() ?? 6)) * 3600_000, config.ruleSyncEnabled.get() !== false),
+        ruleSync: leftOf(rs.lastSyncAt, Math.max(1, Number(acctCfg(config, 'ruleSyncHours', 6) ?? 6)) * 3600_000, config.ruleSyncEnabled.get() !== false),
         balance: leftOf(bs.lastCheckAt, Math.max(1, Number(config.balanceCheckHours.get() ?? 6)) * 3600_000, config.balanceWarnEnabled.get() === true),
         updateCheck: leftOf(
           loadJsonFile(join(versatiledsBase(), 'qq', 'update-check.json')).lastAt,
@@ -5033,6 +5053,30 @@ function startStatusServer(config, napcat = null) {
       })
       return
     }
+    if (url.pathname === '/account-settings') {
+      // 按号设置（群聊页 / 分享视频页这些字段走这里，2026-10-29）
+      if (req.method === 'POST') {
+        let body = ''
+        req.on('data', (c) => { body += c })
+        req.on('end', () => {
+          try {
+            const patch = JSON.parse(body || '{}')
+            const cur = loadAccountSettings()
+            const next = { ...cur, ...(patch && typeof patch === 'object' ? patch : {}) }
+            writeFileSync(accountSettingsPath(), JSON.stringify(next, null, 2), 'utf8')
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+            res.end(JSON.stringify({ ok: true, settings: next }))
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: false }))
+          }
+        })
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ account: effectiveAccount(), dir: qqAccountDir(), settings: loadAccountSettings() }))
+      return
+    }
     if (url.pathname === '/account-config') {
       // 数据选择：返回所选账号的按号配置（输入框据此同步显示，2026-10-28）
       const readOr = (file, key) => {
@@ -5061,6 +5105,7 @@ function startStatusServer(config, napcat = null) {
         focusChatTarget: focus,
         proactiveTargets: targets,
         groupProfiles,
+        settings: loadAccountSettings(),
       }))
       return
     }
@@ -7101,7 +7146,7 @@ export function apply(ctx, config) {
   async function sendBiliCard({ bvid, groupId = '', userId = '', delaySec = 0 }) {
     // 反思期是发言总闸：分享也停
     if (groupId && inQuiet(groupId)) return { skipped: 'quiet' }
-    const style = String(config.videoShareCardStyle.get() || 'text').trim().toLowerCase()
+    const style = String(acctCfg(config, 'videoShareCardStyle', 'text') || 'text').trim().toLowerCase()
     const fire = async () => {
       let message
       let logText = ''
@@ -7177,17 +7222,17 @@ export function apply(ctx, config) {
     let stopped = false
     const tick = async () => {
       if (stopped) return
-      if (config.videoShareEnabled.get() !== true) return
-      const intervalMs = Math.max(60, Number(config.videoShareIntervalSec.get() ?? 300)) * 1000
+      if ((acctCfg(config, 'videoShareEnabled', true) !== false)) return
+      const intervalMs = Math.max(60, Number(acctCfg(config, 'videoShareIntervalSec', 300) ?? 300)) * 1000
       const st = loadVideoShareState()
       if (st.lastAt && Date.now() - Number(st.lastAt) < intervalMs) return
       const shared = Array.isArray(st.shared) ? st.shared : []
-      const maxAge = Number(config.videoShareMaxAgeHours.get() ?? 24)
+      const maxAge = Number(acctCfg(config, 'videoShareMaxAgeHours', 24) ?? 24)
       const pick = recentSeenVideos(maxAge > 0 ? maxAge : 0).find((x) => !shared.includes(x.bvid))
       if (!pick) return
       const { groupId, userId } = await resolveShareTarget(config.videoShareTarget.get())
       if (!groupId && !userId) return
-      const delaySec = Math.max(0, Number(config.videoShareDelaySec.get() ?? 30))
+      const delaySec = Math.max(0, Number(acctCfg(config, 'videoShareDelaySec', 30) ?? 30))
       try {
         await sendBiliCard({ bvid: pick.bvid, groupId, userId, delaySec })
         saveVideoShareState({ lastAt: Date.now(), shared: [...shared, pick.bvid].slice(-60) })
@@ -7655,7 +7700,7 @@ export function apply(ctx, config) {
   let rulesSyncing = false
 
   function targetRuleGroups() {
-    const raw = String(config.ruleGroups.get() || '').trim()
+    const raw = String(acctCfg(config, 'ruleGroups', '') || '').trim()
     return raw ? raw.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean) : []
   }
 
@@ -7851,11 +7896,11 @@ async function syncGroupRules(force = false) {
 
   /** 群里说话前读到的群规片段：置顶公告 + 最近几条公告（含要确认的重要通知）。 */
   function groupRuleText(gid) {
-    if (config.ruleInject.get() === false) return ''
+    if (acctCfg(config, 'ruleInject', true) === false) return ''
     const state = loadRulesState()
     const rec = state.groups[String(gid)]
     if (!rec) return ''
-    const max = Math.max(200, Number(config.ruleMaxChars.get() ?? 1200))
+    const max = Math.max(200, Number(acctCfg(config, 'ruleMaxChars', 1200) ?? 1200))
     const clip = (text, n) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, n)
     const lines = []
     if (rec.intro) lines.push(`群介绍：${clip(rec.intro, 200)}`)
@@ -7882,7 +7927,7 @@ async function syncGroupRules(force = false) {
       if (stopped) return
       if (config.ruleSyncEnabled.get() === false) return
       const state = loadRulesState()
-      const hours = Math.max(1, Number(config.ruleSyncHours.get() ?? 6))
+      const hours = Math.max(1, Number(acctCfg(config, 'ruleSyncHours', 6) ?? 6))
       if (state.lastSyncAt && Date.now() - Number(state.lastSyncAt) < hours * 3600_000) return
       syncGroupRules(false).catch((err) => {
         plog('warn', '[dsh-versatileds] 同步群规失败:', err?.message ?? err)
@@ -10249,7 +10294,7 @@ async function syncGroupRules(force = false) {
 
       // 主人说「分享个视频」：从最近看过的里挑一条，直接发到当前会话（群里就发群）
       if (fromOwner && wantsShareVideo(text)) {
-        const maxAge = Number(config.videoShareMaxAgeHours.get() ?? 24)
+        const maxAge = Number(acctCfg(config, 'videoShareMaxAgeHours', 24) ?? 24)
         const pick = recentSeenVideos(maxAge > 0 ? maxAge : 0)[0]
         if (!pick) {
           const ack = '我还没看过视频呢，让我先刷一会儿'
@@ -11541,7 +11586,7 @@ async function syncGroupRules(force = false) {
           case 'share_video': {
             const bvid = String(args.bvid || '').trim() || (recentSeenVideos()[0]?.bvid ?? '')
             if (!bvid) return '没有可分享的视频：给个 bvid，或者先在 B站 看过一条'
-            const target = String(args.group_id || args.user_id || config.videoShareTarget.get() || '').trim()
+            const target = String(args.group_id || args.user_id || acctCfg(config, 'videoShareTarget', '') || '').trim()
             if (!args.live) {
               return JSON.stringify({ 动作: 'share_video', bvid, 目标: target || '主人私聊', 预览: true }, null, 2)
             }

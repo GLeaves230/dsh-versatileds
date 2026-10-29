@@ -277,6 +277,16 @@ window.__ModuleLoader__.load({
             }).catch(() => {})
           } catch { /* ignore */ }
         }
+        // 这些字段也按账号存一份（qq/<号>/settings.json，2026-10-29）
+        if (["videoShareEnabled","videoShareIntervalSec","videoShareDelaySec","videoShareMaxAgeHours","videoShareTarget","videoShareCardStyle","ruleGroups","ruleInject","ruleMaxChars","ruleSyncHours","ruleSyncEnabled","neighborChatChance","silenceAfterScoldSec","neighborBots","neighborNames","groupProfiles"].includes(field)) {
+          try {
+            fetch(`${QQ_STATUS_URL}/account-settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [field]: next }),
+            }).catch(() => {})
+          } catch { /* ignore */ }
+        }
         }
       }
       return React.createElement(
@@ -589,6 +599,16 @@ window.__ModuleLoader__.load({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ids }),
+            }).catch(() => {})
+          } catch { /* ignore */ }
+        }
+        // 这些字段也按账号存一份（qq/<号>/settings.json，2026-10-29）
+        if (["videoShareEnabled","videoShareIntervalSec","videoShareDelaySec","videoShareMaxAgeHours","videoShareTarget","videoShareCardStyle","ruleGroups","ruleInject","ruleMaxChars","ruleSyncHours","ruleSyncEnabled","neighborChatChance","silenceAfterScoldSec","neighborBots","neighborNames","groupProfiles"].includes(field)) {
+          try {
+            fetch(`${QQ_STATUS_URL}/account-settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [field]: next }),
             }).catch(() => {})
           } catch { /* ignore */ }
         }
@@ -2088,6 +2108,12 @@ window.__ModuleLoader__.load({
         const [acctCfg, setAcctCfg] = React.useState(null)
         const acctVal = (field) => {
           if (!acctCfg) return undefined
+          // 先看按号 settings.json（群聊/分享视频这些字段），再看顶层（2026-10-29）
+          const st = acctCfg.settings
+          if (st && Object.prototype.hasOwnProperty.call(st, field)) {
+            const sv = st[field]
+            if (sv !== undefined && sv !== null && sv !== '') return String(sv)
+          }
           const v = acctCfg[field]
           return v === undefined || v === null || v === '' ? undefined : String(v)
         }
