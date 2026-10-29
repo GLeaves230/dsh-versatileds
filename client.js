@@ -1302,8 +1302,12 @@ window.__ModuleLoader__.load({
     function GroupProfilesPanel(props) {
       const { form, value, disabled } = props
       const [draft, setDraft] = React.useState('')
+      const [search, setSearch] = React.useState('')
       const [localList, setLocalList] = React.useState(null)
       const [contacts, setContacts] = React.useState({ groups: [], friends: [] })
+      const q = String(search || '').trim().toLowerCase()
+      const filteredGroups = (contacts.groups || []).filter((g) => !q || String(g.name || '').toLowerCase().includes(q) || String(g.id).includes(q))
+      const filteredFriends = (contacts.friends || []).filter((f) => !q || String(f.name || '').toLowerCase().includes(q) || String(f.id).includes(q))
       const list = React.useMemo(() => {
         if (localList) return localList
         try { return JSON.parse(String(value || '{}')) || {} } catch { return {} }
@@ -1370,14 +1374,22 @@ window.__ModuleLoader__.load({
         React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 } },
         React.createElement('div', { style: rowStyle },
           React.createElement('span', { style: labelStyle }, '添加群 / 个人'),
+          React.createElement('input', {
+            type: 'text', value: search, placeholder: '搜群名/群号…', disabled,
+            onChange: (e) => setSearch(e.target.value), style: { ...inputStyle, maxWidth: '180px' },
+          }),
           React.createElement('select', {
             value: draft, disabled, onChange: (e) => setDraft(e.target.value), style: inputStyle,
           },
             React.createElement('option', { value: '' }, '-- 选已加入的群或好友 --'),
-            React.createElement('optgroup', { label: '群' },
-              contacts.groups.map((g) => React.createElement('option', { key: `g${g.id}`, value: g.id }, `${g.name}（${g.id}）`))),
-            React.createElement('optgroup', { label: '好友' },
-              contacts.friends.map((f) => React.createElement('option', { key: `f${f.id}`, value: f.id }, `${f.name}（${f.id}）`))),
+            filteredGroups.length
+              ? React.createElement('optgroup', { label: '群' },
+                  filteredGroups.map((g) => React.createElement('option', { key: 'g' + g.id, value: g.id }, `群 ${g.name || g.id}（${g.id}）`)))
+              : null,
+            filteredFriends.length
+              ? React.createElement('optgroup', { label: '好友' },
+                  filteredFriends.map((f) => React.createElement('option', { key: 'f' + f.id, value: f.id }, `好友 ${f.name || f.id}（${f.id}）`)))
+              : null,
           ),
           React.createElement('button', { type: 'button', onClick: add, disabled, style: { padding: '4px 10px', cursor: 'pointer' } }, '添加'),
         ),
@@ -2618,6 +2630,7 @@ window.__ModuleLoader__.load({
               style: skipStyle,
               onClick: () => { setStickerOpen(true); loadStickers() },
             }, '表情包设置'),
+            React.createElement('span', { style: hintStyle }, '★ = 常用（优先发）；点进去能删/标常用/看来源，张数上限在「表情包库最多保留张数」'),
             React.createElement('span', { style: hintStyle }, `${stickers.length} 张 · ★ 常用会优先发`),
             stickerMsg ? React.createElement('span', { style: hintStyle }, stickerMsg) : null,
           ),
