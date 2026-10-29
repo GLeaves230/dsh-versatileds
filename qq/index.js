@@ -2769,6 +2769,14 @@ function stickerStatePath() {
   return qqStatePath('sticker.state', 'json')
 }
 
+/** index 里存的是文件名（兼容老数据里的绝对路径），这里拼成真实路径。 */
+function stickerFileOf(entry) {
+  const raw = String(entry?.file || '')
+  if (!raw) return ''
+  const name = basename(raw)
+  return name ? join(stickerDir(), name) : ''
+}
+
 function loadStickerIndex() {
   try {
     const data = JSON.parse(readFileSync(stickerIndexPath(), 'utf8'))
@@ -2804,7 +2812,8 @@ function collectSticker(filePath, desc, meta = {}, maxCount = 300) {
     const index = loadStickerIndex()
     const prev = index[hash] || {}
     index[hash] = {
-      file: dest,
+      // 只存文件名，不存绝对路径（换账号/换机器都能用）
+      file: `${hash}${ext}`,
       desc: String(desc || prev.desc || '').slice(0, 200),
       at: Number(prev.at || 0) || Date.now(),
       from: String(meta.from || prev.from || ''),
@@ -2822,7 +2831,7 @@ function collectSticker(filePath, desc, meta = {}, maxCount = 300) {
     if (keys.length > limit) {
       keys.sort((a, b) => Number(index[a]?.at || 0) - Number(index[b]?.at || 0))
       for (const k of keys.slice(0, keys.length - limit)) {
-        try { unlinkSync(index[k].file) } catch { /* 已被删 */ }
+        try { unlinkSync(stickerFileOf(index[k])) } catch { /* 已被删 */ }
         delete index[k]
       }
     }
@@ -2879,7 +2888,7 @@ function markStickerSent(file) {
   try {
     const index = loadStickerIndex()
     for (const key of Object.keys(index)) {
-      if (index[key]?.file === file) {
+      if (stickerFileOf(index[key]) === file) {
         index[key].sent = Number(index[key].sent || 0) + 1
         saveStickerIndex(index)
         return
@@ -5670,7 +5679,7 @@ function startStatusServer(config, napcat = null) {
     if (url.pathname === '/stickers') {
       const index = loadStickerIndex()
       const list = Object.entries(index)
-        .filter(([, v]) => v && v.file && existsSync(v.file))
+        .filter(([, v]) => v && stickerFileOf(v) && existsSync(stickerFileOf(v)))
         .map(([name, v]) => ({
           name,
           desc: String(v.desc || ''),
@@ -5687,14 +5696,15 @@ function startStatusServer(config, napcat = null) {
     if (url.pathname === '/sticker_img') {
       const name = String(url.searchParams.get('name') || '')
       const rec = loadStickerIndex()[name]
-      if (!rec || !existsSync(rec.file)) {
+      const recFile = stickerFileOf(rec)
+      if (!rec || !existsSync(recFile)) {
         res.writeHead(404)
         res.end()
         return
       }
       try {
-        const buf = readFileSync(rec.file)
-        const low = String(rec.file).toLowerCase()
+        const buf = readFileSync(recFile)
+        const low = String(recFile).toLowerCase()
         const type = low.endsWith('.gif') ? 'image/gif'
           : low.endsWith('.png') ? 'image/png'
             : low.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
@@ -5723,7 +5733,7 @@ function startStatusServer(config, napcat = null) {
       const index = loadStickerIndex()
       const rec = index[name]
       if (rec) {
-        try { if (rec.file && existsSync(rec.file)) unlinkSync(rec.file) } catch { /* ignore */ }
+        try { if (recFile && existsSync(recFile)) unlinkSync(recFile) } catch { /* ignore */ }
         delete index[name]
         saveStickerIndex(index)
       }
@@ -8977,7 +8987,7 @@ async function syncGroupRules(force = false) {
   async function backfillStickerPhash() {
     const index = loadStickerIndex()
     const todo = Object.entries(index)
-      .filter(([, v]) => v?.file && !v.phash && existsSync(v.file))
+      .filter(([, v]) => v?.file && !v.phash && existsSync(stickerFileOf(v)))
       .slice(0, 40)
     for (const [hash, entry] of todo) {
       const ph = await perceptualHash(entry.file, config)
