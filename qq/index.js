@@ -5590,9 +5590,30 @@ function startStatusServer(config, napcat = null) {
       return
     }
     if (url.pathname === '/logs') {
+      const groups = listLogFiles(config)
+      // 聊天记录补充「群/私聊 + 名字」给 UI 显示用（文件名不变，2026-10-29）
+      try {
+        const chatGroup = groups.find((g) => String(g.name || '').startsWith('聊天记录'))
+        if (chatGroup) {
+          const groupNames = new Map()
+          const friendNames = new Map()
+          try {
+            for (const g of (napcat ? await napcat.groups() : []) || []) groupNames.set(String(g.group_id), String(g.group_name || ''))
+          } catch { /* ignore */ }
+          try {
+            for (const f of (napcat ? await napcat.friends() : []) || []) friendNames.set(String(f.user_id), String(f.nickname || f.remark || ''))
+          } catch { /* ignore */ }
+          for (const f of chatGroup.files) {
+            const m = String(f.label || '').match(/^(private|group)-(.+)\.log$/)
+            if (!m) continue
+            f.kind = m[1] === 'group' ? 'group' : 'private'
+            f.peerId = m[2]
+            f.peerName = (m[1] === 'group' ? groupNames.get(m[2]) : friendNames.get(m[2])) || ''
+          }
+        }
+      } catch { /* ignore */ }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      // 前端按 { groups: [...] } 解析（2026-10-29 修：之前返回数组，日志页一直显示「还没找到日志」）
-      res.end(JSON.stringify({ groups: listLogFiles(config) }))
+      res.end(JSON.stringify({ groups }))
       return
     }
     if (url.pathname === '/logs/clean') {

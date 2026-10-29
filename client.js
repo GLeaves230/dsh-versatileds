@@ -1621,7 +1621,7 @@ window.__ModuleLoader__.load({
                 },
                 React.createElement('option', { value: '' }, `选择${g.name}…`),
                 g.files.map((f) => React.createElement('option', { key: f.id, value: f.id },
-                  `${f.label}　${(f.size / 1024).toFixed(0)}KB`)),
+                  `${f.kind ? (f.kind === 'group' ? '群 ' : '私聊 ') + (f.peerName ? `${f.peerName}（${f.peerId}）` : f.peerId) + ' · ' : ''}${f.label}　${(f.size / 1024).toFixed(0)}KB`)),
                 ),
               ))
             : React.createElement('div', { style: { fontSize: '12px', opacity: 0.6 } },
