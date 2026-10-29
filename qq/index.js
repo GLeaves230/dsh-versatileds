@@ -30,7 +30,7 @@ function plog(level, ...args) {
 
 import { spawn, spawnSync } from 'node:child_process'
 import http from 'node:http'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync, writeSync } from 'node:fs'
+import { copyFileSync, rmSync, appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync, writeSync } from 'node:fs'
 import { readFile as readFileAsync } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
@@ -2260,6 +2260,143 @@ async function readQqAndNapcatVersion(shell) {
   return out
 }
 
+// ---------- A 流程：本地组装（NapCat 包 + 对应 QQ），不依赖安装器（2026-10-29） ----------
+/** 已知可用的 QQ 安装包（来自 OneKey 安装器实测的官方 CDN 直链）。 */
+const QQ_KNOWN_INSTALLERS = [
+  { version: '9.9.33-52230', url: 'https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe' },
+]
+
+/** 本地组装一个 OneKey 结构的 NapCat 目录：QQ.exe + versions/<ver>/resources/app/napcat。 */
+async function assembleNapcatInstall(dir) {
+  const qq = QQ_KNOWN_INSTALLERS[0]
+  if (!qq) { plog('warn', '[dsh-versatileds] 没有可用的 QQ 安装包记录'); return false }
+  const build = String(qq.version).split('-')[1] || String(qq.version)
+  const ver = String(qq.version)
+  const shell = join(dir, `NapCat.${build}.Shell`)
+  const downloadDir = join(versatiledsBase(), 'normal', 'download')
+  mkdirSync(downloadDir, { recursive: true })
+  const qqExe = join(downloadDir, `qq-${ver}.exe`)
+  const shellZip = join(downloadDir, 'napcat-shell.zip')
+  const q = (x) => String(x).replace(/'/g, "''")
+
+  // 0) 需要 7z 解压 QQ：没有就从 onekey.zip 解出来（本地有就用本地的）
+  if (!existsSync(join(dir, '7z.exe'))) {
+    const onekey = join(downloadDir, 'napcat-onekey.zip')
+    if (!existsSync(onekey)) {
+      plog('info', '[dsh-versatileds] 下载 7z 工具包（OneKey 安装器 zip）')
+      const ok7 = await downloadOneKeyZip(onekey)
+      if (!ok7) { plog('warn', '[dsh-versatileds] 7z 工具包下载失败'); return false }
+    }
+    const r0 = await runPsAsync(`Expand-Archive -LiteralPath '${q(onekey)}' -DestinationPath '${q(dir)}' -Force`, 300_000)
+    if (r0.status !== 0 || !existsSync(join(dir, '7z.exe'))) {
+      plog('warn', '[dsh-versatileds] 7z 工具解压失败')
+      return false
+    }
+  }
+
+  // 1) QQ 安装包（腾讯 CDN，直连就快，不再走镜像）
+  if (!existsSync(qqExe) || statSync(qqExe).size < 100 * 1024 * 1024) {
+    plog('info', `[dsh-versatileds] 下载 QQ ${ver}（约 300MB，直连腾讯 CDN）`)
+    const r = await runPsAsync(`$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '${q(qq.url)}' -OutFile '${q(qqExe)}' -TimeoutSec 1800`, 1900_000)
+    let size = 0
+    try { size = statSync(qqExe).size } catch { size = 0 }
+    if (r.status !== 0 || size < 100 * 1024 * 1024) {
+      plog('warn', `[dsh-versatileds] QQ 下载失败（${Math.round(size / 1048576)} MB）`)
+      return false
+    }
+    plog('info', `[dsh-versatileds] QQ 下载完成（${Math.round(size / 1048576)} MB）`)
+  }
+
+  // 2) NapCat Shell 包
+  if (!existsSync(shellZip) || statSync(shellZip).size < 10 * 1024 * 1024) {
+    plog('info', '[dsh-versatileds] 下载 NapCat Shell 包（约 34MB）')
+    const ok = await downloadViaMirrors('https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip', shellZip, { minBytes: 10 * 1024 * 1024, officialTimeoutSec: 120, mirrorTimeoutSec: 900 })
+    if (!ok) { plog('warn', '[dsh-versatileds] NapCat 包下载失败'); return false }
+  }
+
+  // 3) 解压 QQ 安装包（安装器同款：7z x QQ.exe，再把 QQ.exe/versions 提到 shell 根）
+  try { rmSync(shell, { recursive: true, force: true }) } catch { /* ignore */ }
+  const sevenZip = join(dir, '7z.exe')
+  if (!existsSync(sevenZip)) {
+    plog('warn', '[dsh-versatileds] 找不到 7z.exe（安装器没解压出来）')
+    return false
+  }
+  plog('info', `[dsh-versatileds] 解压 QQ 到 ${shell}`)
+  const r1 = await runPsAsync(`& '${q(sevenZip)}' -o'${q(shell)}' x '${q(qqExe)}' -y | Out-Null`, 900_000)
+  if (r1.status !== 0) {
+    plog('warn', '[dsh-versatileds] QQ 解压失败')
+    return false
+  }
+  // 整理：把 .rsrc 里出来的 QQ.exe / versions / msvcp140.dll 提到 shell 根
+  try {
+    const inner = join(shell, 'QQ.exe')
+    if (!existsSync(inner)) {
+      const found = findFileRecursive(shell, 'QQ.exe')
+      if (found) {
+        const from = dirname(found)
+        for (const name of ['QQ.exe', 'msvcp140.dll', 'versions']) {
+          const src = join(from, name)
+          if (existsSync(src)) { try { renameSync(src, join(shell, name)) } catch { /* ignore */ } }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 4) NapCat 放进 versions/<ver>/resources/app/napcat
+  const appDir = join(shell, 'versions', ver, 'resources', 'app', 'napcat')
+  mkdirSync(appDir, { recursive: true })
+  plog('info', `[dsh-versatileds] 解压 NapCat 到 ${appDir}`)
+  const r2 = await runPsAsync(`Expand-Archive -LiteralPath '${q(shellZip)}' -DestinationPath '${q(appDir)}' -Force`, 600_000)
+  if (r2.status !== 0) {
+    plog('warn', '[dsh-versatileds] NapCat 解压失败')
+    return false
+  }
+
+  // 5) 改 package.json 的 main（安装器同款）
+  try {
+    const pj = join(shell, 'versions', ver, 'resources', 'app', 'package.json')
+    if (existsSync(pj)) {
+      const j = JSON.parse(readFileSync(pj, 'utf8'))
+      j.main = './napcat/napcat.mjs'
+      writeFileSync(pj, JSON.stringify(j, null, 2), 'utf8')
+    }
+  } catch { /* ignore */ }
+
+  // 6) bootmain（napcat.bat / NapCatWinBootMain.exe / Hook.dll）
+  try {
+    const bm = join(dir, 'bootmain')
+    if (existsSync(bm)) {
+      for (const f of readdirSync(bm)) {
+        try { copyFileSync(join(bm, f), join(shell, f)) } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore */ }
+
+  const ok = findNapcatShell(dir)
+  if (ok) {
+    plog('info', `[dsh-versatileds] 本地组装完成：${ok}`)
+    return true
+  }
+  plog('warn', '[dsh-versatileds] 本地组装后仍校验不过')
+  return false
+}
+
+/** 在目录里递归找某个文件名（组装用）。 */
+function findFileRecursive(root, name, depth = 0) {
+  if (depth > 6 || !existsSync(root)) return ''
+  try {
+    for (const e of readdirSync(root, { withFileTypes: true })) {
+      const p = join(root, e.name)
+      if (e.isFile() && e.name.toLowerCase() === name.toLowerCase()) return p
+      if (e.isDirectory()) {
+        const hit = findFileRecursive(p, name, depth + 1)
+        if (hit) return hit
+      }
+    }
+  } catch { /* ignore */ }
+  return ''
+}
+
 async function ensureOneKeyInstaller(config, dir) {
   if (config.napcatUseInstaller?.get?.() === false) return false
   try {
@@ -2341,7 +2478,17 @@ async function ensureNapcatPackage(config) {
   napcatPkg.busy = true
   napcatPkg.error = ''
   try {
-    // 优先 OneKey 安装器（自带适配 QQ）；能走通就不用老流程了（2026-10-29）
+    // A 流程：本地组装（NapCat 包 + 对应 QQ，不依赖安装器）→ B 流程：OneKey 安装器 → C 老流程（2026-10-29）
+    if (await assembleNapcatInstall(dir)) {
+      napcatPkg.ready = true
+      const curQq1 = await detectCurrentQq(config)
+      if (curQq1) {
+        plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq1}（按这个号写 OneBot 配置）`)
+        setLoginQq(curQq1); rememberLoginQq(curQq1)
+      }
+      ensureOneBotConfig(config, curQq1)
+      return true
+    }
     if (await ensureOneKeyInstaller(config, dir)) {
       napcatPkg.ready = true
       const curQq2 = await detectCurrentQq(config)
