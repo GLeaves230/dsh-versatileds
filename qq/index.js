@@ -4475,6 +4475,24 @@ async function isQqProcess(pid) {
   }
 }
 
+/** 是不是「NapCat 拉起的那个 QQ」：按进程可执行路径判断，日常大号 QQ 不动（2026-10-29 主人要求）。 */
+async function isNapcatQqProcess(pid, config) {
+  const id = Number(pid)
+  if (!id || id < 100) return false
+  try {
+    const r = await runAsync('powershell', ['-NoProfile', '-Command',
+      `try { (Get-Process -Id ${id} -ErrorAction Stop).Path } catch { }`], 8000)
+    const exe = String(r.stdout || '').trim()
+    if (!exe) return false
+    const lp = exe.toLowerCase().replace(/\\/g, '/')
+    if (!/qq\.exe$/.test(lp)) return false
+    const shell = String(napcatShellRoot(config) || '').toLowerCase().replace(/\\/g, '/')
+    const root = String(napcatRoot(config) || '').toLowerCase().replace(/\\/g, '/')
+    // 路径在 NapCat 自己的目录里才算我们的
+    return (shell && lp.startsWith(shell)) || (root && lp.startsWith(root))
+  } catch { return false }
+}
+
 /** 端口持有者 PID（解析 netstat，比 PowerShell 的 Get-NetTCPConnection 兼容性好）。 */
 async function portOwnerPid(port) {
   try {
@@ -4501,10 +4519,10 @@ async function resolveNapcatPid(home = dshHome()) {
   let pid = (await portOwnerPid(6099)) || (await portOwnerPid(3000))
   if (!pid) {
     try {
-      const f = join(home, 'napcat', 'napcat', 'launcher.pid')
+      const f = join(napcatShellRoot(config), 'launcher.pid')
       if (existsSync(f)) {
         const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-        if (v > 100 && await isQqProcess(v)) pid = v
+        if (v > 100 && await isNapcatQqProcess(v, config)) pid = v
       }
     } catch { /* ignore */ }
   }
@@ -4549,17 +4567,18 @@ async function killOldStartedNapcat(config) {
   const killed = []
   for (const pid of pids) {
     try {
-      if (!(await isQqProcess(pid))) continue
+      // 只认 NapCat 隔离版的 QQ；日常大号（D:\Program Files\Tencent\QQNT）不动
+      if (!(await isNapcatQqProcess(pid, config))) continue
       await taskkillTree(pid, false)
       killed.push(pid)
     } catch { /* 单个失败不影响别的 */ }
   }
   // launcher.pid 里的那个也算（NapCat 注入时写的）
   try {
-    const f = join(dshHome(), 'napcat', 'napcat', 'launcher.pid')
+    const f = join(napcatShellRoot(config), 'launcher.pid')
     if (existsSync(f)) {
       const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-      if (v > 100 && await isQqProcess(v)) {
+      if (v > 100 && await isNapcatQqProcess(v, config)) {
         await taskkillTree(v, false)
         killed.push(v)
       }
@@ -4567,15 +4586,7 @@ async function killOldStartedNapcat(config) {
   } catch { /* ignore */ }
   // NapCatWinBootMain 守护树也清掉，不然它会把 QQ 再拉回来
   try { await runAsync('taskkill', ['/F', '/T', '/IM', 'NapCatWinBootMain.exe'], 8000) } catch { /* ignore */ }
-  // 再杀「本账号的 QQ 主进程」（命令行里有 -q <账号>）：它会反复重启子进程，
-  // 只杀端口持有者/子进程杀不干净（2026-10-28 实测：12160 一直重启子进程抢 6099）
-  try {
-    const quick = String(config?.napcatQuickLogin?.get?.() || '').trim()
-    if (quick) {
-      const ps = `Get-CimInstance Win32_Process -Filter "Name='QQ.exe'" | Where-Object { $_.CommandLine -like '*-q ${quick}*' } | ForEach-Object { taskkill /F /T /PID $_.ProcessId }`
-      await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 20000)
-    }
-  } catch { /* ignore */ }
+  // 不再按 -q 模糊杀 QQ：那会误伤日常大号（2026-10-29）
   saveStartedPids([])
   return killed
 }
@@ -4592,10 +4603,18 @@ function killNapCatWeStarted(config) {
   let pid = 0
   // 1) 注入的 QQ 进程（launcher.pid），必须验明是 QQ
   try {
-    const f = join(home, 'napcat', 'napcat', 'launcher.pid')
+    const f = join(napcatShellRoot(config), 'launcher.pid')
     if (existsSync(f)) {
       const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-      if (v > 100 && isQqProcess(v)) pid = v
+      // 同步路径：拿进程路径判断是不是 NapCat 那个 QQ（isQqProcess 是异步的，这里不能用）
+      if (v > 100) {
+        try {
+          const r = spawnSync('powershell', ['-NoProfile', '-Command', `try { (Get-Process -Id ${v} -ErrorAction Stop).Path } catch { }`], { timeout: 8000, windowsHide: true })
+          const exe = String(r.stdout || '').trim().toLowerCase().replace(/\\/g, '/')
+          const shellDir = String(napcatShellRoot(config) || '').toLowerCase().replace(/\\/g, '/')
+          if (/qq\.exe$/.test(exe) && shellDir && exe.startsWith(shellDir)) pid = v
+        } catch { /* ignore */ }
+      }
     }
   } catch { /* ignore */ }
   // 2) 没有就杀 NapCat 服务进程（6099 持有者）
@@ -4651,10 +4670,10 @@ async function napcatPidCandidates(config, home = dshHome()) {
   }
   if (!pids.length) {
     try {
-      const f = join(home, 'napcat', 'napcat', 'launcher.pid')
+      const f = join(napcatShellRoot(config), 'launcher.pid')
       if (existsSync(f)) {
         const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-        if (v > 100 && await isQqProcess(v)) pids.push(v)
+        if (v > 100 && await isNapcatQqProcess(v, config)) pids.push(v)
       }
     } catch { /* ignore */ }
   }
