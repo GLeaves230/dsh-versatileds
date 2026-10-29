@@ -1501,7 +1501,7 @@ async function initNotesMem() {
 }
 
 function biliLogPath() {
-  return join(versatiledsBase(), 'qq', 'bili_log.md')
+  return join(qqAccountDir(), 'bili_log.md')
 }
 
 /** 把 B站 看到的东西记下来，QQ 生成时读它。 */
@@ -2690,7 +2690,7 @@ function loadSearchResult(maxAgeMin = 15) {
 // ---------- 直播 ----------
 
 function livePath() {
-  return join(versatiledsBase(), 'qq', 'live.md')
+  return join(qqAccountDir(), 'live.md')
 }
 
 // ---------- 图片 / 表情 ----------
@@ -3537,7 +3537,7 @@ function liveFramePath(config) {
 }
 
 function liveRequestPath() {
-  return join(versatiledsBase(), 'qq', 'live.request.json')
+  return join(qqAccountDir(), 'live.request.json')
 }
 
 /** 一键清缓存：logs 模式清空 chat/ 全部会话日志 + 旧日志；live 模式清直播相关文件。 */
@@ -3582,7 +3582,7 @@ function clearCache(target = 'live', config) {
 }
 
 function liveStatePath() {
-  return join(versatiledsBase(), 'qq', 'live.state.json')
+  return join(qqAccountDir(), 'live.state.json')
 }
 
 function loadLiveState() {
@@ -4612,7 +4612,7 @@ function killNapCatWeStarted(config) {
     napcatPidCache = { pid: 0, at: 0 }
     // 退出阶段 stdout 已经还回终端了，日志写文件，别刷到提示符后面
     try {
-      appendFileSync(join(versatiledsBase(), 'qq', 'napcat_exit.log'),
+      appendFileSync(join(qqAccountDir(), 'napcat_exit.log'),
         `- ${new Date().toLocaleString('zh-CN', { hour12: false })} 已清理本次拉起的 NapCat（pid=${pid}）\n`, 'utf8')
     } catch { /* ignore */ }
     return true
@@ -4720,7 +4720,7 @@ async function logoutNapCat(config) {
     }
   } catch { /* ignore */ }
   try {
-    appendFileSync(join(versatiledsBase(), 'qq', 'napcat_exit.log'),
+    appendFileSync(join(qqAccountDir(), 'napcat_exit.log'),
       `- ${new Date().toLocaleString('zh-CN', { hour12: false })} 主人点了退出登录：`
       + `pids=${pids.join(',')} ${alive ? '还有进程没退（UAC 没点？）' : '已全部退出'}\n`, 'utf8')
   } catch { /* ignore */ }
@@ -5453,16 +5453,24 @@ function startStatusServer(config, napcat = null) {
       return
     }
     if (url.pathname === '/login/open') {
-      // 在资源管理器里打开 launcher.bat 所在目录，方便主人右键用管理员运行
+      // 在资源管理器里打开 NapCat 启动器所在目录（OneKey 是 NapCat.<build>.Shell）2026-10-29
       const dir = napcatShellRoot(config)
-      const ok = existsSync(dir)
-      if (ok) {
+      const exists = existsSync(dir)
+      let opened = false
+      if (exists) {
         try {
-          await runAsync('explorer', [dir], 5000)
-        } catch { /* explorer 打不开就算了 */ }
+          const q = (x) => String(x).replace(/'/g, "''")
+          // 两种都试：cmd start 最稳，explorer 兜底
+          const r = await runAsync('cmd', ['/c', 'start', '', `${dir}`], 8000)
+          opened = r.status === 0
+          if (!opened) {
+            await runAsync('explorer.exe', [dir], 8000)
+            opened = true
+          }
+        } catch { opened = false }
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok, dir }))
+      res.end(JSON.stringify({ ok: exists && opened, exists, opened, dir }))
       return
     }
     if (url.pathname === '/qr/png') {
@@ -6580,7 +6588,7 @@ export function apply(ctx, config) {
   /** 私聊排查探针：写 qq/private_debug.log（2026-10-26 私聊不回时用，查完可以删）。 */
   const qqProbe = (msg) => {
     try {
-      appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+      appendFileSync(join(qqAccountDir(), 'private_debug.log'),
         `[${new Date().toLocaleString('zh-CN', { hour12: false })}] ${msg}\n`, 'utf8')
     } catch { /* ignore */ }
   }
@@ -7202,7 +7210,7 @@ export function apply(ctx, config) {
     try {
       const r = await web.search({ query: String(text).slice(0, 80), maxResults: 3 })
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'search_debug.log'),
+        appendFileSync(join(qqAccountDir(), 'search_debug.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} q=${String(text).slice(0, 60)} len=${String(r?.content || '').length} src=${(r?.sources || []).length}\n`, 'utf8')
       } catch { /* ignore */ }
       const parts = []
@@ -7212,13 +7220,13 @@ export function apply(ctx, config) {
       }
       const joined = parts.join('\n').trim()
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'search_debug.log'),
+        appendFileSync(join(qqAccountDir(), 'search_debug.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} q=${String(text).slice(0, 60)} parts=${joined.length}\n`, 'utf8')
       } catch { /* ignore */ }
       return joined
     } catch (err) {
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'search_debug.log'),
+        appendFileSync(join(qqAccountDir(), 'search_debug.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} q=${String(text).slice(0, 60)} FAIL ${err?.message ?? err}\n`, 'utf8')
       } catch { /* ignore */ }
       return ''
@@ -7286,7 +7294,7 @@ export function apply(ctx, config) {
   function quickAnswer(text) {
     const t = String(text)
     try {
-      appendFileSync(join(versatiledsBase(), 'qq', 'quick.log'),
+      appendFileSync(join(qqAccountDir(), 'quick.log'),
         `${new Date().toISOString()} called text=${JSON.stringify(t).slice(0, 40)}\n`)
     } catch { /* ignore */ }
 
@@ -8090,7 +8098,7 @@ async function syncGroupRules(force = false) {
   async function describeImage(filePath) {
     const debug = (msg) => {
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'image_debug.log'),
+        appendFileSync(join(qqAccountDir(), 'image_debug.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${msg}\n`, 'utf8')
       } catch { /* ignore */ }
     }
@@ -8301,7 +8309,7 @@ async function syncGroupRules(force = false) {
     const quick = String(config.napcatQuickLogin.get() || '').trim()
     const noise = (m) => {
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'napcat_start.log'),
+        appendFileSync(join(qqAccountDir(), 'napcat_start.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${m}\n`, 'utf8')
       } catch { /* ignore */ }
     }
@@ -8463,7 +8471,7 @@ async function syncGroupRules(force = false) {
       const since = Date.now()
       // 启动日志也写文件，控制台只留真正需要盯的几行
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'napcat_start.log'),
+        appendFileSync(join(qqAccountDir(), 'napcat_start.log'),
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ensure launcher=${launcher} reason=${reason}\n`, 'utf8')
       } catch { /* ignore */ }
       await startNapCat(launcher)
@@ -8827,7 +8835,7 @@ async function syncGroupRules(force = false) {
       ? raw
       : `${raw}${raw.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`
 
-    const logFile = join(versatiledsBase(), 'qq', 'ws.log')
+    const logFile = join(qqAccountDir(), 'ws.log')
     const log = (line) => {
       try {
         mkdirSync(dirname(logFile), { recursive: true })
@@ -9750,7 +9758,7 @@ async function syncGroupRules(force = false) {
     const lowMode = isLowBalanceMode()
     if (data.message_type === 'private') {
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+        appendFileSync(join(qqAccountDir(), 'private_debug.log'),
           `[${new Date().toLocaleString('zh-CN', { hour12: false })}] recv from=${sender} quiet=${inQuiet(`p:${sender}`)} text=${plainText(data.message).slice(0, 30)}\n`, 'utf8')
       } catch { /* ignore */ }
       if (!config.autoReplyEnabled.get()) return
@@ -10061,7 +10069,7 @@ async function syncGroupRules(force = false) {
       if (more.length) imageFiles = more
     }
     try {
-      appendFileSync(join(versatiledsBase(), 'qq', 'image_debug.log'),
+      appendFileSync(join(qqAccountDir(), 'image_debug.log'),
         `- ${new Date().toLocaleString('zh-CN', { hour12: false })} recv id=${data.message_id} files=${imageFiles.length} segs=${(data.message || []).map((s) => s.type).join(',')}\n`, 'utf8')
     } catch { /* ignore */ }
     if (!text) return
@@ -10442,7 +10450,7 @@ async function syncGroupRules(force = false) {
           scope: isGroup ? String(data.group_id) : `private:${sender}`,
         }
         try {
-          appendFileSync(join(versatiledsBase(), 'qq', 'image_debug.log'),
+          appendFileSync(join(qqAccountDir(), 'image_debug.log'),
             `- ${new Date().toLocaleString('zh-CN', { hour12: false })} imageInfo len=${imageInfo.length} ${imageInfo.slice(0, 60).replace(/\n/g, ' ')}\n`, 'utf8')
         } catch { /* ignore */ }
         if (config.stickerEnabled.get() === true) {
@@ -10545,7 +10553,7 @@ async function syncGroupRules(force = false) {
       qqProbe(`after generate len=${String(reply || '').length}`)
       if (reply && /\[免回\]/.test(reply)) {
         try {
-          appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+          appendFileSync(join(qqAccountDir(), 'private_debug.log'),
             `[${new Date().toLocaleString('zh-CN', { hour12: false })}] 免回标记，静默返回（${data.message_type} ${data.group_id || sender}）\n`, 'utf8')
         } catch { /* ignore */ }
         return
@@ -10655,7 +10663,7 @@ async function syncGroupRules(force = false) {
 
       // 私聊没回的时候要能查：到底生成空了、还是发送失败（2026-10-26 主人：「怎么私聊不回了」）
       try {
-        appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+        appendFileSync(join(qqAccountDir(), 'private_debug.log'),
           `[${new Date().toLocaleString('zh-CN', { hour12: false })}] reply len=${String(reply || '').length} type=${data.message_type}\n`, 'utf8')
       } catch { /* ignore */ }
       if (!String(reply || '').trim()) {
@@ -10933,7 +10941,7 @@ async function syncGroupRules(force = false) {
         } catch { /* 日志失败不影响回复 */ }
       } catch (err) {
         try {
-          appendFileSync(join(versatiledsBase(), 'qq', 'private_debug.log'),
+          appendFileSync(join(qqAccountDir(), 'private_debug.log'),
             `[${new Date().toLocaleString('zh-CN', { hour12: false })}] error: ${err?.message ?? err}\n`, 'utf8')
         } catch { /* ignore */ }
         plog('warn', '[dsh-versatileds] 自动回复失败:', err?.message ?? err)
@@ -11216,7 +11224,7 @@ async function syncGroupRules(force = false) {
         }
         if (args.what === 'memory' || args.what === 'all') tail(memoryPath(), '事件记忆 memory.md')
         if (args.what === 'bili' || args.what === 'all') {
-          tail(join(versatiledsBase(), 'qq', 'bili_log.md'), 'B站 日志 bili_log.md')
+          tail(join(qqAccountDir(), 'bili_log.md'), 'B站 日志 bili_log.md')
         }
         if (args.what === 'groups' || args.what === 'all') {
           tail(rulesMdPath(), '群规 group_rules.md', 8)
