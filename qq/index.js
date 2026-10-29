@@ -4741,6 +4741,8 @@ async function logoutNapCat(config) {
  * id 用相对标识（qq/... 或 napcat/...），读取时按前缀还原成绝对路径。
  */
 function listLogFiles(config) {
+  const base = versatiledsBase()
+  const rel = (file) => relative(base, file).replace(/\\/g, '/')
   const groups = []
   const pack = (id, label, p) => {
     try {
@@ -4753,43 +4755,41 @@ function listLogFiles(config) {
   }
   const add = (name, files) => { if (files.length) groups.push({ name, files }) }
 
-  // 1) 插件自己的日志
+  // 1) 插件自己的日志（按号目录，2026-10-29）
   {
-    const dir = join(versatiledsBase(), 'qq')
+    const dir = qqAccountDir()
     const files = []
-    for (const name of ['ws.log', 'napcat_start.log', 'napcat_exit.log', 'image_debug.log', 'auto_browse.log']) {
-      const f = pack(`qq/${name}`, name, join(dir, name))
+    for (const name of ['ws.log', 'napcat_start.log', 'napcat_exit.log', 'image_debug.log', 'private_debug.log', 'search_debug.log', 'quick.log', 'dialog.log', 'qqbot-outbound.log']) {
+      const f = pack(rel(join(dir, name)), name, join(dir, name))
       if (f) files.push(f)
     }
     files.sort((a, b) => b.mtime - a.mtime)
-    add('插件日志', files)
+    add('插件日志（当前账号）', files)
   }
 
-  // 2) NapCat 自己的日志（<napcat>\logs 下递归找）
+  // 2) NapCat 自己的日志（跟随实际 app 目录：OneKey 在 versions/<ver>/resources/app/napcat/logs）
   {
-    const root = napcatRoot(config)
-    const base = join(root, 'napcat', 'logs')
+    const base2 = join(napcatAppDir(config), 'logs')
     const files = []
-    const walk = (dir, depth) => {
-      if (depth > 3) return
+    const walk = (dir, depth2) => {
+      if (depth2 > 3) return
       let entries = []
       try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
       for (const e of entries) {
         const p = join(dir, e.name)
-        if (e.isDirectory()) walk(p, depth + 1)
+        if (e.isDirectory()) walk(p, depth2 + 1)
         else if (/\.(log|txt)$/i.test(e.name)) {
-          const rel = relative(root, p).replace(/\\/g, '/')
-          const f = pack(rel, rel.replace(/^napcat\/logs\//, ''), p)
+          const f = pack(rel(p), e.name, p)
           if (f) files.push(f)
         }
       }
     }
-    walk(base, 0)
+    walk(base2, 0)
     files.sort((a, b) => b.mtime - a.mtime)
     add('NapCat 日志', files.slice(0, 30))
   }
 
-  // 3) 聊天记录
+  // 3) 聊天记录（按号：qq/<账号>/chat）
   {
     const dir = chatDir()
     const files = []
@@ -4797,19 +4797,13 @@ function listLogFiles(config) {
     try { entries = readdirSync(dir) } catch { /* ignore */ }
     for (const name of entries) {
       if (!name.endsWith('.log')) continue
-      const f = pack(`qq/chat/${name}`, name, join(dir, name))
+      const f = pack(rel(join(dir, name)), name, join(dir, name))
       if (f) files.push(f)
     }
-    // 聊天记录按大小降序：消息越多越活跃，排在最前面
-    files.sort((a, b) => b.size - a.size)
-    add('聊天记录', files.slice(0, 50))
+    files.sort((a, b) => b.mtime - a.mtime)
+    add('聊天记录（当前账号）', files.slice(0, 30))
   }
-
-  // 0 字节的日志（NapCat 偶尔会建空文件）列表里不显示，点开也是空的
-  for (const g of groups) {
-    g.files = g.files.filter((f) => Number(f.size) > 0)
-  }
-  return { groups }
+  return groups
 }
 
 /** 把日志 id 还原成绝对路径，并挡住目录穿越。 */
@@ -4821,9 +4815,11 @@ function resolveLogPath(config, id) {
     file = join(base, id)
     if (!file.startsWith(base)) return ''
   } else if (id.startsWith('napcat/')) {
-    // NapCat 装在 <napcatRoot>/napcat/ 下，logs 也在那一层
-    file = join(napcatBase, 'napcat', id.slice('napcat/'.length))
-    if (!file.startsWith(napcatBase)) return ''
+    // NapCat 日志跟随实际 app 目录（老布局 <root>/napcat，OneKey 在 versions/…/app/napcat）
+    const rest = id.slice('napcat/'.length)
+    const candidates = [join(napcatAppDir(config), rest), join(napcatBase, 'napcat', rest)]
+    file = candidates.find((f) => existsSync(f)) || ''
+    if (!file) return ''
   } else {
     return ''
   }
