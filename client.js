@@ -1678,6 +1678,10 @@ window.__ModuleLoader__.load({
             }
           })
           .catch(() => setSt(null))
+        fetch(`${QQ_STATUS_URL}/account-settings`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => setClearOnLogout(Boolean(d && d.settings && d.settings.quickLoginClearOnLogout)))
+          .catch(() => {})
         fetch(`${QQ_STATUS_URL}/accounts`, { cache: 'no-store' })
           .then((r) => r.json())
           .then((d) => setAccounts((d.accounts || []).map((a) => a.id || a)))
@@ -1696,7 +1700,15 @@ window.__ModuleLoader__.load({
           body: JSON.stringify(body),
         })
           .then((r) => r.json())
-          .then((d) => { setMsg(d && d.ok ? '已保存' : '保存失败'); load() })
+          .then((d) => {
+            setMsg(d && d.ok ? '已保存' : '保存失败')
+            fetch(`${QQ_STATUS_URL}/account-settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ quickLoginClearOnLogout: clearOnLogout }),
+            }).catch(() => {})
+            load()
+          })
           .catch(() => setMsg('接口没响应'))
       }
       const expireText = !st
@@ -1733,6 +1745,13 @@ window.__ModuleLoader__.load({
             style: { padding: '3px 6px', borderRadius: '6px', background: 'transparent', color: 'inherit', border: '1px solid rgba(128,128,128,0.3)' },
           })
           : null,
+        React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' } },
+          React.createElement('input', {
+            type: 'checkbox', checked: clearOnLogout,
+            onChange: (e) => setClearOnLogout(e.target.checked),
+          }),
+          '退出登录时停用免登录（默认关；开着时退出就等于清掉，下次要扫码）',
+        ),
         React.createElement('button', { type: 'button', style: skipStyle, onClick: save }, '保存'),
         React.createElement('span', { style: hintStyle }, `当前：${expireText}${st && st.pendingDays ? `；已选 ${st.pendingDays} 天，等下次扫码登录后开始算` : ''}`),
         msg ? React.createElement('span', { style: hintStyle }, msg) : null,

@@ -1675,6 +1675,7 @@ function quickLoginUsable(config) {
   const want = String(config?.napcatQuickLogin?.get?.() || '').trim()
   if (!want) return ''
   const st = loadQuickLoginState()
+  if (st.disabled === true) return ''
   if (String(st.account || '') !== want) {
     // 还没登记过这个号的时效：按「永久」先放行（老用户不受影响）
     return want
@@ -1704,11 +1705,22 @@ function consumePendingQuickLogin() {
     if (!st.account || !(days > 0)) return false
     const next = {
       ...st,
+      disabled: false,
       days,
       expireAt: Date.now() + days * 86400_000,
       pendingDays: 0,
       renewedAt: Date.now(),
     }
+    writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
+    return true
+  } catch { return false }
+}
+
+/** 停用免登录：下次必须扫码（等重新扫码登录成功再生成 ts）。 */
+function disableQuickLogin() {
+  try {
+    const st = loadQuickLoginState()
+    const next = { ...st, disabled: true, expireAt: 0, pendingDays: 0 }
     writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
     return true
   } catch { return false }
@@ -5381,6 +5393,13 @@ function startStatusServer(config, napcat = null) {
     }
     if (url.pathname === '/login/stop' || url.pathname === '/napcat/stop') {
       // 「退出登录」：杀掉 NapCat 进程。杀之前要等进程真退，所以这个请求会挂几秒
+      // 默认不动免登录时效；「退出登录时停用免登录」开着才清（2026-10-29）
+      try {
+        if (acctCfg(config, 'quickLoginClearOnLogout', false) === true) {
+          disableQuickLogin()
+          plog('info', '[dsh-versatileds] 退出登录：已按设置停用免登录（下次需要扫码）')
+        }
+      } catch { /* ignore */ }
       let r
       try {
         r = napcatControl.stop ? await napcatControl.stop() : { ok: false, error: '插件还没就绪' }
