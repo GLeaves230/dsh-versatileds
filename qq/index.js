@@ -1689,6 +1689,18 @@ function quickLoginUsable(config) {
   return want
 }
 
+/** 免登录成功一次就续期：expireAt = now + days（永久/未设置天数不动，2026-10-29）。 */
+function renewQuickLogin() {
+  try {
+    const st = loadQuickLoginState()
+    const days = Number(st.days || 0)
+    if (!st.account || !(days > 0)) return false
+    const next = { ...st, expireAt: Date.now() + days * 86400_000, renewedAt: Date.now() }
+    writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
+    return true
+  } catch { return false }
+}
+
 function napcatLauncherPath(config) {
   const custom = String(config.napcatLauncher.get() || '').trim()
   if (custom) return custom
@@ -5158,7 +5170,7 @@ function startStatusServer(config, napcat = null) {
             const expireAt = permanent
               ? null
               : (Number(j.expireAt) > 0 ? Number(j.expireAt) : (days > 0 ? Date.now() + days * 86400_000 : null))
-            const next = { account, expireAt, at: Date.now() }
+            const next = { account, expireAt, at: Date.now(), days: permanent ? 0 : (days > 0 ? days : null) }
             mkdirSync(dirname(quickLoginStatePath()), { recursive: true })
             writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
             try { config.napcatQuickLogin.set(account) } catch { /* 老框架没有 set 就算了 */ }
@@ -5179,6 +5191,7 @@ function startStatusServer(config, napcat = null) {
         account: String(st.account || ''),
         expireAt: st.expireAt === undefined ? null : st.expireAt,
         permanent: st.expireAt === null || st.expireAt === undefined,
+        days: Number(st.days || 0) || null,
         remainingDays: (st.expireAt && Number(st.expireAt) > 0) ? Math.max(0, Math.ceil((Number(st.expireAt) - now) / 86400_000)) : null,
         expired,
         usable: Boolean(quickLoginUsable(config)),
@@ -8700,6 +8713,8 @@ async function syncGroupRules(force = false) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
           plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
+          // 免登录成功一次就续期（2026-10-29 主人要的滑动过期）
+          try { if (quickLoginUsable(config)) renewQuickLogin() } catch { /* ignore */ }
           // 把这次拉起来的 pid 记下来：下次点「登录服务」先按它清旧进程（2026-10-28）
           try { recordStartedPid(await resolveNapcatPid()) } catch { /* ignore */ }
           // 退出登录时 WS 已经收手了，这里让它重新连上

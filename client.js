@@ -1737,7 +1737,7 @@ window.__ModuleLoader__.load({
         React.createElement('span', { style: hintStyle }, `当前：${expireText}`),
         msg ? React.createElement('span', { style: hintStyle }, msg) : null,
         React.createElement('div', { style: { ...hintStyle, width: '100%' } },
-          '要本机这个号成功扫码登录过一次才有登录态；到期后自动取消快速登录，会要求重新扫码。'),
+          '要本机这个号成功扫码登录过一次才有登录态；每次免登录成功都会把时效往后推（滑动续期），过期后自动取消并要求重新扫码。'),
       )
     }
 
