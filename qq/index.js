@@ -1690,6 +1690,9 @@ function quickLoginUsable(config) {
 }
 
 /** 免登录成功一次就续期：expireAt = now + days（永久/未设置天数不动，2026-10-29）。 */
+/** 本次拉起 NapCat 是不是用的快速登录（扫码登录才会重算免登录时效）。 */
+let napcatStartedQuick = false
+
 function renewQuickLogin() {
   try {
     const st = loadQuickLoginState()
@@ -8538,7 +8541,8 @@ async function syncGroupRules(force = false) {
 
   /** 优先走「最高权限」计划任务，绕过 UAC；没建任务就退回直接启动。 */
   async function startNapCat(launcher) {
-    const quick = String(config.napcatQuickLogin.get() || '').trim()
+    const quick = quickLoginUsable(config)
+    napcatStartedQuick = Boolean(quick)
     const noise = (m) => {
       try {
         appendFileSync(join(qqAccountDir(), 'napcat_start.log'),
@@ -8713,8 +8717,8 @@ async function syncGroupRules(force = false) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
           plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
-          // 免登录成功一次就续期（2026-10-29 主人要的滑动过期）
-          try { if (quickLoginUsable(config)) renewQuickLogin() } catch { /* ignore */ }
+          // 只有「扫码登录」才重算时效；免登录期间不续期（2026-10-29 主人澄清）
+          try { if (!napcatStartedQuick) renewQuickLogin() } catch { /* ignore */ }
           // 把这次拉起来的 pid 记下来：下次点「登录服务」先按它清旧进程（2026-10-28）
           try { recordStartedPid(await resolveNapcatPid()) } catch { /* ignore */ }
           // 退出登录时 WS 已经收手了，这里让它重新连上
