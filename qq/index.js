@@ -363,7 +363,7 @@ export const Config = Schema.object({
     .description('同一个群两次主动接话的最短间隔（秒）'),
   groupReplyChance: Schema.number().default(30).volatile()
     .description('群聊里没被 @ 时，随机接话的概率（0-100）；被 @ 时一定回'),
-  quietAfterComplaintSec: Schema.number().default(180).volatile()
+  quietAfterComplaintSec: Schema.number().default(600).volatile()
     .description('被群友说吵/刷屏之后，多少秒内不主动说话（被 @ 或点名除外）；0 关闭'),
   neighborReplyChance: Schema.number().default(30).volatile()
     .description('隔壁家 AI 在聊、没点你时，你主动搭一句的概率（0-100）；0 就是完全不掺和'),
@@ -3538,7 +3538,7 @@ function pickRetortStyle(config) {
  * 填目录就补 latest.jpg，填完整文件路径就原样用。
  */
 function liveFramePath(config) {
-  const custom = String(config.liveFramePath.get() || '').trim()
+  const custom = String(acctCfg(config, 'liveFramePath', '') || '').trim()
   if (!custom) return ''
   return /\.(jpg|jpeg|png)$/i.test(custom) ? custom : join(custom, 'latest.jpg')
 }
@@ -6432,10 +6432,10 @@ function plainText(segments) {
 // 默认不按名字猜：群里昵称带「肥鱼」的真人不少（2026-10-25 主人指出「星星眼的Sans」是群友，
 // 只是名片叫「大肥鱼～星星眼的Sans」）。默认只认 neighborBots 里登记的 QQ 号；
 // 真想额外按名字认，自己往 neighborNameKeywords 里填。
-const DEFAULT_NEIGHBOR_KEYWORDS = ''
+const DEFAULT_NEIGHBOR_KEYWORDS = '肥鱼,小鲸鱼,小肥鱼'
 
 function neighborKeywords(config) {
-  const raw = String(config?.neighborNameKeywords?.get?.() || DEFAULT_NEIGHBOR_KEYWORDS)
+  const raw = String(acctCfg(config, 'neighborNameKeywords', DEFAULT_NEIGHBOR_KEYWORDS) || DEFAULT_NEIGHBOR_KEYWORDS)
   return raw.split(/[,，\s]+/).filter(Boolean)
 }
 
@@ -7516,8 +7516,8 @@ export function apply(ctx, config) {
 
     qqProbe('gen: system start')
     let system
-    const live = config.liveEnabled.get() === true
-      ? loadLive(Number(config.liveMaxAgeSec.get() ?? 1200))
+    const live = acctCfg(config, 'liveEnabled', true) === true
+      ? loadLive(Number(acctCfg(config, 'liveMaxAgeSec', 1200) ?? 1200))
       : null
     if (isGroup) {
       // 群聊也读人设（身份/说话风格），但「称呼」「重要」两节含主人 QQ 号和私聊约定，群里不带
@@ -8159,7 +8159,7 @@ async function syncGroupRules(force = false) {
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${msg}\n`, 'utf8')
       } catch { /* ignore */ }
     }
-    if (config.imageVisionEnabled.get() !== true) {
+    if (acctCfg(config, 'imageVisionEnabled', true) !== true) {
       debug(`skip: imageVisionEnabled=false ${filePath}`)
       return ''
     }
@@ -8184,8 +8184,8 @@ async function syncGroupRules(force = false) {
       let finish = ''
       let reasoning = 0
       for await (const chunk of llm.stream({
-        provider: String(config.imageProvider.get() || 'deepseek-account'),
-        model: String(config.imageModel.get() || 'deepseek-flash'),
+        provider: String(acctCfg(config, 'imageProvider', 'deepseek-account') || 'deepseek-account'),
+        model: String(acctCfg(config, 'imageModel', 'deepseek-flash') || 'deepseek-flash'),
         messages: [{
           role: 'user',
           content: [
@@ -8656,8 +8656,8 @@ async function syncGroupRules(force = false) {
     try {
       let out = ''
       for await (const chunk of llm.stream({
-        provider: String(config.imageProvider.get() || 'deepseek-account'),
-        model: String(config.imageModel.get() || 'deepseek-flash'),
+        provider: String(acctCfg(config, 'imageProvider', 'deepseek-account') || 'deepseek-account'),
+        model: String(acctCfg(config, 'imageModel', 'deepseek-flash') || 'deepseek-flash'),
         messages: [{
           role: 'user',
           content: [
@@ -8699,7 +8699,7 @@ async function syncGroupRules(force = false) {
     try {
       let out = ''
       for await (const chunk of llm.stream({
-        provider: String(config.imageProvider.get() || 'deepseek-account'),
+        provider: String(acctCfg(config, 'imageProvider', 'deepseek-account') || 'deepseek-account'),
         model: 'deepseek-flash',
         messages: [{
           role: 'user',
@@ -8777,7 +8777,7 @@ async function syncGroupRules(force = false) {
           if (lines.length < 2) continue
           let out = ''
           for await (const chunk of llm.stream({
-            provider: String(config.imageProvider.get() || 'deepseek-account'),
+            provider: String(acctCfg(config, 'imageProvider', 'deepseek-account') || 'deepseek-account'),
             model: 'deepseek-flash',
             messages: [{
               role: 'user',
@@ -8837,11 +8837,11 @@ async function syncGroupRules(force = false) {
 
   /** QQ 侧只负责「要一帧」：把直播间地址交给 B站 插件，抓帧和看图都不在这里做。 */
   function requestLiveFrame(reason) {
-    if (config.liveEnabled.get() !== true) return
-    if (config.liveRequestEnabled.get() !== true) return
-    const qqUrl = String(config.liveUrl.get() || '').trim()
+    if (acctCfg(config, 'liveEnabled', true) !== true) return
+    if (acctCfg(config, 'liveRequestEnabled', true) !== true) return
+    const qqUrl = String(acctCfg(config, 'liveUrl', '') || '').trim()
     const state = loadLiveState()
-    const cooldownMs = Math.max(1, Number(config.liveRequestCooldownSec.get() ?? 180)) * 1000
+    const cooldownMs = Math.max(1, Number(acctCfg(config, 'liveRequestCooldownSec', 180) ?? 180)) * 1000
     if (state.requestedAt && Date.now() - Number(state.requestedAt) < cooldownMs) return
 
     let bili
@@ -9330,7 +9330,7 @@ async function syncGroupRules(force = false) {
         && lastHuman.message.some((seg) => seg?.type === 'at' && String(seg?.data?.qq) === String(me))
       if (!atMe) {
         // 同上：没 @ 我们也可以偶尔搭一句，别让主动性完全消失
-        const chance = Math.max(0, Math.min(100, Number(config.neighborReplyChance.get() ?? 30)))
+        const chance = Math.max(0, Math.min(100, Number(acctCfg(config, 'neighborReplyChance', 30) ?? 30)))
         if (chance <= 0 || Math.random() * 100 >= chance) return false
       }
     }
@@ -9885,7 +9885,7 @@ async function syncGroupRules(force = false) {
           // 没点到你：平时不插嘴；只有「群友之间的空闲时段」（最近 3 分钟没真人说话）
           // 或主动聊天状态里，才试着跟隔壁 AI 聊两句（2026-10-26 主人要求）
           const humanIdle = Date.now() - Number(lastHumanAt.get(String(data.group_id)) || 0) > IDLE_BEFORE_NEIGHBOR_MS
-          const baseNeighborChance = Math.max(0, Math.min(100, Number(config.neighborReplyChance.get() ?? 30)))
+          const baseNeighborChance = Math.max(0, Math.min(100, Number(acctCfg(config, 'neighborReplyChance', 30) ?? 30)))
           const chance = (humanIdle || isActiveChatMode(data.group_id))
             ? Math.max(baseNeighborChance, 60)
             : baseNeighborChance
@@ -10001,7 +10001,7 @@ async function syncGroupRules(force = false) {
     const atOthersQuiet = (data.message || []).some((s) => s && s.type === 'at'
       && String(s.data?.qq) !== String(self) && String(s.data?.qq) !== 'all')
     if (data.message_type === 'group' && !atOthersQuiet && looksLikeComplaint(plainText(data.message))) {
-      const sec = Number(config.quietAfterComplaintSec.get() ?? 180)
+      const sec = Number(acctCfg(config, 'quietAfterComplaintSec', 600) ?? 600)
       if (sec > 0) {
         // 群和私聊各有自己的反思倒计时（2026-10-26 主人：反思按会话独立）
         quietState.set(`g:${data.group_id}`, Date.now() + sec * 1000)
@@ -10016,7 +10016,7 @@ async function syncGroupRules(force = false) {
     }
     // 私聊也能进反思：私聊里被要求闭嘴/别说了，单独计时（2026-10-26 主人要求）
     if (data.message_type === 'private' && looksLikeComplaint(plainText(data.message))) {
-      const sec = Number(config.quietAfterComplaintSec.get() ?? 180)
+      const sec = Number(acctCfg(config, 'quietAfterComplaintSec', 600) ?? 600)
       if (sec > 0) {
         quietState.set(`p:${sender}`, Date.now() + sec * 1000)
         saveQuietState()
@@ -10032,7 +10032,7 @@ async function syncGroupRules(force = false) {
           // 自动识别达标（强证据或累计分够）的 AI 也写进「隔壁家的 AI QQ 号」名单：
           // 持久化到配置，重启不用重新观察；跟它们说话只打字不发语音
           try {
-            const cur = String(config.neighborBots.get() || '')
+            const cur = String(acctCfg(config, 'neighborBots', '') || '')
             const list = cur.split(/[，,]/).map((s) => s.trim()).filter(Boolean)
             if (!list.includes(String(sender))) {
               list.push(String(sender))
@@ -10134,7 +10134,7 @@ async function syncGroupRules(force = false) {
     // 分享卡片（B站 小程序/链接）：卡片本身只有标题，先顺着短链点进去把内容拿出来，再回话
     let cardInfo = ''
     let cardBvid = ''
-    if (config.shareCardWatch.get() !== false) {
+    if (acctCfg(config, 'shareCardWatch', true) !== false) {
       const card = findShareCard(data.message)
       if (card) {
         cardBvid = await resolveBvidFromCard(card)
@@ -10236,14 +10236,14 @@ async function syncGroupRules(force = false) {
       qqProbe(`enter try type=${data.message_type} from=${sender} text=${String(text).slice(0, 20)}`)
 
       // 明确让它发一张表情包：直接发图，别用文字或 emoji 糊弄
-      if (config.stickerEnabled.get() === true && wantsStickerImage(text)) {
+      if (acctCfg(config, 'stickerEnabled', true) === true && wantsStickerImage(text)) {
         plog('info', `[dsh-versatileds] 表情包请求命中：${String(text).slice(0, 30)}`)
         const file = pickSticker(`${text}\n${text}`, true)
         if (file) {
           try {
             // 缩到 QQ 表情大小再发，别是张大图；gif 保留原图，动图不缩成静态
             const isGif = /\.gif$/i.test(file)
-            const shrunk = isGif ? null : await shrinkSticker(file, Number(config.stickerResizeMaxPx.get() ?? 240), config)
+            const shrunk = isGif ? null : await shrinkSticker(file, Number(acctCfg(config, 'stickerResizeMaxPx', 240) ?? 240), config)
             const buf = shrunk || readFileSync(file)
             const segments = []
             // 引用被要求的那句，让人看得出是在回它
@@ -10510,7 +10510,7 @@ async function syncGroupRules(force = false) {
           appendFileSync(join(qqAccountDir(), 'image_debug.log'),
             `- ${new Date().toLocaleString('zh-CN', { hour12: false })} imageInfo len=${imageInfo.length} ${imageInfo.slice(0, 60).replace(/\n/g, ' ')}\n`, 'utf8')
         } catch { /* ignore */ }
-        if (config.stickerEnabled.get() === true) {
+        if (acctCfg(config, 'stickerEnabled', true) === true) {
           const descs = imageFiles.map((f) => loadImageNote(f)).filter(Boolean)
           const stickerWorthy = descs.some((d) => isStickerDesc(d))
           if (stickerWorthy) {
@@ -10519,11 +10519,11 @@ async function syncGroupRules(force = false) {
               collectSticker(f, joined, {
                 from: sender,
                 groupId: data.message_type === 'group' ? String(data.group_id) : '',
-              }, Number(config.stickerMax.get() ?? 300))
+              }, Number(acctCfg(config, 'stickerMax', 300) ?? 300))
               // 入库后补算感知哈希，下次同一张图换个清晰度也能认出来
               ensureStickerPhash(f, config).catch(() => {})
               // 同时加进 QQ 账号的「我的表情」，以后发出来就是表情包不是普通图片
-              if (config.stickerFavorEnabled.get() === true) {
+              if (acctCfg(config, 'stickerFavorEnabled', true) === true) {
                 favoriteSticker(f).catch(() => {})
               }
             }
@@ -10672,9 +10672,9 @@ async function syncGroupRules(force = false) {
 
       // 没话茬了：群里就发个表情包（优先常用），别硬憋文字
       // 反思期（刚被要求闭嘴）不能再甩表情包——2026-10-26 主人问「你表情包怎么还能发」，它又发了一张
-      if (!reply && isGroup && !inQuiet(data.group_id) && config.stickerEnabled.get() === true) {
+      if (!reply && isGroup && !inQuiet(data.group_id) && acctCfg(config, 'stickerEnabled', true) === true) {
         // 刚发过表情包就别再甩一张（2026-10-25 群友「大肥鱼刷屏」：没话就发表情，连着发两条）
-        const stGapMs = Math.max(1, Number(config.stickerSendMinGapSec.get() ?? 600)) * 1000
+        const stGapMs = Math.max(1, Number(acctCfg(config, 'stickerSendMinGapSec', 600) ?? 600)) * 1000
         const stState = loadJsonFile(stickerStatePath())
         const stLastAt = Number(stState[data.group_id] || 0)
         if (stLastAt && Date.now() - stLastAt <= stGapMs) return
@@ -10682,7 +10682,7 @@ async function syncGroupRules(force = false) {
         if (file) {
           try {
             const isGif = /\.gif$/i.test(file)
-            const shrunk = isGif ? null : await shrinkSticker(file, Number(config.stickerResizeMaxPx.get() ?? 240), config)
+            const shrunk = isGif ? null : await shrinkSticker(file, Number(acctCfg(config, 'stickerResizeMaxPx', 240) ?? 240), config)
             const buf = shrunk || readFileSync(file)
             await new Promise((r) => setTimeout(r, 800 + Math.random() * 1200))
             if (config.enabled.get() !== false && !inQuiet(data.group_id)) {
@@ -10934,10 +10934,10 @@ async function syncGroupRules(force = false) {
         }
         // 表情包：按当前话题挑一张，带冷却，别刷屏
         // 反思期不附表情包
-        if (isGroup && !inQuiet(data.group_id) && config.stickerEnabled.get() === true && imageFiles.length === 0) {
-          const chance = Number(config.stickerChance.get() ?? 8)
+        if (isGroup && !inQuiet(data.group_id) && acctCfg(config, 'stickerEnabled', true) === true && imageFiles.length === 0) {
+          const chance = Number(acctCfg(config, 'stickerChance', 8) ?? 8)
           if (chance > 0 && Math.random() * 100 < chance) {
-            const gapMs = Math.max(1, Number(config.stickerSendMinGapSec.get() ?? 600)) * 1000
+            const gapMs = Math.max(1, Number(acctCfg(config, 'stickerSendMinGapSec', 600) ?? 600)) * 1000
             const st = loadJsonFile(stickerStatePath())
             const lastAt = Number(st[data.group_id] || 0)
             if (!lastAt || Date.now() - lastAt > gapMs) {
@@ -10946,7 +10946,7 @@ async function syncGroupRules(force = false) {
                 try {
                   // gif 动图不缩，保住动画
                   const isGif = /\.gif$/i.test(file)
-                  const shrunk = isGif ? null : await shrinkSticker(file, Number(config.stickerResizeMaxPx.get() ?? 240), config)
+                  const shrunk = isGif ? null : await shrinkSticker(file, Number(acctCfg(config, 'stickerResizeMaxPx', 240) ?? 240), config)
                   const buf = shrunk || readFileSync(file)
                   // 隔几秒再补，像人说完话过一会儿才甩个表情，不要紧贴着糊上去
                   await new Promise((r) => setTimeout(r, 2000 + Math.random() * 2500))
@@ -11478,8 +11478,8 @@ async function syncGroupRules(force = false) {
           }
           case 'live_status': {
             const state = loadLiveState()
-            const qqUrl = String(config.liveUrl.get() || '').trim()
-            const liveInfo = loadLive(Number(config.liveMaxAgeSec.get() ?? 1200))
+            const qqUrl = String(acctCfg(config, 'liveUrl', '') || '').trim()
+            const liveInfo = loadLive(Number(acctCfg(config, 'liveMaxAgeSec', 1200) ?? 1200))
             let biliUrl = ''
             let biliFrame = ''
             let biliLive = null
@@ -11517,13 +11517,13 @@ async function syncGroupRules(force = false) {
               截图路径: framePath || '（未定）',
               截图来自: override ? 'QQ 侧覆盖' : 'B站 插件的 image 目录',
               截图存在: framePath ? existsSync(framePath) : false,
-              直播挂起: config.liveEnabled.get(),
-              要帧开关: config.liveRequestEnabled.get(),
-              要帧最短间隔: `${Math.max(1, Number(config.liveRequestCooldownSec.get() ?? 180))} 秒`,
+              直播挂起: acctCfg(config, 'liveEnabled', ''),
+              要帧开关: acctCfg(config, 'liveRequestEnabled', ''),
+              要帧最短间隔: `${Math.max(1, Number(acctCfg(config, 'liveRequestCooldownSec', 180) ?? 180))} 秒`,
               上次要帧: state.requestedAt
                 ? new Date(Number(state.requestedAt)).toLocaleString('zh-CN', { hour12: false })
                 : '—',
-              速记有效期: `${config.liveMaxAgeSec.get()} 秒`,
+              速记有效期: `${acctCfg(config, 'liveMaxAgeSec', '')} 秒`,
               速记状态: liveInfo ? `${liveInfo.ageMin} 分钟前更新` : '没有或已过期',
             }, null, 2)
           }
