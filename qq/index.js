@@ -2757,6 +2757,30 @@ function saveImageNote(filePath, desc) {
 
 // ---------- 表情包库 ----------
 
+/** 群/好友名字缓存：登录时写，未登录时日志页用（仅显示用，2026-10-29）。 */
+function contactsCachePath() {
+  return qqStatePath('contacts-cache', 'json')
+}
+function loadContactsCache() {
+  try {
+    const j = JSON.parse(readFileSync(contactsCachePath(), 'utf8'))
+    return {
+      groups: j && typeof j.groups === 'object' ? j.groups : {},
+      friends: j && typeof j.friends === 'object' ? j.friends : {},
+    }
+  } catch { return { groups: {}, friends: {} } }
+}
+function saveContactsCache(groups, friends) {
+  try {
+    mkdirSync(dirname(contactsCachePath()), { recursive: true })
+    writeFileSync(contactsCachePath(), JSON.stringify({
+      groups: Object.fromEntries(groups || []),
+      friends: Object.fromEntries(friends || []),
+      at: Date.now(),
+    }, null, 2), 'utf8')
+  } catch { /* ignore */ }
+}
+
 function stickerDir() {
   return join(qqAccountDir(), 'sticker')
 }
@@ -5603,13 +5627,20 @@ function startStatusServer(config, napcat = null) {
           try {
             for (const f of (napcat ? await napcat.friends() : []) || []) friendNames.set(String(f.user_id), String(f.nickname || f.remark || ''))
           } catch { /* ignore */ }
+          // 拿不到就退回上次缓存的群名/好友名（未登录也能显示）
+          const cache = loadContactsCache()
           for (const f of chatGroup.files) {
             const m = String(f.label || '').match(/^(private|group)-(.+)\.log$/)
             if (!m) continue
-            f.kind = m[1] === 'group' ? 'group' : 'private'
+            const isGroup = m[1] === 'group'
+            f.kind = isGroup ? 'group' : 'private'
             f.peerId = m[2]
-            f.peerName = (m[1] === 'group' ? groupNames.get(m[2]) : friendNames.get(m[2])) || ''
+            const live = isGroup ? groupNames.get(m[2]) : friendNames.get(m[2])
+            const cached = isGroup ? cache.groups[m[2]] : cache.friends[m[2]]
+            f.peerName = String(live || cached || '')
           }
+          // 顺手把这次拿到的名字存进缓存
+          if (groupNames.size || friendNames.size) saveContactsCache(groupNames, friendNames)
         }
       } catch { /* ignore */ }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
