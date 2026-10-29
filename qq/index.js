@@ -5433,23 +5433,6 @@ function startStatusServer(config, napcat = null) {
       res.end(JSON.stringify({ ok, dir }))
       return
     }
-    if (url.pathname === '/qr') {
-      const html = `<!doctype html><meta charset="utf-8"><title>NapCat 登录</title>
-<style>
-body{font-family:system-ui;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:28px}
-img{width:300px;height:300px;background:#fff;border-radius:12px;padding:8px}
-button{margin:8px;padding:10px 30px;font-size:16px;border-radius:8px;border:0;cursor:pointer}
-#d{background:#2e7d32;color:#fff}#c{background:#555;color:#fff}
-</style>
-<h2>NapCat 扫码登录</h2>
-<img src="/qr/png?${Date.now()}" alt="qr">
-<p>用手机 QQ 扫这个码，扫完点「完成」</p>
-<button id="d" onclick="fetch('/qr/done').then(()=>{document.body.innerHTML='<h2>已提交，等登录…</h2>'})">完成</button>
-<button id="c" onclick="fetch('/qr/close').then(()=>{document.body.innerHTML='<h2>已关闭</h2>'})">关闭</button>`
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(html)
-      return
-    }
     if (url.pathname === '/qr/png') {
       const file = config ? napcatQrPath(config) : ''
       if (!file || !existsSync(file)) {
@@ -5554,15 +5537,6 @@ button{margin:8px;padding:10px 30px;font-size:16px;border-radius:8px;border:0;cu
         res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({ error: String(err?.message ?? err) }))
       }
-      return
-    }
-    if (url.pathname === '/qr/done' || url.pathname === '/qr/close') {
-      const v = url.pathname.endsWith('done') ? 'done' : 'close'
-      try {
-        writeFileSync(join(versatiledsBase(), 'qq', 'napcat-qr-result.txt'), v, 'utf8')
-      } catch { /* ignore */ }
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok: true, result: v }))
       return
     }
     if (url.pathname === '/chat_paths') {
@@ -8402,27 +8376,6 @@ async function syncGroupRules(force = false) {
     return false
   }
 
-  /** 用本地网页显示二维码（PowerShell 弹窗在沙箱下会 0xc0000142），返回 done / close。 */
-  async function openQrPage() {
-    const result = join(versatiledsBase(), 'qq', 'napcat-qr-result.txt')
-    try { unlinkSync(result) } catch { /* ignore */ }
-    const pageUrl = `http://127.0.0.1:${STATUS_PORT}/qr`
-    try {
-      await runAsync('cmd', ['/c', 'start', '', pageUrl], 10000)
-    } catch { /* 打不开就让主人手动开 */ }
-    plog('info', '[dsh-versatileds] 二维码页面:', pageUrl)
-    for (let i = 0; i < 300; i += 1) {
-      await sleep(1000)
-      try {
-        const v = readFileSync(result, 'utf8').trim()
-        if (v) {
-          try { unlinkSync(result) } catch { /* ignore */ }
-          return v
-        }
-      } catch { /* 还没点 */ }
-    }
-    return 'close'
-  }
 
   /** 确保 NapCat 在跑：没跑就拉起、等登录，登录完清掉二维码缓存。openPage=false 时不弹独立网页；force=true 是设置页手动点的，不受 autoStartNapCat 限制。 */
   async function ensureNapCat(reason = '', openPage = true, force = false) {
@@ -8484,11 +8437,6 @@ async function syncGroupRules(force = false) {
       await startNapCat(launcher)
       const gotQr = await waitForQr(qrPath, since)
       if (!gotQr) return false
-      const choice = openPage ? await openQrPage() : 'done'
-      if (choice === 'close') {
-        lastQrCloseAt = Date.now()
-        return false
-      }
       for (let i = 0; i < 90; i += 1) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
