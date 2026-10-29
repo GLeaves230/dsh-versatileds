@@ -2281,10 +2281,13 @@ async function ensureOneKeyInstaller(config, dir) {
     plog('info', '[dsh-versatileds] 开始安装（会下载 QQ 和 NapCat，约 5-10 分钟，期间别关窗口）')
     let qqDone = false
     let napcatDone = false
+    const installLog = join(versatiledsBase(), 'normal', 'download', 'onekey-install.log')
+    try { mkdirSync(dirname(installLog), { recursive: true }); writeFileSync(installLog, '', 'utf8') } catch { /* ignore */ }
     const run = await runTee(
       'cmd',
       ['/c', `cd /d "${dir}" && NapCatInstaller.exe < nul`],
       (line) => {
+        try { appendFileSync(installLog, line + '\n', 'utf8') } catch { /* ignore */ }
         if (/QQ下载成功|QQ 下载成功/.test(line)) qqDone = true
         if (/NapCat下载成功|NapCat 下载成功/.test(line)) napcatDone = true
       },
@@ -2292,6 +2295,7 @@ async function ensureOneKeyInstaller(config, dir) {
     )
     if (run.code !== 0) {
       plog('warn', `[dsh-versatileds] 安装器退出码 ${run.code}${run.timeout ? '（超时）' : ''}`)
+      plog('info', `[dsh-versatileds] 安装器日志：${installLog}`)
     }
     const shell = findNapcatShell(dir)
     if (shell) {
