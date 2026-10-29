@@ -1700,15 +1700,31 @@ function consumePendingQuickLogin() {
   try {
     const st = loadQuickLoginState()
     const pending = Number(st.pendingDays || 0)
+    const wantPermanent = st.pendingPermanent === true
     // 本次登录前选过天数就用它；否则沿用已记录的档位（退出后重新扫码 = 刷新 ts）
     const days = pending > 0 ? pending : Number(st.days || 0)
-    if (!st.account || !(days > 0)) return false
+    if (!st.account) return false
+    if (!wantPermanent && !(days > 0)) return false
+    if (wantPermanent) {
+      const nextPermanent = {
+        ...st,
+        disabled: false,
+        days: 0,
+        expireAt: null,
+        pendingDays: 0,
+        pendingPermanent: false,
+        renewedAt: Date.now(),
+      }
+      writeFileSync(quickLoginStatePath(), JSON.stringify(nextPermanent, null, 2), 'utf8')
+      return true
+    }
     const next = {
       ...st,
       disabled: false,
       days,
       expireAt: Date.now() + days * 86400_000,
       pendingDays: 0,
+      pendingPermanent: false,
       renewedAt: Date.now(),
     }
     writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
@@ -5197,9 +5213,10 @@ function startStatusServer(config, napcat = null) {
               // 自定义日期：折算成天数，等下次扫码登录后开始算
               pendingDays = Math.max(1, Math.ceil((Number(j.expireAt) - Date.now()) / 86400_000))
             }
+            // 一律待生效：下次扫码登录成功后才写入 expireAt（2026-10-29 主人要求）
             const next = permanent
-              ? { account, expireAt: null, days: 0, pendingDays: 0, at: Date.now() }
-              : { account, expireAt: null, days: 0, pendingDays, at: Date.now() }
+              ? { account, expireAt: null, days: 0, pendingDays: 0, pendingPermanent: true, disabled: false, at: Date.now() }
+              : { account, expireAt: null, days: 0, pendingDays, pendingPermanent: false, disabled: false, at: Date.now() }
             mkdirSync(dirname(quickLoginStatePath()), { recursive: true })
             writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
             try { config.napcatQuickLogin.set(account) } catch { /* 老框架没有 set 就算了 */ }
@@ -5222,6 +5239,7 @@ function startStatusServer(config, napcat = null) {
         permanent: st.expireAt === null || st.expireAt === undefined,
         days: Number(st.days || 0) || null,
         pendingDays: Number(st.pendingDays || 0) || null,
+        pendingPermanent: st.pendingPermanent === true,
         remainingDays: (st.expireAt && Number(st.expireAt) > 0) ? Math.max(0, Math.ceil((Number(st.expireAt) - now) / 86400_000)) : null,
         expired,
         usable: Boolean(quickLoginUsable(config)),

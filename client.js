@@ -1709,7 +1709,7 @@ window.__ModuleLoader__.load({
         })
           .then((r) => r.json())
           .then((d) => {
-            setMsg(d && d.ok ? '已保存' : '保存失败')
+            setMsg(d && d.ok ? '已保存（下次扫码登录后生效）' : '保存失败')
             fetch(`${QQ_STATUS_URL}/account-settings`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1719,12 +1719,12 @@ window.__ModuleLoader__.load({
           })
           .catch(() => setMsg('接口没响应'))
       }
-      const hasPending = Boolean(st && st.pendingDays)
+      const hasPending = Boolean(st && (st.pendingDays || st.pendingPermanent))
       const reallyPermanent = Boolean(st && st.permanent && !hasPending && !Number(st.days || 0))
       const expireText = !st
         ? '读取中…'
         : hasPending
-          ? `待生效：下次扫码登录后开始算 ${st.pendingDays} 天`
+          ? (st.pendingPermanent ? '待生效：下次扫码登录后永久免登录' : `待生效：下次扫码登录后开始算 ${st.pendingDays} 天`)
           : reallyPermanent
             ? '永久免登录'
             : (st.expired ? '已过期，需要重新扫码' : `还剩 ${st.remainingDays} 天（${new Date(Number(st.expireAt)).toLocaleDateString('zh-CN')} 到期）`)
