@@ -5525,7 +5525,8 @@ function startStatusServer(config, napcat = null) {
     }
     if (url.pathname === '/logs') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-      res.end(JSON.stringify(listLogFiles(config)))
+      // 前端按 { groups: [...] } 解析（2026-10-29 修：之前返回数组，日志页一直显示「还没找到日志」）
+      res.end(JSON.stringify({ groups: listLogFiles(config) }))
       return
     }
     if (url.pathname === '/logs/clean') {

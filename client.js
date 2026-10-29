@@ -1444,7 +1444,8 @@ window.__ModuleLoader__.load({
         try {
           const r = await fetch(`${QQ_STATUS_URL}/logs`, { cache: 'no-store' })
           const d = await r.json()
-          setData(d && d.groups ? d : { groups: [] })
+          // 兼容 { groups } 和纯数组两种返回
+        setData(Array.isArray(d) ? { groups: d } : (d && d.groups ? d : { groups: [] }))
           setLastAt(new Date())
         } catch {
           setData({ groups: [] })
