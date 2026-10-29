@@ -1689,7 +1689,10 @@ window.__ModuleLoader__.load({
           .catch(() => {})
         fetch(`${QQ_STATUS_URL}/accounts`, { cache: 'no-store' })
           .then((r) => r.json())
-          .then((d) => setAccounts((d.accounts || []).map((a) => a.id || a)))
+          .then((d) => {
+            setAccounts((d.accounts || []).map((a) => a.id || a))
+            setAccount((prev) => prev || String(d.current || d.view || ''))
+          })
           .catch(() => {})
       }
       React.useEffect(() => { load() }, [])
@@ -1716,11 +1719,15 @@ window.__ModuleLoader__.load({
           })
           .catch(() => setMsg('接口没响应'))
       }
+      const hasPending = Boolean(st && st.pendingDays)
+      const reallyPermanent = Boolean(st && st.permanent && !hasPending && !Number(st.days || 0))
       const expireText = !st
         ? '读取中…'
-        : st.permanent
-          ? '永久免登录'
-          : (st.expired ? '已过期，需要重新扫码' : `还剩 ${st.remainingDays} 天（${new Date(Number(st.expireAt)).toLocaleDateString('zh-CN')} 到期）`)
+        : hasPending
+          ? `待生效：下次扫码登录后开始算 ${st.pendingDays} 天`
+          : reallyPermanent
+            ? '永久免登录'
+            : (st.expired ? '已过期，需要重新扫码' : `还剩 ${st.remainingDays} 天（${new Date(Number(st.expireAt)).toLocaleDateString('zh-CN')} 到期）`)
       return React.createElement('div', { style: { ...rowStyle, flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: '10px', marginTop: '6px' } },
         React.createElement('span', { style: labelStyle }, '快速登录 QQ'),
         React.createElement('select', {
@@ -1765,7 +1772,7 @@ window.__ModuleLoader__.load({
           '退出登录时停用免登录（默认关；开着时退出就等于清掉，下次要扫码）',
         ),
         React.createElement('button', { type: 'button', style: skipStyle, onClick: save }, '保存'),
-        React.createElement('span', { style: hintStyle }, `当前：${expireText}${st && st.pendingDays ? `；已选 ${st.pendingDays} 天，等下次扫码登录后开始算` : ''}`),
+        React.createElement('span', { style: hintStyle }, `当前：${expireText}`),
         msg ? React.createElement('span', { style: hintStyle }, msg) : null,
         React.createElement('div', { style: { ...hintStyle, width: '100%' } },
           '保存后不立即生效：下次扫码登录成功时才按选择的天数开始算（免登录期间不续期）。手动退出登录不会清掉这个设置。'),
