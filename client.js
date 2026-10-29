@@ -1661,6 +1661,8 @@ window.__ModuleLoader__.load({
       const [mode, setMode] = React.useState('permanent')
       const [customDate, setCustomDate] = React.useState('')
       const [msg, setMsg] = React.useState('')
+      const [clearOnLogout, setClearOnLogout] = React.useState(false)
+      const [autoEnabled, setAutoEnabled] = React.useState(true)
       const load = () => {
         fetch(`${QQ_STATUS_URL}/quick-login`, { cache: 'no-store' })
           .then((r) => r.json())
