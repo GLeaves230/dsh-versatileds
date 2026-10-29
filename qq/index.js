@@ -1561,9 +1561,9 @@ const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 /** 插件自带的 NapCat 发布包（有就用它，不下载）。 */
 const NAPCAT_VENDOR_ZIP = join(pluginRoot, 'vendor', 'napcat.zip')
 
-/** 下载回来的压缩包统一放 versatileds/normal/（英文名），解压产物进 qq/napcat/。 */
+/** 下载回来的压缩包统一放 versatileds/normal/download/（英文名），解压产物进 qq/napcat/。 */
 function napcatDownloadZip() {
-  return join(versatiledsBase(), 'normal', 'napcat-shell.zip')
+  return join(versatiledsBase(), 'normal', 'download', 'napcat-shell.zip')
 }
 
 /** NapCat 解压/初始化状态（给「登录」页显示）。 */
@@ -2264,7 +2264,7 @@ async function ensureOneKeyInstaller(config, dir) {
   if (config.napcatUseInstaller?.get?.() === false) return false
   try {
     mkdirSync(dir, { recursive: true })
-    const zip = join(versatiledsBase(), 'normal', 'napcat-onekey.zip')
+    const zip = join(versatiledsBase(), 'normal', 'download', 'napcat-onekey.zip')
     const exe = join(dir, 'NapCatInstaller.exe')
     if (!existsSync(exe)) {
       plog('info', '[dsh-versatileds] 下载开始：NapCat 安装器（OneKey，自带 NapCat 适配版 QQ）')
