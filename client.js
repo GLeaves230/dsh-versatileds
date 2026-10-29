@@ -310,7 +310,12 @@ window.__ModuleLoader__.load({
           setStatus(null)
         }
       }
-      React.useEffect(() => { refresh() }, [])
+      React.useEffect(() => {
+        refresh()
+        const onChange = () => { refresh() }
+        window.addEventListener('vds:account-changed', onChange)
+        return () => window.removeEventListener('vds:account-changed', onChange)
+      }, [])
       const modeText = status
         ? (status.mode === 'manual' ? '手动指定' : '自动挑（大肥鱼自己找活跃的）')
         : '读取中…'
@@ -901,6 +906,8 @@ window.__ModuleLoader__.load({
         })
           .then(() => {
             load()
+            // 广播：日志/状态/聚焦这些按号数据立刻重拉（2026-10-29）
+            try { window.dispatchEvent(new CustomEvent('vds:account-changed')) } catch { /* ignore */ }
             if (onChanged) onChanged()
             // 切完把该数据自己的配置拉回来，输入框据此同步（2026-10-28）
             fetch(`${QQ_STATUS_URL}/account-config`, { cache: 'no-store' })
@@ -1473,7 +1480,9 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         loadList()
         const timer = setInterval(() => { loadList() }, 10000)
-        return () => clearInterval(timer)
+        const onChange = () => { setSel(''); setView({ text: '', error: '', note: '' }); loadList() }
+        window.addEventListener('vds:account-changed', onChange)
+        return () => { clearInterval(timer); window.removeEventListener('vds:account-changed', onChange) }
       }, [loadList])
       // 选中的文件也定时刷新尾部内容，像 tail -f
       React.useEffect(() => {
