@@ -1734,10 +1734,10 @@ window.__ModuleLoader__.load({
           })
           : null,
         React.createElement('button', { type: 'button', style: skipStyle, onClick: save }, '保存'),
-        React.createElement('span', { style: hintStyle }, `当前：${expireText}`),
+        React.createElement('span', { style: hintStyle }, `当前：${expireText}${st && st.pendingDays ? `；已选 ${st.pendingDays} 天，等下次扫码登录后开始算` : ''}`),
         msg ? React.createElement('span', { style: hintStyle }, msg) : null,
         React.createElement('div', { style: { ...hintStyle, width: '100%' } },
-          '要本机这个号成功扫码登录过一次才有登录态。免登录期间不续期：到期后自动失效，要求重新扫码；重新扫码登录成功后，时效才会按选择的天数重新开始算。'),
+          '保存后不立即生效：下次扫码登录成功时才按选择的天数开始算（免登录期间不续期）。手动退出登录不会清掉这个设置。'),
       )
     }
 

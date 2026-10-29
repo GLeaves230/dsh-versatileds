@@ -1693,12 +1693,20 @@ function quickLoginUsable(config) {
 /** 本次拉起 NapCat 是不是用的快速登录（扫码登录才会重算免登录时效）。 */
 let napcatStartedQuick = false
 
-function renewQuickLogin() {
+/** 扫码登录成功后：本次登录前选过「下次免登录 N 天」（pendingDays）才生成 ts 并消费；
+ *  免登录期间不续期，手动退出登录也不动这里（2026-10-29 主人要求）。 */
+function consumePendingQuickLogin() {
   try {
     const st = loadQuickLoginState()
-    const days = Number(st.days || 0)
-    if (!st.account || !(days > 0)) return false
-    const next = { ...st, expireAt: Date.now() + days * 86400_000, renewedAt: Date.now() }
+    const pending = Number(st.pendingDays || 0)
+    if (!st.account || !(pending > 0)) return false
+    const next = {
+      ...st,
+      days: pending,
+      expireAt: Date.now() + pending * 86400_000,
+      pendingDays: 0,
+      renewedAt: Date.now(),
+    }
     writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
     return true
   } catch { return false }
@@ -5170,10 +5178,14 @@ function startStatusServer(config, napcat = null) {
             const account = String(j.account || '').trim()
             const permanent = j.permanent === true
             const days = Number(j.days || 0)
-            const expireAt = permanent
-              ? null
-              : (Number(j.expireAt) > 0 ? Number(j.expireAt) : (days > 0 ? Date.now() + days * 86400_000 : null))
-            const next = { account, expireAt, at: Date.now(), days: permanent ? 0 : (days > 0 ? days : null) }
+            let pendingDays = permanent ? 0 : (days > 0 ? days : 0)
+            if (!permanent && Number(j.expireAt) > 0) {
+              // 自定义日期：折算成天数，等下次扫码登录后开始算
+              pendingDays = Math.max(1, Math.ceil((Number(j.expireAt) - Date.now()) / 86400_000))
+            }
+            const next = permanent
+              ? { account, expireAt: null, days: 0, pendingDays: 0, at: Date.now() }
+              : { account, expireAt: null, days: 0, pendingDays, at: Date.now() }
             mkdirSync(dirname(quickLoginStatePath()), { recursive: true })
             writeFileSync(quickLoginStatePath(), JSON.stringify(next, null, 2), 'utf8')
             try { config.napcatQuickLogin.set(account) } catch { /* 老框架没有 set 就算了 */ }
@@ -5195,6 +5207,7 @@ function startStatusServer(config, napcat = null) {
         expireAt: st.expireAt === undefined ? null : st.expireAt,
         permanent: st.expireAt === null || st.expireAt === undefined,
         days: Number(st.days || 0) || null,
+        pendingDays: Number(st.pendingDays || 0) || null,
         remainingDays: (st.expireAt && Number(st.expireAt) > 0) ? Math.max(0, Math.ceil((Number(st.expireAt) - now) / 86400_000)) : null,
         expired,
         usable: Boolean(quickLoginUsable(config)),
@@ -8718,7 +8731,7 @@ async function syncGroupRules(force = false) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
           plog('info', '[dsh-versatileds] NapCat 已登录，二维码缓存已清')
           // 只有「扫码登录」才重算时效；免登录期间不续期（2026-10-29 主人澄清）
-          try { if (!napcatStartedQuick) renewQuickLogin() } catch { /* ignore */ }
+          try { if (!napcatStartedQuick) consumePendingQuickLogin() } catch { /* ignore */ }
           // 把这次拉起来的 pid 记下来：下次点「登录服务」先按它清旧进程（2026-10-28）
           try { recordStartedPid(await resolveNapcatPid()) } catch { /* ignore */ }
           // 退出登录时 WS 已经收手了，这里让它重新连上
