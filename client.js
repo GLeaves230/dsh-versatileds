@@ -266,6 +266,17 @@ window.__ModuleLoader__.load({
               }).catch(() => {})
             } catch { /* ignore */ }
           }
+        // 主动搭话的群也按账号存一份（2026-10-29）
+        if (field === 'proactiveGroups') {
+          try {
+            const ids = next ? next.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) : []
+            fetch(`${QQ_STATUS_URL}/proactive-groups`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids }),
+            }).catch(() => {})
+          } catch { /* ignore */ }
+        }
         }
       }
       return React.createElement(
@@ -565,6 +576,17 @@ window.__ModuleLoader__.load({
               }).catch(() => {})
             } catch { /* ignore */ }
           }
+        // 主动搭话的群也按账号存一份（2026-10-29）
+        if (field === 'proactiveGroups') {
+          try {
+            const ids = next ? next.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) : []
+            fetch(`${QQ_STATUS_URL}/proactive-groups`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids }),
+            }).catch(() => {})
+          } catch { /* ignore */ }
+        }
         }
       }
       return React.createElement(
@@ -684,12 +706,12 @@ window.__ModuleLoader__.load({
 
     /** 聚焦聊天：从群/好友里选（按当前账号保存），而不是手填群号（2026-10-28 主人要求）。 */
     function FocusSelectRow({ form, value: initial, pending, setPending, disabled }) {
-      const [contacts, setContacts] = React.useState({ groups: [], friends: [] })
+      const [candidates, setCandidates] = React.useState([]) // 主动搭话列表（按活跃度排序），2026-10-29
       React.useEffect(() => {
         let alive = true
-        fetch(`${QQ_STATUS_URL}/contacts`, { cache: 'no-store' })
+        fetch(`${QQ_STATUS_URL}/focus_status`, { cache: 'no-store' })
           .then((r) => r.json())
-          .then((d) => { if (alive) setContacts({ groups: d.groups || [], friends: d.friends || [] }) })
+          .then((d) => { if (alive) setCandidates(Array.isArray(d.candidates) ? d.candidates : []) })
           .catch(() => {})
         return () => { alive = false }
       }, [])
@@ -708,7 +730,7 @@ window.__ModuleLoader__.load({
         } catch { /* ignore */ }
       }
       return React.createElement('div', { style: rowStyle },
-        React.createElement('span', { style: labelStyle }, '聚焦聊天（手动指定）'),
+        React.createElement('span', { style: labelStyle }, '聚焦聊天'),
         React.createElement('select', {
           value: String(value || ''),
           disabled,
@@ -724,17 +746,17 @@ window.__ModuleLoader__.load({
             maxWidth: '100%',
           },
         },
-        React.createElement('option', { value: '' }, '自动（按活跃度挑）'),
-        contacts.groups.length
-          ? React.createElement('optgroup', { label: '群' },
-              contacts.groups.map((g) => React.createElement('option', { key: 'g' + g.id, value: g.id }, `群 ${g.name || g.id}`)))
+        React.createElement('option', { value: '' }, '自动（从主动搭话列表按活跃度挑）'),
+        candidates.filter((c) => c.kind === 'group').length
+          ? React.createElement('optgroup', { label: '群（主动搭话列表）' },
+              candidates.filter((c) => c.kind === 'group').map((c) => React.createElement('option', { key: 'g' + c.id, value: c.id }, `群 ${c.id}${c.act >= 3 ? ' · 刚刚活跃' : c.act === 2 ? ' · 1小时内' : c.act === 1 ? ' · 今天' : ' · 冷'}`)))
           : null,
-        contacts.friends.length
-          ? React.createElement('optgroup', { label: '好友' },
-              contacts.friends.map((f) => React.createElement('option', { key: 'f' + f.id, value: f.id }, `好友 ${f.name || f.id}`)))
+        candidates.filter((c) => c.kind === 'private').length
+          ? React.createElement('optgroup', { label: '私聊（主动搭话列表）' },
+              candidates.filter((c) => c.kind === 'private').map((c) => React.createElement('option', { key: 'p' + c.id, value: c.id }, `私聊 ${c.id}${c.act >= 3 ? ' · 刚刚活跃' : c.act === 2 ? ' · 1小时内' : c.act === 1 ? ' · 今天' : ' · 冷'}`)))
           : null,
         ),
-        React.createElement('span', { style: hintStyle }, '留空＝自动按活跃度挑；选中后只盯这一个会话（按当前登录账号保存）'),
+        React.createElement('span', { style: hintStyle }, '留空＝从主动搭话列表里按活跃度自动挑；选中后只盯这一个会话（按当前登录账号保存）'),
       )
     }
 
@@ -1770,9 +1792,9 @@ window.__ModuleLoader__.load({
           { style: { marginTop: '10px', fontSize: '12px', lineHeight: 1.7, opacity: 0.75 } },
           React.createElement('div', null, '启动需要管理员权限，任选一种：'),
           React.createElement('div', null, '① 点上面的按钮（已登录时是「退出登录」），在弹出 UAC 窗口点「是」'),
-          React.createElement('div', null, '② 点「打开 NapCat 目录」，右键 launcher.bat → 以管理员身份运行'),
+          React.createElement('div', null, '② 点「打开 NapCat 目录」，右键目录里的 napcat.bat（或 launcher.bat）→ 以管理员身份运行'),
           React.createElement('div', { style: { marginTop: '4px', opacity: 0.8 } },
-            'NapCat 目录：', React.createElement('code', null, st.dir || '<DSH_HOME>/napcat/napcat')),
+            'NapCat 目录：', React.createElement('code', null, st.dir || '<DSH_HOME>/versatileds/qq/napcat')),
         ),
       )
     }

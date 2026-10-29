@@ -1456,12 +1456,13 @@ function notesPath() {
 function focusPath() {
   return join(qqAccountDir(), 'focus.json')
 }
-function readFocusTarget(config) {
+function readFocusTarget() {
+  // 只认按号文件 qq/<账号>/focus.json；没设过就是空（自动挑），不回退全局配置避免串号
   try {
     const j = JSON.parse(readFileSync(focusPath(), 'utf8'))
     if (j && typeof j.target === 'string') return j.target.trim()
-  } catch { /* 没文件就用配置 */ }
-  return String(config?.focusChatTarget?.get?.() || '').trim()
+  } catch { /* 没设过 */ }
+  return ''
 }
 function writeFocusTarget(target) {
   try {
@@ -4195,9 +4196,17 @@ function proactiveTargetsOf(config) {
   try {
     const j = JSON.parse(readFileSync(join(qqAccountDir(), 'proactive-targets.json'), 'utf8'))
     if (Array.isArray(j?.ids)) return j.ids.map(String).filter(Boolean)
+  } catch { /* 没设过 */ }
+  return []
+}
+
+/** 主动搭话的群：只读 qq/<账号>/proactive-groups.json（按号隔离，不回退全局配置）。 */
+function proactiveGroupsOf(config) {
+  try {
+    const j = JSON.parse(readFileSync(join(qqAccountDir(), 'proactive-groups.json'), 'utf8'))
+    if (Array.isArray(j?.ids)) return j.ids.map(String).filter(Boolean)
   } catch { /* 没文件用配置 */ }
-  const raw = String(config?.proactiveTargets?.get?.() || '').trim()
-  return raw ? raw.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) : []
+  return []
 }
 
 function proactiveStatePath() {
@@ -5144,7 +5153,7 @@ function startStatusServer(config, napcat = null) {
         qrAgeSec: hasQr ? Math.round((Date.now() - qrAt) / 1000) : -1,
         pkgBusy: napcatPkg.busy,
         pkgError: napcatPkg.error,
-        dir: join(napcatRoot(config), 'napcat'),
+        dir: napcatShellRoot(config),
         // phase 也要用掩码后的值：不然顶部会显示「已登录」、下面又写「已退出登录」（2026-10-27 主人截图）
         phase: loggedInShown ? 'ready' : (hasQr ? 'waiting_qrcode' : 'offline'),
       }))
@@ -5230,6 +5239,24 @@ function startStatusServer(config, napcat = null) {
       })
       return
     }
+    if (url.pathname === '/proactive-groups' && req.method === 'POST') {
+      // 按账号写主动搭话的群（qq/<qq>/proactive-groups.json，2026-10-29）
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        try {
+          const j = JSON.parse(body || '{}')
+          const ids = Array.isArray(j.ids) ? j.ids.map(String).filter(Boolean) : []
+          writeFileSync(join(qqAccountDir(), 'proactive-groups.json'), JSON.stringify({ ids }, null, 2), 'utf8')
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify({ ok: true, ids }))
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false }))
+        }
+      })
+      return
+    }
     if (url.pathname === '/group-profiles' && req.method === 'POST') {
       // 按账号写群偏好（groups-<qq>.json），设置页调用（2026-10-28）
       let body = ''
@@ -5248,32 +5275,37 @@ function startStatusServer(config, napcat = null) {
       return
     }
     if (url.pathname === '/focus_status') {
-      // 设置页「主动」页用：手动指定 or 自动挑；把自动挑的结果也告诉前端，输入框可以一键填
+      // 设置页「主动」页用：候选 = 主动搭话的群 + 私聊（都按账号），按活跃度挑；也支持手动指定
       const pinned = readFocusTarget(config)
       const now = Date.now()
       const active = []
       for (const [key, until] of focusChat.entries()) {
         if (Number(until) > now) active.push({ key, until })
       }
-      const groups = String(config.proactiveGroups.get() || '')
-        .split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
-      const actOf = (gid) => {
+      const actOf = (key) => {
         try {
-          const f = chatFilePath(`group-${gid}`)
+          const f = chatFilePath(key)
           if (!existsSync(f)) return 0
           const age = now - statSync(f).mtimeMs
           return age < 10 * 60_000 ? 3 : age < 3600_000 ? 2 : age < 6 * 3600_000 ? 1 : 0
         } catch { return 0 }
       }
-      const picked = groups
-        .map((g) => ({ id: g, act: actOf(g) }))
-        .sort((a, b) => b.act - a.act)[0]?.id || ''
+      const candidates = []
+      for (const gid of proactiveGroupsOf(config)) {
+        candidates.push({ id: gid, kind: 'group', key: `group-${gid}`, act: actOf(`group-${gid}`) })
+      }
+      for (const uid of proactiveTargetsOf(config)) {
+        candidates.push({ id: uid, kind: 'private', key: `private-${uid}`, act: actOf(`private-${uid}`) })
+      }
+      candidates.sort((a, b) => b.act - a.act)
+      const picked = candidates.find((c) => c.act > 0)?.id || candidates[0]?.id || ''
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({
         pinned: pinned || '',
         mode: pinned ? 'manual' : 'auto',
         effective: pinned || picked,
         picked,
+        candidates,
         active,
       }))
       return
@@ -5422,7 +5454,7 @@ function startStatusServer(config, napcat = null) {
     }
     if (url.pathname === '/login/open') {
       // 在资源管理器里打开 launcher.bat 所在目录，方便主人右键用管理员运行
-      const dir = join(napcatRoot(config), 'napcat')
+      const dir = napcatShellRoot(config)
       const ok = existsSync(dir)
       if (ok) {
         try {
@@ -8947,7 +8979,7 @@ async function syncGroupRules(force = false) {
         const gs = await ob.groups()
         aliveGroups = new Set((gs || []).map((g) => String(g.group_id)))
       } catch { /* 拉不到就不按群列表过滤 */ }
-      const configGroups = parseIds(config.proactiveGroups.get()).map(String)
+      const configGroups = proactiveGroupsOf(config)
       const out = []
       for (const id of pinnedIds) {
         // 先按群列表认：手动填的群号即使没加进「主动搭话的群」也要当群处理，
@@ -8968,7 +9000,7 @@ async function syncGroupRules(force = false) {
       if (out.length) return out
     }
     const list = []
-    const groups = parseIds(config.proactiveGroups.get())
+    const groups = proactiveGroupsOf(config)
     if (groups.length) {
       let alive = new Set()
       try {
@@ -9102,7 +9134,7 @@ async function syncGroupRules(force = false) {
       plog('info', '[dsh-versatileds] 有未回的私聊，跳过主动搭话')
       return
     }
-    for (const gid of parseIds(config.proactiveGroups.get())) {
+    for (const gid of proactiveGroupsOf(config)) {
       if (await hasUnrepliedGroup(gid)) {
         plog('info', `[dsh-versatileds] 群 ${gid} 有未回的 @，跳过主动搭话`)
         return
