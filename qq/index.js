@@ -2769,12 +2769,24 @@ function stickerStatePath() {
   return qqStatePath('sticker.state', 'json')
 }
 
-/** index 里存的是文件名（兼容老数据里的绝对路径），这里拼成真实路径。 */
+/** index 里存相对 stickerDir 的路径（兼容老数据里的绝对路径），这里拼成真实路径；支持子目录嵌套。 */
 function stickerFileOf(entry) {
-  const raw = String(entry?.file || '')
+  const raw = String(entry?.file || '').trim()
   if (!raw) return ''
-  const name = basename(raw)
-  return name ? join(stickerDir(), name) : ''
+  const dir = stickerDir()
+  const norm = raw.replace(/\\/g, '/')
+  // 老数据是绝对路径：截出相对 stickerDir 的部分；对不上就退回文件名
+  if (/^[A-Za-z]:\//.test(norm) || norm.startsWith('/')) {
+    const base = dir.replace(/\\/g, '/').toLowerCase().replace(/\/$/, '')
+    const lower = norm.toLowerCase()
+    const idx = lower.indexOf(base)
+    if (idx >= 0) {
+      const relPart = norm.slice(idx + base.length).replace(/^\/+/, '')
+      if (relPart) return join(dir, relPart)
+    }
+    return join(dir, basename(norm))
+  }
+  return join(dir, norm.replace(/^\/+/, ''))
 }
 
 function loadStickerIndex() {
@@ -2812,8 +2824,8 @@ function collectSticker(filePath, desc, meta = {}, maxCount = 300) {
     const index = loadStickerIndex()
     const prev = index[hash] || {}
     index[hash] = {
-      // 只存文件名，不存绝对路径（换账号/换机器都能用）
-      file: `${hash}${ext}`,
+      // 只存相对 stickerDir 的路径（换账号/换机器都能用；保留子目录嵌套）
+      file: relative(stickerDir(), dest).replace(/\\/g, '/'),
       desc: String(desc || prev.desc || '').slice(0, 200),
       at: Number(prev.at || 0) || Date.now(),
       from: String(meta.from || prev.from || ''),
