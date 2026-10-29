@@ -80,7 +80,7 @@ function depSpecs(home) {
       wheel: true,
       // PyPI wheel 拿不到时的备选：GitHub 上的 Windows 预编译包，走 gh-proxy 镜像（国内能下）
       urls: [
-        'https://gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+        'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
       ],
 
       wheelJson: 'https://pypi.tuna.tsinghua.edu.cn/pypi/imageio-ffmpeg/json',
@@ -89,6 +89,16 @@ function depSpecs(home) {
 }
 
 /** 从镜像下载依赖；返回 { ok, why }。wheel 的（imageio-ffmpeg）下载后解压出 exe。 */
+// GitHub 下载统一走镜像候选（2026-10-29）：直连 → gh-proxy → ghfast → gh.monlor
+const GH_MIRRORS = ['', 'https://gh-proxy.com/', 'https://ghfast.top/', 'https://gh.monlor.com/']
+let preferredMirror = ''
+/** 把 GitHub 原始地址展开成镜像候选（记住上次成功的那个）。 */
+function mirrorCandidates(ghUrl) {
+  const order = preferredMirror ? [preferredMirror] : []
+  for (const m of GH_MIRRORS) if (!order.includes(m)) order.push(m)
+  return order.map((m) => (m ? m + ghUrl : ghUrl))
+}
+
 async function downloadDep(dep) {
   const urls = Array.isArray(dep.urls) ? dep.urls.slice() : []
   // wheel 类型：现查 PyPI 镜像的 json，拿 win_amd64 的 wheel 地址（硬写 URL 会被 CDN 换掉）
@@ -103,12 +113,20 @@ async function downloadDep(dep) {
     }
   }
   if (!urls.length) return { ok: false, why: '没有下载地址' }
-  for (const url of urls) {
+  // GitHub 地址展开成镜像候选；第一个成功的镜像记下来给后续下载用（2026-10-29）
+  const expanded = []
+  for (const u of urls) {
+    if (/^https:\/\/github\.com\//.test(u)) expanded.push(...mirrorCandidates(u))
+    else expanded.push(u)
+  }
+  for (const url of expanded) {
     try {
       const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(600_000) })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const buf = Buffer.from(await res.arrayBuffer())
       if (buf.length < 1_000_000) throw new Error(`文件太小（${buf.length} 字节）`)
+      // 记住这次用的镜像前缀，下一批下载先用它（2026-10-29）
+      { const hit = GH_MIRRORS.find((m) => m && url.startsWith(m)); preferredMirror = hit || '' }
       if (dep.wheel) {
         // wheel 就是个 zip：解到 target，ffmpeg 会落在 imageio_ffmpeg/binaries/ 下
         mkdirSync(dep.target, { recursive: true })
