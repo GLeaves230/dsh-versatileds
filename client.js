@@ -2292,7 +2292,13 @@ window.__ModuleLoader__.load({
             .then((d) => setStickers(Array.isArray(d.list) ? d.list : []))
             .catch(() => {})
         }
-        React.useEffect(() => { loadStickers() }, [])
+        React.useEffect(() => {
+          loadStickers()
+          // 切「数据选择」后表情包也换到那个号的（2026-10-29）
+          const onChange = () => { setStickerSelected(new Set()); setStickerMsg(''); loadStickers() }
+          window.addEventListener('vds:account-changed', onChange)
+          return () => window.removeEventListener('vds:account-changed', onChange)
+        }, [])
         const toggleStickerFav = (name, favorite) => {
           fetch(`${QQ_STATUS_URL}/sticker_fav?name=${encodeURIComponent(name)}&on=${favorite ? 1 : 0}`, { method: 'POST' })
             .then(() => loadStickers())
