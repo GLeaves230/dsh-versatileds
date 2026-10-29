@@ -1716,7 +1716,7 @@ function writeHiddenLauncher(napcatDir, launcher, quick, pidFile) {
  * 这是唯一可靠的"我们启动的 QQ"标识：命令行读不到（权限），进程树断了（launcher 早已退出）。
  */
 function readNapcatMainPid(config) {
-  const root = join(napcatRoot(config), 'napcat', 'logs')
+  const root = join(napcatAppDir(config), 'logs')
   const files = []
   const walk = (dir, depth) => {
     if (depth > 3) return
@@ -8310,10 +8310,11 @@ async function syncGroupRules(force = false) {
     // 配置 napcatHiddenLaunch=false 时跳过这条，退回下面可见窗口的启动方式。
     if (config.napcatHiddenLaunch.get() !== false) {
       try {
-        const napcatDir = join(napcatRoot(config), 'napcat')
-        const pidFile = join(napcatDir, 'launcher.pid')
+        // 工作目录必须是 launcher 所在目录（OneKey 的 napcat.bat 用 .\NapCatWinBootMain.exe 相对路径）
+        const launchDir = dirname(launcher)
+        const pidFile = join(launchDir, 'launcher.pid')
         try { unlinkSync(pidFile) } catch { /* 旧文件清掉，免得读到上一次的 PID */ }
-        const vbs = writeHiddenLauncher(napcatDir, launcher, quick, pidFile)
+        const vbs = writeHiddenLauncher(launchDir, launcher, quick, pidFile)
         const q = (s) => String(s).replace(/'/g, "''")
         const ps = `Start-Process -FilePath 'wscript.exe' -ArgumentList '${q(vbs)}' -Verb RunAs`
         const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
