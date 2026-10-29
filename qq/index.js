@@ -1668,8 +1668,25 @@ function napcatLauncherPath(config) {
   if (!shell) return ''
   const oneKey = join(shell, 'napcat.bat')
   if (existsSync(oneKey)) {
-    const quickBat = join(shell, 'napcat.quick.bat')
-    if (String(config?.napcatQuickLogin?.get?.() || '').trim() && existsSync(quickBat)) return quickBat
+    // OneKey 的 napcat.quick.bat 里 QQ 号是写死的（10086），不吃参数；
+    // 配了快速登录号就现场生成一个带号的脚本（2026-10-29）
+    const quick = String(config?.napcatQuickLogin?.get?.() || '').trim()
+    if (quick && /^\d{5,12}$/.test(quick)) {
+      const gen = join(shell, `napcat-quick-${quick}.bat`)
+      try {
+        const body = [
+          '@echo off',
+          'chcp 65001 >nul',
+          'cd /d "%~dp0"',
+          `.\\NapCatWinBootMain.exe ${quick}`,
+          '',
+        ].join('\r\n')
+        let cur = ''
+        try { cur = readFileSync(gen, 'utf8') } catch { /* 还没生成 */ }
+        if (cur !== body) writeFileSync(gen, body, 'utf8')
+      } catch { /* 写不了就用原生 bat */ }
+      if (existsSync(gen)) return gen
+    }
     return oneKey
   }
   try {
