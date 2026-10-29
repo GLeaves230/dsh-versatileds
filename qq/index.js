@@ -1603,10 +1603,8 @@ function findNapcatShell(root) {
 }
 
 function napcatInstalled(dir) {
+  // 只认 OneKey 隔离布局（自带适配 QQ）。老布局要系统 QQ，已废弃（2026-10-29 主人：只走隔离版）
   try {
-    // 老布局：<dir>/napcat/napcat.mjs
-    if (NAPCAT_REQUIRED.every((f) => existsSync(join(dir, 'napcat', f)))) return true
-    // OneKey 布局：<dir>/NapCat.*.Shell/...
     return Boolean(findNapcatShell(dir))
   } catch {
     return false
@@ -1639,23 +1637,24 @@ function napcatAppDir(config) {
 function napcatLauncherPath(config) {
   const custom = String(config.napcatLauncher.get() || '').trim()
   if (custom) return custom
-  const root = napcatShellRoot(config)
-  // OneKey 包：根目录直接放 napcat.bat / napcat.quick.bat（自带 QQ，2026-10-29）
-  const oneKey = join(root, 'napcat.bat')
+  const shell = findNapcatShell(napcatRoot(config))
+  // 只走隔离版：启动器必须在 NapCat.<build>.Shell 目录里（老布局的 launcher.bat 会找系统 QQ）
+  if (!shell) return ''
+  const oneKey = join(shell, 'napcat.bat')
   if (existsSync(oneKey)) {
-    const quickBat = join(root, 'napcat.quick.bat')
+    const quickBat = join(shell, 'napcat.quick.bat')
     if (String(config?.napcatQuickLogin?.get?.() || '').trim() && existsSync(quickBat)) return quickBat
     return oneKey
   }
-  const dir = join(root, 'napcat')
-  // NapCat 官方：Windows 10 要用 launcher-win10.bat（Win11 用 launcher.bat）
   try {
     const parts = String(os.release() || '').split('.').map((x) => Number(x) || 0)
     const build = parts[2] || 0
-    const win10 = join(dir, 'launcher-win10.bat')
+    const win10 = join(shell, 'launcher-win10.bat')
     if (build > 0 && build < 22000 && existsSync(win10)) return win10
+    const plain = join(shell, 'launcher.bat')
+    if (existsSync(plain)) return plain
   } catch { /* ignore */ }
-  return join(dir, 'launcher.bat')
+  return ''
 }
 
 function napcatQrPath(config) {
@@ -2516,29 +2515,11 @@ async function ensureNapcatPackage(config) {
       ensureOneBotConfig(config, curQq2)
       return true
     }
-    if (!existsSync(NAPCAT_VENDOR_ZIP)) {
-      plog('info', '[dsh-versatileds] 插件里没有 NapCat 包，去官方下最新版')
-      await downloadNapcatPackage()
-    }
-    mkdirSync(dir, { recursive: true })
-    plog('info', '[dsh-versatileds] 首次初始化：解压 NapCat 到', dir)
-    const q = (s) => String(s).replace(/'/g, "''")
-    // 解压 118MB 也要一两分钟，同样别用 spawnSync 卡住事件循环
-    const srcZip = existsSync(NAPCAT_VENDOR_ZIP) ? NAPCAT_VENDOR_ZIP : napcatDownloadZip()
-    const r = await runPsAsync(
-      `Expand-Archive -LiteralPath '${q(srcZip)}' -DestinationPath '${q(dir)}' -Force`,
-      600000,
-    )
-    napcatPkg.ready = napcatInstalled(dir)
-    if (napcatPkg.ready) {
-      const curQq = await detectCurrentQq(config)
-      if (curQq) {
-        plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQq}（按这个号写 OneBot 配置）`)
-        setLoginQq(curQq); rememberLoginQq(curQq)
-      }
-      ensureOneBotConfig(config, curQq)
-    }
-    if (!napcatPkg.ready) napcatPkg.error = `解压后关键文件仍不完整（exit ${r.status}）`
+    // 老流程（NapCat 包 + 系统 QQ）已废弃：只走隔离版（2026-10-29 主人要求）
+    plog('warn', '[dsh-versatileds] 隔离版 NapCat 安装失败：A 流程（本地组装）和 B 流程（OneKey 安装器）都没成功')
+    plog('warn', '[dsh-versatileds] 请检查网络后重试；或手动解压 NapCat.Shell.Windows.OneKey.zip 运行 NapCatInstaller.exe')
+    napcatPkg.error = '隔离版 NapCat 安装失败（不走系统 QQ）。看日志里的 A/B 流程提示，或手动跑 OneKey 安装器'
+    return false
     return napcatPkg.ready
   } catch (err) {
     napcatPkg.error = String(err?.message ?? err)
