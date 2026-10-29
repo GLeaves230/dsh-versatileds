@@ -2352,6 +2352,22 @@ async function assembleNapcatInstall(dir) {
     return false
   }
 
+  // 4.5) 拍平：最新 Shell zip 根是一层 napcat/，这里把里面的东西提上来
+  try {
+    const innerDir = join(appDir, 'napcat')
+    const flatMjs = join(appDir, 'napcat.mjs')
+    const nestedMjs = join(innerDir, 'napcat.mjs')
+    if (!existsSync(flatMjs) && existsSync(nestedMjs)) {
+      for (const e of readdirSync(innerDir)) {
+        const src = join(innerDir, e)
+        const dst = join(appDir, e)
+        try { renameSync(src, dst) } catch { /* ignore */ }
+      }
+      try { rmSync(innerDir, { recursive: true, force: true }) } catch { /* ignore */ }
+      plog('info', '[dsh-versatileds] 已把 NapCat 目录拍平一层')
+    }
+  } catch { /* ignore */ }
+
   // 5) 改 package.json 的 main（安装器同款）
   try {
     const pj = join(shell, 'versions', ver, 'resources', 'app', 'package.json')
