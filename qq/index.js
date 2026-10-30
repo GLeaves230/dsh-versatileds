@@ -515,6 +515,8 @@ export const Config = Schema.object({
     .description('DSH 退出时顺手关掉我拉起的 NapCat；默认关——NapCat 是提权进程，关它要弹 UAC，会把退出卡住'),
   napcatQuickLogin: Schema.string().default('').volatile()
     .description('快速登录的 QQ 号；填了 launcher 启动时带这个号，不用扫码；留空就是扫码登录'),
+  qqInstallPath: Schema.string().default('C:\\Program Files\\NapCat\\Tencent\\QQNT')
+    .description('独立 QQ 安装路径（默认 C:\Program Files\NapCat\Tencent\QQNT；必须在 512 字节扇区的盘上，4Kn 盘跑不了 QQ）'),
   downloadThreads: Schema.number().default(16)
     .description('多线程下载线程数：1/8/16/32（16 快又稳，32 极快但可能被镜像限流）'),
   sharedMemoryPrivate: Schema.boolean().default(true).volatile()
@@ -2810,40 +2812,85 @@ async function restoreSystemQqRegistry() {
   return false
 }
 
+/**
+ * 独立 QQ 自动安装（2026-10-30 主人定稿）：
+ * ① 目标路径来自配置 qqInstallPath（默认 C:\Program Files\NapCat\Tencent\QQNT）
+ * ② 校验目标盘物理扇区必须 512（4Kn 盘 QQ 跑不起来，实测 F 盘）
+ * ③ 备份系统 QQ 的一切（注册表整键 + 目录名）
+ * ④ 隐藏系统 QQ 目录 + 删 Uninstall\QQ（否则安装器会卸掉它）
+ * ⑤ 改 Install 指向目标 → 启动安装器（用户点一次安装）
+ * ⑥ 轮询到目标 QQ.exe → 恢复系统 QQ 目录名 + 恢复注册表整键 + 写自定义键 + 删安装包
+ */
+
+const QQ_INSTALLER_URL = 'https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe'
+
+/** 目标盘的物理扇区（4096 = 4Kn，QQ 跑不了）。返回 { ok, sector, error } */
+async function checkSectorSize(targetPath) {
+  try {
+    const drive = String(targetPath).slice(0, 2)
+    const r = await runAsync('fsutil', ['fsinfo', 'ntfsinfo', drive], 20000)
+    const m = String(r.stdout || '').match(/Bytes Per Physical Sector\s*:\s*(\d+)/i)
+    const sector = m ? Number(m[1]) : 0
+    if (!sector) return { ok: false, sector: 0, error: '读不到扇区大小' }
+    if (sector !== 512) return { ok: false, sector, error: `目标盘是 ${sector} 字节物理扇区（4Kn），QQ 在这种盘上跑不起来，请换一个 512 扇区的盘` }
+    return { ok: true, sector }
+  } catch (err) {
+    return { ok: false, sector: 0, error: String(err?.message ?? err).slice(0, 80) }
+  }
+}
+
 async function installIsolatedQq(config) {
   if (qqInstallState.running) return qqInstallState
-  const target = join(versatiledsBase(), 'qq', 'qq-napcat')
-  qqInstallState = { running: true, phase: 'downloading', target, startedAt: Date.now(), error: '' }
-  const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
-  const exe = join(napcatRoot(config), 'qq-installer.exe')
-  const url = 'https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe'
+  const target = String(acctCfg(config, 'qqInstallPath', 'C:\\Program Files\\NapCat\\Tencent\\QQNT') || '').trim()
+    || 'C:\\Program Files\\NapCat\\Tencent\\QQNT'
+  qqInstallState = { running: true, phase: 'checking', target, startedAt: Date.now(), error: '' }
 
   try {
-    // 先备份系统 QQ 用到的全部注册表值（动态读，不硬编码），装完恢复
-    try { await backupSystemQqRegistry() } catch { /* ignore */ }
+    // ② 扇区校验
+    const sec = await checkSectorSize(target)
+    if (!sec.ok) {
+      qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: sec.error }
+      plog('warn', '[dsh-versatileds] 独立 QQ 安装被拒：' + sec.error)
+      return qqInstallState
+    }
+    qqInstallState.phase = 'downloading'
+
+    // ③ 备份系统 QQ（注册表整键 + 目录名）
+    await backupSystemQqRegistry()
+    const sysDir = 'D:\\Program Files\\Tencent\\QQNT'
+    const hiddenDir = 'D:\\Program Files\\Tencent\\QQNT.dsh-hidden'
+    try {
+      if (existsSync(sysDir) && !existsSync(hiddenDir)) {
+        await runAsync('cmd', ['/c', 'move', `"${sysDir}"`, `"${hiddenDir}"`], 60000)
+        plog('info', '[dsh-versatileds] 已隐藏系统 QQ 目录：' + hiddenDir)
+      }
+    } catch { /* 藏不了也继续，只是可能被卸 */ }
+
+    // ④ 删 Uninstall\QQ + 改 Install
+    try {
+      const ps = [
+        'Remove-Item "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ" -Recurse -Force -ErrorAction SilentlyContinue',
+        `New-ItemProperty -Path 'HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT' -Name 'Install' -Value '${target.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
+        'Write-Output "ok"',
+      ].join('; ')
+      await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 60000)
+    } catch { /* ignore */ }
+
+    // ① 下载安装包
+    const exe = join(napcatRoot(config), 'qq-installer.exe')
     if (!existsSync(exe) || statSync(exe).size < 200 * 1024 * 1024) {
+      const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
       plog('info', `[dsh-versatileds] 下载 QQ 安装包（${threads} 线程）…`)
-      const got = await downloadParallel(url, exe, { threads, minBytes: 200 * 1024 * 1024 })
+      const got = await downloadParallel(QQ_INSTALLER_URL, exe, { threads, minBytes: 200 * 1024 * 1024 })
       if (!got.ok) {
         qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装包下载失败：' + got.reason }
         return qqInstallState
       }
     }
-    qqInstallState.phase = 'launching'
 
-    // 备份 Install → 改成目标目录（安装器默认路径跟着变）
-    const ps = [
-      '$k = "HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT"',
-      'if (Test-Path $k) {',
-      '  $old = (Get-ItemProperty $k).Install',
-      '  if ($old) { Set-Content -Path "' + join(versatiledsBase(), 'qq', 'qq-install-bak.txt').replace(/\\/g, '\\\\') + '" -Value $old -Encoding UTF8 }',
-      '}',
-      `New-ItemProperty -Path $k -Name 'Install' -Value '${target.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
-      'Write-Output "ok"',
-    ].join('; ')
-    await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 60000)
-
-    // 启动安装器：必须 detached + unref，绝不能用 runAsync（超时会 kill 掉安装器，2026-10-30 踩过）
+    // ⑤ 启动安装器（detached，不杀）
+    qqInstallState.phase = 'installing'
+    plog('info', '[dsh-versatileds] 安装器已启动，目标路径=' + target + '（点「安装」即可）')
     try {
       const child = spawn(exe, [], { detached: true, stdio: 'ignore', windowsHide: false })
       child.unref()
@@ -2852,34 +2899,39 @@ async function installIsolatedQq(config) {
       return qqInstallState
     }
 
-    qqInstallState.phase = 'installing'
-    plog('info', '[dsh-versatileds] 安装器已启动，默认目录=' + target + '（点「安装」即可）')
-
-    // 后台轮询目标目录：出现 QQ.exe 就收尾
-    const deadline = Date.now() + 10 * 60_000
+    // ⑥ 轮询目标目录 → 收尾
+    const deadline = Date.now() + 15 * 60_000
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 5000))
       if (existsSync(join(target, 'QQ.exe'))) {
         qqInstallState.phase = 'finishing'
-        // 恢复系统 QQ 的注册表值（安装器会覆盖 Uninstall\QQ / Install 等）
+        // 恢复系统 QQ 目录名
+        try {
+          if (existsSync(hiddenDir) && !existsSync(sysDir)) {
+            await runAsync('cmd', ['/c', 'move', `"${hiddenDir}"`, `"${sysDir}"`], 60000)
+          }
+        } catch { /* ignore */ }
+        // 恢复系统 QQ 注册表（含 Uninstall\QQ 整键）
         await restoreSystemQqRegistry()
-        // 再写我们自己的键，指向独立 QQ（系统 QQ 的键保持原值）
-        const ps2 = [
-          '$u = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds"',
-          'if (-not (Test-Path $u)) { New-Item -Path $u -Force | Out-Null }',
-          `New-ItemProperty -Path $u -Name 'DisplayName' -Value 'dsh-versatileds (isolated QQ for NapCat)' -PropertyType String -Force | Out-Null`,
-          `New-ItemProperty -Path $u -Name 'UninstallString' -Value '"${join(target, 'Uninstall.exe').replace(/\\/g, '\\\\')}"' -PropertyType String -Force | Out-Null`,
-          `New-ItemProperty -Path $u -Name 'InstallLocation' -Value '${target.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
-          'Write-Output "ok"',
-        ].join('; ')
-        await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps2], 60000)
+        // 写自定义键指向独立 QQ
+        try {
+          const ps2 = [
+            '$u = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds"',
+            'if (-not (Test-Path $u)) { New-Item -Path $u -Force | Out-Null }',
+            `New-ItemProperty -Path $u -Name 'DisplayName' -Value 'dsh-versatileds (isolated QQ for NapCat)' -PropertyType String -Force | Out-Null`,
+            `New-ItemProperty -Path $u -Name 'UninstallString' -Value '"${join(target, 'Uninstall.exe').replace(/\\/g, '\\\\')}"' -PropertyType String -Force | Out-Null`,
+            `New-ItemProperty -Path $u -Name 'InstallLocation' -Value '${target.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
+            'Write-Output "ok"',
+          ].join('; ')
+          await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps2], 60000)
+        } catch { /* ignore */ }
         try { rmSync(exe, { force: true }) } catch { /* ignore */ }
         qqInstallState = { ...qqInstallState, running: false, phase: 'done' }
         plog('info', '[dsh-versatileds] 独立 QQ 安装完成：' + target)
         return qqInstallState
       }
     }
-    qqInstallState = { ...qqInstallState, running: false, phase: 'timeout', error: '等待安装超时（10 分钟）' }
+    qqInstallState = { ...qqInstallState, running: false, phase: 'timeout', error: '等待安装超时（15 分钟）' }
     return qqInstallState
   } catch (err) {
     qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: String(err?.message ?? err).slice(0, 160) }

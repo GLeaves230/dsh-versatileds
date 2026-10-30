@@ -1789,9 +1789,12 @@ window.__ModuleLoader__.load({
     }
 
     /** 独立 QQ（D:\QQ-NapCat）：卸载 + 打开目录，2026-10-30 */
-    function IsolatedQqPanel() {
+    function IsolatedQqPanel({ form }) {
       const [note, setNote] = React.useState('')
       const [busy, setBusy] = React.useState(false)
+      const [installPath, setInstallPath] = React.useState(() => {
+        try { return String(form.get('qqInstallPath') || 'C:\\Program Files\\NapCat\\Tencent\\QQNT') } catch { return 'C:\\Program Files\\NapCat\\Tencent\\QQNT' }
+      })
       const call = (path) => {
         setBusy(true)
         setNote('处理中…')
@@ -1804,6 +1807,17 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(false))
       }
       return React.createElement('div', { style: { ...rowStyle, flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: '10px', marginTop: '6px' } },
+        React.createElement('span', { style: labelStyle }, '独立 QQ 安装路径'),
+        React.createElement('input', {
+          value: installPath,
+          onChange: (e) => {
+            setInstallPath(e.target.value)
+            try { form.set('qqInstallPath', e.target.value) } catch { /* ignore */ }
+          },
+          placeholder: 'C:\\Program Files\\NapCat\\Tencent\\QQNT',
+          style: { flex: 1, minWidth: '320px', padding: '3px 6px' },
+        }),
+        React.createElement('span', { style: hintStyle }, '必须放 512 字节扇区的盘（4Kn 盘跑不了 QQ）；默认 C:\\Program Files\\NapCat\\Tencent\\QQNT'),
         React.createElement('span', { style: labelStyle }, '独立 QQ'),
         React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/uninstall-qq') }, '卸载独立 QQ'),
         React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/open-qq-dir') }, '打开独立 QQ 目录'),
@@ -1811,7 +1825,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function LoginPanel({ channel }) {
+    function LoginPanel({ channel, form }) {
       const [st, setSt] = React.useState({ phase: 'loading' })
       const [busy, setBusy] = React.useState(false)
       const [stopping, setStopping] = React.useState(false)
@@ -2001,7 +2015,7 @@ window.__ModuleLoader__.load({
             'NapCat 目录：', React.createElement('code', null, st.dir || '<DSH_HOME>/versatileds/qq/napcat')),
         ),
         React.createElement(QuickLoginPanel, { key: 'quick-login' }),
-        React.createElement(IsolatedQqPanel, { key: 'isolated-qq' }),
+        React.createElement(IsolatedQqPanel, { key: 'isolated-qq', form: form }),
       )
     }
 
@@ -2602,7 +2616,7 @@ window.__ModuleLoader__.load({
 
         // 登录子页面：只显示状态和二维码，不渲染普通字段
         if (activeTab === 'login') {
-          children.push(React.createElement(LoginPanel, { key: 'login-panel', channel: v.qqChannel || 'napcat' }))
+          children.push(React.createElement(LoginPanel, { key: 'login-panel', channel: v.qqChannel || 'napcat', form: form }))
         }
 
         if (activeTab === 'logs') {
