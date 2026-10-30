@@ -4944,6 +4944,8 @@ const actionClock = { lastSendAt: 0 }
 const napcatControl = { start: null, alive: null, stop: null }
 /** 手动触发主动搭话：路由在模块级，apply 内的 proactiveTick 只能这样暴露 */
 let proactiveTickFn = null
+/** 上一次「启动登录服务」的结果：{ at, ok, reason, error }。UI 用它显示为什么没起来（2026-10-30） */
+let napcatStartResult = { at: 0, ok: null, reason: '', error: '' }
 
 /** 主动退出登录：置 true 后不再自动拉起 NapCat，WS 断了也不再自动重连；点「启动登录服务」才清掉。 */
 let napcatLoggedOut = false
@@ -6095,6 +6097,8 @@ function startStatusServer(config, napcat = null) {
       const loggedInShown = loggedIn && !napcatLoggedOut
       res.end(JSON.stringify({
         loggedIn: loggedInShown,
+        // 上一次「启动登录服务」的结果：为什么点了没起来（2026-10-30）
+        startResult: napcatStartResult,
         loggedOut: napcatLoggedOut,
         // 退出登录要杀的进程：设置页顺手显示出来，出问题时不用再翻日志
         pid: loggedInShown ? await resolveNapcatPid() : 0,
@@ -6116,9 +6120,17 @@ function startStatusServer(config, napcat = null) {
     if (url.pathname === '/login/start' || url.pathname === '/napcat/start') {
       // 拉起是慢活（等二维码 + 等登录），别让 HTTP 请求挂住，发起就返回
       try {
-        const p = napcatControl.start ? napcatControl.start('settings') : null
-        if (p && typeof p.catch === 'function') p.catch(() => {})
-      } catch { /* ignore */ }
+        if (!napcatControl.start) {
+          plog('warn', '[dsh-versatileds] 启动被调用但插件还没就绪（napcatControl.start 为空）')
+        } else {
+          const p = napcatControl.start('settings')
+          if (p && typeof p.catch === 'function') p.catch((err) => {
+            plog('warn', '[dsh-versatileds] 启动 NapCat 失败：' + String(err?.message ?? err).slice(0, 160))
+          })
+        }
+      } catch (err) {
+        plog('warn', '[dsh-versatileds] 启动 NapCat 抛错：' + String(err?.message ?? err).slice(0, 160))
+      }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true, started: true }))
       return
@@ -9514,10 +9526,30 @@ async function syncGroupRules(force = false) {
       return false
     }
     // 「免登录自动化」关掉时：不自动拉起，需要手动点「启动登录服务」（2026-10-29）
-    if (!force && acctCfg(config, 'quickLoginAutoEnabled', true) === false) return false
-    if (!force && config.autoStartNapCat.get() !== true) return false
-    if (napcatStarting) return false
-    if (Date.now() - lastQrCloseAt < 5 * 60_000) return false
+    if (!force && acctCfg(config, 'quickLoginAutoEnabled', true) === false) {
+      plog('info', '[dsh-versatileds] 免登录自动化已关闭，不自动拉起 NapCat')
+      return false
+    }
+    if (!force && config.autoStartNapCat.get() !== true) {
+      plog('info', '[dsh-versatileds] 自动启动已关闭，不自动拉起 NapCat')
+      return false
+    }
+    // 正在启动：手动点「登录服务」(force) 时不能静默拒绝，等上一次结束再说（2026-10-30）
+    if (napcatStarting) {
+      if (!force) return false
+      plog('info', '[dsh-versatileds] 手动启动：等上一次启动流程结束…')
+      const waitUntil = Date.now() + 90_000
+      while (napcatStarting && Date.now() < waitUntil) await sleep(500)
+      if (napcatStarting) {
+        plog('warn', '[dsh-versatileds] 上一次启动还没结束（等了 90 秒），这次不重复拉起')
+        return false
+      }
+    }
+    // 刚关掉二维码窗口：5 分钟内不自动重拉；手动点登录不受限
+    if (!force && Date.now() - lastQrCloseAt < 5 * 60_000) {
+      plog('info', '[dsh-versatileds] 刚关闭过二维码窗口，5 分钟内不自动重拉')
+      return false
+    }
     napcatStarting = true
     try {
       const launcher = napcatLauncherPath(config)
@@ -9846,7 +9878,16 @@ async function syncGroupRules(force = false) {
 
   // 设置页的「登录」子页面通过这两个钩子直接驱动（手动点按钮，强制拉起）
   napcatControl.alive = () => napcatAlive()
-  napcatControl.start = (reason) => ensureNapCat(reason, false, true)
+  napcatControl.start = (reason) => {
+    const p = ensureNapCat(reason, false, true)
+    // 记下结果，UI 能显示「为什么点了登录却没起来」（2026-10-30）
+    p.then((ok) => {
+      napcatStartResult = { at: Date.now(), ok: Boolean(ok), reason: String(reason || ''), error: '' }
+    }, (err) => {
+      napcatStartResult = { at: Date.now(), ok: false, reason: String(reason || ''), error: String(err?.message ?? err).slice(0, 200) }
+    })
+    return p
+  }
   napcatControl.stop = () => logoutNapCat(config)
 
   /** QQ 侧只负责「要一帧」：把直播间地址交给 B站 插件，抓帧和看图都不在这里做。 */
