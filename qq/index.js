@@ -2300,8 +2300,8 @@ async function downloadLight(ghUrl, dest) {
 async function downloadParallel(url, dest, opts = {}) {
   const threads = Math.max(1, Math.min(32, Number(opts.threads) || 16))
   const minBytes = Number(opts.minBytes) || 100_000
-  const partAttempts = Number(opts.partAttempts) || 8
-  const partTimeoutMs = Number(opts.partTimeoutMs) || 120_000
+  const partAttempts = Number(opts.partAttempts) || 3
+  const partTimeoutMs = Number(opts.partTimeoutMs) || 30_000
   const headTimeoutMs = Number(opts.headTimeoutMs) || 30_000
 
   // 1) HEAD：拿总大小 + 看支不支持 Range
@@ -2843,8 +2843,14 @@ async function installIsolatedQq(config) {
     ].join('; ')
     await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 60000)
 
-    // 启动安装器（可见，等用户点「安装」）
-    await runAsync(exe, [], 5000).catch(() => {})
+    // 启动安装器：必须 detached + unref，绝不能用 runAsync（超时会 kill 掉安装器，2026-10-30 踩过）
+    try {
+      const child = spawn(exe, [], { detached: true, stdio: 'ignore', windowsHide: false })
+      child.unref()
+    } catch (err) {
+      qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装器启动失败：' + String(err?.message ?? err).slice(0, 120) }
+      return qqInstallState
+    }
 
     qqInstallState.phase = 'installing'
     plog('info', '[dsh-versatileds] 安装器已启动，默认目录=' + target + '（点「安装」即可）')
@@ -2887,7 +2893,8 @@ async function installIsolatedQq(config) {
  * A 流程（解压版 QQ）已被证明跑不起来（QQNT.dll APPCRASH）。
  */
 async function installShellLayout(config, dir) {
-  const zip = join(dir, 'NapCat.Shell.zip')
+  // 用带时间戳的文件名：/download 接口和旧句柄可能锁住固定名字，避开它
+  const zip = join(dir, `NapCat.Shell.${Date.now()}.zip`)
   const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
   const url = 'https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip'
   plog('info', `[dsh-versatileds] S 流程：下载 NapCat.Shell.zip（${threads} 线程）…`)
@@ -5385,6 +5392,13 @@ function startStatusServer(config, napcat = null) {
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
     const url = new URL(req.url || '/', 'http://127.0.0.1')
     if (url.pathname === '/cooldowns') {
+      // 缓存为空就实时问一次 OneBot（2026-10-30：独立 QQ 启动不带 -q，缓存可能一直是空的）
+      if (!loginQqCache) {
+        try {
+          const q = await detectCurrentQq(config)
+          if (q) { loginQqCache = q; rememberLoginQq(q) }
+        } catch { /* ignore */ }
+      }
       const state = loadProactiveState()
       const enabled = config.proactiveEnabled.get() === true
       const limit = Number(config.proactiveDailyLimit.get() ?? 0)
