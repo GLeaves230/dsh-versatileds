@@ -2867,7 +2867,7 @@ async function systemQqDir() {
       if (d && existsSync(join(d, 'QQ.exe'))) return d
     }
   } catch { /* ignore */ }
-  return 'D:\\Program Files\\Tencent\\QQNT'
+  return 'C:\\Program Files\\Tencent\\QQNT'
 }
 
 /** 目标盘的物理扇区（4096 = 4Kn，QQ 跑不了）。返回 { ok, sector, error } */
