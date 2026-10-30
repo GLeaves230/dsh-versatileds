@@ -4884,6 +4884,8 @@ const actionClock = { lastSendAt: 0 }
 
 /** apply 里把「拉起 NapCat」「查登录态」「退出登录」挂到这里，设置页的子页面直接调。 */
 const napcatControl = { start: null, alive: null, stop: null }
+/** 手动触发主动搭话：路由在模块级，apply 内的 proactiveTick 只能这样暴露 */
+let proactiveTickFn = null
 
 /** 主动退出登录：置 true 后不再自动拉起 NapCat，WS 断了也不再自动重连；点「启动登录服务」才清掉。 */
 let napcatLoggedOut = false
@@ -6132,7 +6134,7 @@ function startStatusServer(config, napcat = null) {
         saveProactiveState(st)
         const targets = proactiveTargetsOf(config)
         const groups = proactiveGroupsOf(config)
-        await proactiveTick()
+        if (typeof proactiveTickFn === 'function') await proactiveTickFn()
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
         res.end(JSON.stringify({
           ok: true,
@@ -10220,6 +10222,7 @@ async function syncGroupRules(force = false) {
       plog('info', `[dsh-versatileds] 主动搭话目标 ${target.type}:${target.id} 本轮没接上，下次继续试`)
     }
   }
+  proactiveTickFn = proactiveTick
 
   /** 群接话：读最近 15 分钟的话题，接一句并 @ 最近说话的人。 */
   async function proactiveGroupStep(gid) {
