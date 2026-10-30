@@ -150,6 +150,16 @@ window.__ModuleLoader__.load({
       const save = () => {
         const clean = items.map((s) => String(s || '').trim()).filter(Boolean)
         form.set(field, clean.join(','))
+        // 主动搭话列表按账号存一份（2026-10-30：之前只写了全局配置，切号看着像没保存）
+        if (field === 'proactiveTargets' || field === 'proactiveGroups') {
+          fetch(QQ_STATUS_URL + (field === 'proactiveTargets' ? '/proactive-targets' : '/proactive-groups'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: clean }),
+          }).then((r) => r.json()).then((d) => {
+            if (d && Array.isArray(d.ids)) setAccountIds(d.ids)
+          }).catch(() => {})
+        }
         setMsg('已保存')
         setOpen(false)
       }
