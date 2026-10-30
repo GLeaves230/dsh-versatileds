@@ -1619,6 +1619,9 @@ function findNapcatShell(root) {
       .sort((a, b) => b.v - a.v)
     for (const c of cands) {
       const shell = join(root, c.d)
+      // 布局 1：Shell 根（napcat.mjs + launcher.bat，用系统 QQ；2026-10-30）
+      if (existsSync(join(shell, 'napcat.mjs')) && existsSync(join(shell, 'launcher.bat'))) return shell
+      // 布局 2：OneKey（QQ.exe + versions/<v>/resources/app/napcat/napcat.mjs）
       if (!existsSync(join(shell, 'QQ.exe'))) continue
       const vers = join(shell, 'versions')
       if (!existsSync(vers)) continue
@@ -1756,6 +1759,10 @@ function napcatLauncherPath(config) {
   if (!shell) return ''
   // OneKey 自带的 napcat.bat 只调 NapCatWinBootMain.exe（从注册表找系统 QQ），
   // 会注入到错的 QQ 版本上；这里生成显式带「自带 QQ + Hook DLL」的启动脚本（2026-10-29）
+  // Shell 根布局（napcat.mjs + launcher.bat）：launcher.bat 自己从注册表找系统 QQ（2026-10-30）
+  if (existsSync(join(shell, 'napcat.mjs')) && existsSync(join(shell, 'launcher.bat'))) {
+    return join(shell, 'launcher.bat')
+  }
   const bootMain = join(shell, 'NapCatWinBootMain.exe')
   const hookDll = join(shell, 'NapCatWinBootHook.dll')
   const selfQq = join(shell, 'QQ.exe')
@@ -2692,6 +2699,73 @@ async function ensureOneKeyInstaller(config, dir) {
   }
 }
 
+/**
+ * S 流程（2026-10-30）：下载完整 NapCat.Shell.zip，解压成「Shell 根布局」，
+ * 直接用系统 QQ（launcher.bat 从注册表找），不再下载/解压 QQ 安装包。
+ * A 流程（解压版 QQ）已被证明跑不起来（QQNT.dll APPCRASH）。
+ */
+async function installShellLayout(config, dir) {
+  const zip = join(dir, 'NapCat.Shell.zip')
+  const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
+  const url = 'https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip'
+  plog('info', `[dsh-versatileds] S 流程：下载 NapCat.Shell.zip（${threads} 线程）…`)
+  try { mkdirSync(dir, { recursive: true }) } catch { /* ignore */ }
+  const ok = await downloadViaMirrors(url, zip, { minBytes: 30 * 1024 * 1024, threads })
+  if (!ok) { plog('warn', '[dsh-versatileds] S 流程：NapCat.Shell.zip 下载失败'); return false }
+
+  // 用系统 QQ 的 build 号命名 shell 目录（读不到就用 52230）
+  let build = '52230'
+  try {
+    const versDir = 'D:\\Program Files\\Tencent\\QQNT\\versions'
+    for (const v of readdirSync(versDir)) {
+      const m = /-(\d+)$/.exec(v)
+      if (m) { build = m[1]; break }
+      const m2 = /9\.9\.(\d+)/.exec(v)
+      if (m2) { build = m2[1]; break }
+    }
+  } catch { /* ignore */ }
+  const target = join(dir, `NapCat.${build}.Shell`)
+  try {
+    if (existsSync(target)) rmSync(target, { recursive: true, force: true })
+  } catch (err) { plog('warn', '[dsh-versatileds] S 流程：旧 shell 目录删不掉：' + String(err?.message ?? err).slice(0, 80)) }
+  mkdirSync(target, { recursive: true })
+
+  plog('info', '[dsh-versatileds] S 流程：解压到 ' + target)
+  const ps = `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${target}' -Force`
+  const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 600_000)
+  if (r.status !== 0) {
+    plog('warn', '[dsh-versatileds] S 流程：解压失败 ' + String(r.stderr || '').slice(0, 160))
+    return false
+  }
+
+  // 校验关键文件
+  const need = ['launcher.bat', 'napcat.mjs', 'loadNapCat.js', 'NapCatWinBootMain.exe', 'NapCatWinBootHook.dll']
+  for (const f of need) {
+    if (!existsSync(join(target, f))) {
+      plog('warn', '[dsh-versatileds] S 流程：解压后缺少 ' + f)
+      return false
+    }
+  }
+
+  // NapCat 自己的日志开关（隐藏启动时排障只能靠文件日志）
+  try {
+    const cfgDir = join(target, 'config')
+    mkdirSync(cfgDir, { recursive: true })
+    const ncFile = join(cfgDir, 'napcat.json')
+    let nc = {}
+    try { nc = JSON.parse(readFileSync(ncFile, 'utf8')) } catch { nc = {} }
+    nc.fileLog = true
+    if (!nc.fileLogLevel) nc.fileLogLevel = 'debug'
+    if (nc.consoleLog === undefined) nc.consoleLog = true
+    writeFileSync(ncFile, JSON.stringify(nc, null, 2), 'utf8')
+  } catch { /* ignore */ }
+
+  plog('info', '[dsh-versatileds] S 流程完成：' + target)
+  // 用完即删下载包（主人要求：测试时每次都干净下载）
+  try { rmSync(zip, { force: true }) } catch { /* ignore */ }
+  return true
+}
+
 async function ensureNapcatPackage(config) {
   const dir = napcatRoot(config)
   if (napcatInstalled(dir)) {
@@ -2722,6 +2796,17 @@ async function ensureNapcatPackage(config) {
   napcatPkg.busy = true
   napcatPkg.error = ''
   try {
+    // S 流程优先（2026-10-30）：完整 NapCat.Shell.zip + 系统 QQ，不解压 QQ 安装包
+    if (await installShellLayout(config, dir)) {
+      napcatPkg.ready = true
+      const curQqS = await detectCurrentQq(config)
+      if (curQqS) {
+        plog('info', `[dsh-versatileds] 当前登录的 QQ：${curQqS}（按这个号写 OneBot 配置）`)
+        setLoginQq(curQqS); rememberLoginQq(curQqS)
+      }
+      ensureOneBotConfig(config, curQqS)
+      return true
+    }
     // A 流程：本地组装（NapCat 包 + 对应 QQ，不依赖安装器）→ B 流程：OneKey 安装器 → C 老流程（2026-10-29）
     if (await assembleNapcatInstall(dir)) {
       napcatPkg.ready = true
@@ -5452,6 +5537,35 @@ function startStatusServer(config, napcat = null) {
       res.end(JSON.stringify({ ok: true }))
       return
     }
+    if (url.pathname === '/napcat/download') {
+      // 自测 / 手动重下 NapCat.Shell.zip：走多线程下载器，验证线程设置与镜像（2026-10-30）
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'POST only' }))
+        return
+      }
+      const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
+      const dest = join(napcatRoot(config), 'NapCat.Shell.zip')
+      plog('info', `[dsh-versatileds] 手动重下 NapCat.Shell.zip（${threads} 线程）…`)
+      const t0 = Date.now()
+      const ok = await downloadViaMirrors(
+        'https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip',
+        dest,
+        { minBytes: 30 * 1024 * 1024, threads },
+      )
+      let bytes = 0
+      try { bytes = statSync(dest).size } catch { bytes = 0 }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({
+        ok: Boolean(ok),
+        threads,
+        bytes,
+        mb: Number((bytes / 1048576).toFixed(1)),
+        seconds: Math.round((Date.now() - t0) / 1000),
+        mirror: mirrorState.active || '直连',
+      }))
+      return
+    }
     if (url.pathname === '/login' || url.pathname === '/napcat') {
       // 「登录」子页面用：登录态 + 二维码是否就绪；登录成功后顺手删掉二维码缓存
       // 注意：NapCat 进程活着 ≠ QQ 在线。退出登录后进程还在，得再问一次 get_login_info 才算真登录。
@@ -5491,7 +5605,7 @@ function startStatusServer(config, napcat = null) {
         qrAt,
         pkgReady: napcatInstalled(napcatRoot(config)),
         // 诊断（Win10 排障用，2026-10-28）：目录/启动器/二维码新鲜度
-        dirExists: existsSync(join(napcatRoot(config), 'napcat')),
+        dirExists: existsSync(napcatShellRoot(config) || napcatRoot(config)),
         launcherExists: existsSync(napcatLauncherPath(config)),
         qrAgeSec: hasQr ? Math.round((Date.now() - qrAt) / 1000) : -1,
         pkgBusy: napcatPkg.busy,
