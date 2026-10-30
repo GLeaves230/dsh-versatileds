@@ -737,18 +737,39 @@ function ownerFilePath() {
 }
 
 function ownerQQOf(config) {
-  // 只认按号文件：qq/<账号>/owner.json（设置里填的）→ local-owner.json（私聊自动认主）。
-  // 不再回退全局 config.ownerQQ，避免两个号串主人（2026-10-30 主人要求）。
+  // 语义：isolateAccountMemory（账号记忆隔离）开着 → 主人按号；关着 → 用全局 ownerQQ。
+  // 隔离开时如果这个号还没有主人信息，就把全局的值一次性复制过来（种子），之后互不影响。
+  const isolated = config?.isolateAccountMemory?.get?.() === true
+  const globalOwner = String(config?.ownerQQ?.get?.() || '').trim()
+  if (!isolated) {
+    if (globalOwner) return globalOwner
+    try {
+      const j = loadJsonFile(ownerFilePath())
+      if (j?.owner) return String(j.owner).trim()
+    } catch { /* ignore */ }
+    try {
+      const local = loadJsonFile(localOwnerPath())
+      return String(local?.qq || '').trim()
+    } catch { return '' }
+  }
+  // 隔离开：按号文件优先
   try {
     const j = loadJsonFile(ownerFilePath())
     if (j?.owner) return String(j.owner).trim()
   } catch { /* ignore */ }
+  // 这个号还没有主人信息 → 用全局值初始化一份（只种一次）
+  if (globalOwner) {
+    try {
+      saveJsonFile(ownerFilePath(), { owner: globalOwner, at: Date.now(), seededFromGlobal: true })
+      plog('info', '[dsh-versatileds] 按号主人初始化：' + ownerFilePath() + ' ← ' + globalOwner)
+    } catch { /* ignore */ }
+    return globalOwner
+  }
+  // 全局也没填 → 看自动认主
   try {
     const local = loadJsonFile(localOwnerPath())
     return String(local?.qq || '').trim()
-  } catch {
-    return ''
-  }
+  } catch { return '' }
 }
 
 /** 没配 ownerQQ 时，把第一条私聊的人记成主人（只认一次，之后设置页填的优先）。 */
