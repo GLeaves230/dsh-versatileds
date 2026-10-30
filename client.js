@@ -1788,6 +1788,29 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 独立 QQ（D:\QQ-NapCat）：卸载 + 打开目录，2026-10-30 */
+    function IsolatedQqPanel() {
+      const [note, setNote] = React.useState('')
+      const [busy, setBusy] = React.useState(false)
+      const call = (path) => {
+        setBusy(true)
+        setNote('处理中…')
+        fetch(QQ_STATUS_URL + path, { method: 'POST' })
+          .then((r) => r.json())
+          .then((d) => {
+            setNote(d && d.ok ? (path.includes('open') ? '已打开目录：' + (d.dir || '') : '卸载程序已启动：' + (d.dir || '')) : (d && d.error ? d.error : '失败'))
+          })
+          .catch(() => setNote('接口没响应'))
+          .finally(() => setBusy(false))
+      }
+      return React.createElement('div', { style: { ...rowStyle, flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(128,128,128,.2)', paddingTop: '10px', marginTop: '6px' } },
+        React.createElement('span', { style: labelStyle }, '独立 QQ'),
+        React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/uninstall-qq') }, '卸载独立 QQ'),
+        React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/open-qq-dir') }, '打开独立 QQ 目录'),
+        React.createElement('span', { style: hintStyle }, note || 'NapCat 注入的是独立 QQ（注册表键 dsh-versatileds），系统 QQ 不受影响；卸载只删独立 QQ。'),
+      )
+    }
+
     function LoginPanel({ channel }) {
       const [st, setSt] = React.useState({ phase: 'loading' })
       const [busy, setBusy] = React.useState(false)
@@ -1978,6 +2001,7 @@ window.__ModuleLoader__.load({
             'NapCat 目录：', React.createElement('code', null, st.dir || '<DSH_HOME>/versatileds/qq/napcat')),
         ),
         React.createElement(QuickLoginPanel, { key: 'quick-login' }),
+        React.createElement(IsolatedQqPanel, { key: 'isolated-qq' }),
       )
     }
 

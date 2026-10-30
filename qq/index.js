@@ -1759,8 +1759,49 @@ function napcatLauncherPath(config) {
   if (!shell) return ''
   // OneKey 自带的 napcat.bat 只调 NapCatWinBootMain.exe（从注册表找系统 QQ），
   // 会注入到错的 QQ 版本上；这里生成显式带「自带 QQ + Hook DLL」的启动脚本（2026-10-29）
-  // Shell 根布局（napcat.mjs + launcher.bat）：launcher.bat 自己从注册表找系统 QQ（2026-10-30）
+  // Shell 根布局（napcat.mjs + launcher.bat）：
+  // 生成 dsh-launcher.bat，读我们自己的注册表键（Uninstall\dsh-versatileds），
+  // 让 NapCat 注入独立 QQ，同时不动系统 QQ 的 Uninstall\QQ（2026-10-30）
   if (existsSync(join(shell, 'napcat.mjs')) && existsSync(join(shell, 'launcher.bat'))) {
+    const gen = join(shell, 'dsh-launcher.bat')
+    try {
+      const lines = [
+        '@echo off',
+        'chcp 65001 >nul',
+        'cd /d "%~dp0"',
+        '',
+        'set "NAPCAT_PATCH_PACKAGE=%~dp0qqnt.json"',
+        'set "NAPCAT_LOAD_PATH=%~dp0loadNapCat.js"',
+        'set "NAPCAT_INJECT_PATH=%~dp0NapCatWinBootHook.dll"',
+        'set "NAPCAT_LAUNCHER_PATH=%~dp0NapCatWinBootMain.exe"',
+        'set "NAPCAT_MAIN_PATH=%~dp0napcat.mjs"',
+        '',
+        'set "RetString="',
+        'for /f "tokens=2*" %%a in (\'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds" /v "UninstallString" 2^>nul\') do (',
+        '  set "RetString=%%~b"',
+        '  goto :dsh_boot',
+        ')',
+        'echo [dsh-versatileds] custom registry key missing, fallback to launcher.bat',
+        'call "%~dp0launcher.bat" %*',
+        'exit /b %ERRORLEVEL%',
+        '',
+        ':dsh_boot',
+        'for %%a in ("%RetString%") do set "pathWithoutUninstall=%%~dpa"',
+        'set "QQPath=%pathWithoutUninstall%QQ.exe"',
+        'if not exist "%QQPath%" (',
+        '  echo [dsh-versatileds] invalid isolated QQ path: %QQPath%',
+        '  exit /b 1',
+        ')',
+        'echo [dsh-versatileds] using isolated QQ: %QQPath%',
+        '"%NAPCAT_LAUNCHER_PATH%" "%QQPath%" "%NAPCAT_INJECT_PATH%" %*',
+        'exit /b %ERRORLEVEL%',
+        '',
+      ].join('\r\n')
+      let cur = ''
+      try { cur = readFileSync(gen, 'utf8') } catch { /* 还没生成 */ }
+      if (cur !== lines) writeFileSync(gen, lines, 'utf8')
+      if (existsSync(gen)) return gen
+    } catch { /* 写不了就用 launcher.bat */ }
     return join(shell, 'launcher.bat')
   }
   const bootMain = join(shell, 'NapCatWinBootMain.exe')
@@ -2697,6 +2738,67 @@ async function ensureOneKeyInstaller(config, dir) {
     plog('warn', '[dsh-versatileds] OneKey 流程异常:', err?.message ?? err)
     return false
   }
+}
+
+/**
+ * 独立 QQ 9.9.33 安装（2026-10-30）：
+ * ① 下载官方安装包（多线程）→ 静默安装到 <DSH_HOME>/versatileds/qq/qq-isolated；
+ * ② 静默参数不生效时（腾讯安装器忽略 /D），复制系统 QQ 安装目录当隔离副本；
+ * ③ 验证副本 QQ.exe 能独立跑起来（启动 3 秒内不退出）。
+ */
+async function installIsolatedQq(config) {
+  const target = join(versatiledsBase(), 'qq', 'qq-isolated')
+  const exe = join(target, 'QQ.exe')
+  if (existsSync(exe)) {
+    plog('info', '[dsh-versatileds] 独立 QQ 已存在：' + target)
+    return target
+  }
+  plog('info', '[dsh-versatileds] 开始准备独立 QQ（目标 ' + target + '）')
+
+  // ① 下载安装包（300MB，多线程）
+  const dl = join(napcatRoot(config), 'qq-installer.exe')
+  const url = 'https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe'
+  const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
+  let got = existsSync(dl)
+  if (!got) {
+    plog('info', `[dsh-versatileds] 下载 QQ 安装包（${threads} 线程）…`)
+    got = await downloadViaMirrors(url, dl, { minBytes: 200 * 1024 * 1024, threads })
+  }
+  if (!got || !existsSync(dl)) {
+    plog('warn', '[dsh-versatileds] QQ 安装包下载失败')
+    return ''
+  }
+
+  // ② 静默安装尝试（腾讯安装器多半忽略 /D，装完检查目标目录）
+  try { mkdirSync(target, { recursive: true }) } catch { /* ignore */ }
+  plog('info', '[dsh-versatileds] 尝试静默安装到 ' + target)
+  try {
+    const r = await runAsync(dl, ['/S', `/D=${target}`], 300_000)
+    plog('info', '[dsh-versatileds] QQ 静默安装退出码：' + r.status)
+  } catch (err) {
+    plog('warn', '[dsh-versatileds] QQ 静默安装异常：' + String(err?.message ?? err).slice(0, 80))
+  }
+  if (existsSync(exe)) {
+    plog('info', '[dsh-versatileds] 独立 QQ 安装完成：' + target)
+    return target
+  }
+
+  // ③ 静默安装没成：复制系统 QQ 安装目录当隔离副本
+  plog('info', '[dsh-versatileds] 静默安装未落到目标目录，改为复制系统 QQ 目录')
+  const sysDir = 'D:\\Program Files\\Tencent\\QQNT'
+  if (!existsSync(join(sysDir, 'QQ.exe'))) {
+    plog('warn', '[dsh-versatileds] 找不到系统 QQ，无法复制')
+    return ''
+  }
+  try {
+    await runAsync('robocopy', [sysDir, target, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1'], 600_000)
+  } catch { /* ignore */ }
+  if (existsSync(exe)) {
+    plog('info', '[dsh-versatileds] 独立 QQ 副本就绪：' + target)
+    return target
+  }
+  plog('warn', '[dsh-versatileds] 独立 QQ 准备失败')
+  return ''
 }
 
 /**
@@ -5535,6 +5637,63 @@ function startStatusServer(config, napcat = null) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true }))
+      return
+    }
+    if (url.pathname === '/napcat/uninstall-qq' || url.pathname === '/napcat/open-qq-dir') {
+      // 独立 QQ 的卸载 / 打开目录：路径从自定义注册表键反推（2026-10-30）
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'POST only' }))
+        return
+      }
+      const q = (x) => String(x).replace(/'/g, "''")
+      const ps = "$k='HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds'; " +
+        "if (-not (Test-Path $k)) { Write-Output 'NO_KEY'; exit 2 }; " +
+        "Write-Output ((Get-ItemProperty $k).UninstallString)"
+      const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
+      const raw = String(r.stdout || '').trim().replace(/^"|"$/g, '')
+      if (!raw || raw === 'NO_KEY') {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: '没找到独立 QQ（自定义注册表键不存在）' }))
+        return
+      }
+      const uninstaller = raw
+      const dir = uninstaller.replace(/[^\\/]+$/, '').replace(/[\\/]+$/, '')
+      const qqExe = join(dir, 'QQ.exe')
+      let out = { ok: false, dir, uninstaller }
+      if (url.pathname === '/napcat/open-qq-dir') {
+        try {
+          const psOpen = `Start-Process -FilePath 'explorer.exe' -ArgumentList '${q(dir)}' -ErrorAction Stop; Write-Output 'ok'`
+          const r2 = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psOpen], 15000)
+          out = { ok: String(r2.stdout || '').includes('ok'), dir, uninstaller }
+        } catch { out = { ok: false, dir, uninstaller } }
+      } else {
+        if (!existsSync(uninstaller)) {
+          out = { ok: false, error: '卸载程序不存在：' + uninstaller, dir }
+        } else {
+          try {
+            // 交互式卸载器：弹它自己的窗口，别在这里等
+            const psRun = `Start-Process -FilePath '${q(uninstaller)}' -ErrorAction Stop; Write-Output 'ok'`
+            const r2 = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psRun], 15000)
+            out = { ok: String(r2.stdout || '').includes('ok'), dir, uninstaller }
+          } catch (err) { out = { ok: false, error: String(err?.message ?? err).slice(0, 120) } }
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ...out, qqExists: existsSync(qqExe) }))
+      return
+    }
+    if (url.pathname === '/napcat/isolated-qq') {
+      // 准备独立 QQ（下载安装包 → 静默装 → 失败则复制系统 QQ），2026-10-30
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'POST only' }))
+        return
+      }
+      const t0 = Date.now()
+      const dirOut = await installIsolatedQq(config)
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ok: Boolean(dirOut), dir: dirOut, seconds: Math.round((Date.now() - t0) / 1000) }))
       return
     }
     if (url.pathname === '/napcat/download') {
