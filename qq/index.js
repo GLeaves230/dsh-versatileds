@@ -515,6 +515,8 @@ export const Config = Schema.object({
     .description('DSH 退出时顺手关掉我拉起的 NapCat；默认关——NapCat 是提权进程，关它要弹 UAC，会把退出卡住'),
   napcatQuickLogin: Schema.string().default('').volatile()
     .description('快速登录的 QQ 号；填了 launcher 启动时带这个号，不用扫码；留空就是扫码登录'),
+  downloadThreads: Schema.number().default(16)
+    .description('多线程下载线程数：1/8/16/32（16 快又稳，32 极快但可能被镜像限流）'),
   sharedMemoryPrivate: Schema.boolean().default(true).volatile()
     .description('私聊是否读共享记忆'),
   sharedMemoryGroups: Schema.string().default('*').volatile()
@@ -1748,29 +1750,31 @@ function napcatLauncherPath(config) {
   const shell = findNapcatShell(napcatRoot(config))
   // 只走隔离版：启动器必须在 NapCat.<build>.Shell 目录里（老布局的 launcher.bat 会找系统 QQ）
   if (!shell) return ''
-  const oneKey = join(shell, 'napcat.bat')
-  if (existsSync(oneKey)) {
-    // OneKey 的 napcat.quick.bat 里 QQ 号是写死的（10086），不吃参数；
-    // 配了快速登录号就现场生成一个带号的脚本（2026-10-29）
+  // OneKey 自带的 napcat.bat 只调 NapCatWinBootMain.exe（从注册表找系统 QQ），
+  // 会注入到错的 QQ 版本上；这里生成显式带「自带 QQ + Hook DLL」的启动脚本（2026-10-29）
+  const bootMain = join(shell, 'NapCatWinBootMain.exe')
+  const hookDll = join(shell, 'NapCatWinBootHook.dll')
+  const selfQq = join(shell, 'QQ.exe')
+  if (existsSync(bootMain) && existsSync(selfQq)) {
     const quick = quickLoginUsable(config)
-    if (quick && /^\d{5,12}$/.test(quick)) {
-      const gen = join(shell, `napcat-quick-${quick}.bat`)
-      try {
-        const body = [
-          '@echo off',
-          'chcp 65001 >nul',
-          'cd /d "%~dp0"',
-          `.\\NapCatWinBootMain.exe ${quick}`,
-          '',
-        ].join('\r\n')
-        let cur = ''
-        try { cur = readFileSync(gen, 'utf8') } catch { /* 还没生成 */ }
-        if (cur !== body) writeFileSync(gen, body, 'utf8')
-      } catch { /* 写不了就用原生 bat */ }
+    const gen = join(shell, quick ? `dsh-launch-quick-${quick}.bat` : 'dsh-launch.bat')
+    try {
+      const lines = [
+        '@echo off',
+        'chcp 65001 >nul',
+        'cd /d "%~dp0"',
+        '".\\NapCatWinBootMain.exe"' + (quick ? ` ${quick}` : ''),
+        '',
+      ]
+      const body = lines.join('\r\n')
+      let cur = ''
+      try { cur = readFileSync(gen, 'utf8') } catch { /* 还没生成 */ }
+      if (cur !== body) writeFileSync(gen, body, 'utf8')
       if (existsSync(gen)) return gen
-    }
-    return oneKey
+    } catch { /* 写不了就用原生 bat */ }
   }
+  const oneKey = join(shell, 'napcat.bat')
+  if (existsSync(oneKey)) return oneKey
   try {
     const parts = String(os.release() || '').split('.').map((x) => Number(x) || 0)
     const build = parts[2] || 0
@@ -2236,6 +2240,77 @@ async function downloadLight(ghUrl, dest) {
 }
 
 /** 带镜像回退的下载：小文件先轻量链，再 PowerShell 链；失败换下一个，全挂再测一轮。 */
+/**
+ * 多线程分段下载（HTTP Range）：每段独立重试、独立超时，失败只补该段；
+ * 拼完校验总长度。线程数来自 config.downloadThreads（1/8/16/32）。
+ * 返回 { ok, bytes, reason }。
+ */
+async function downloadParallel(url, dest, opts = {}) {
+  const threads = Math.max(1, Math.min(32, Number(opts.threads) || 16))
+  const minBytes = Number(opts.minBytes) || 100_000
+  const partAttempts = Number(opts.partAttempts) || 8
+  const partTimeoutMs = Number(opts.partTimeoutMs) || 120_000
+  const headTimeoutMs = Number(opts.headTimeoutMs) || 30_000
+
+  // 1) HEAD：拿总大小 + 看支不支持 Range
+  let total = 0
+  let ranges = false
+  try {
+    const h = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(headTimeoutMs) })
+    total = Number(h.headers.get('content-length') || 0)
+    ranges = String(h.headers.get('accept-ranges') || '').toLowerCase().includes('bytes')
+    if (!h.ok) return { ok: false, reason: `HEAD ${h.status}` }
+  } catch (err) { return { ok: false, reason: `HEAD 失败：${String(err?.message ?? err).slice(0, 60)}` } }
+  if (!total) return { ok: false, reason: '没有 content-length' }
+  if (!ranges) return { ok: false, reason: '服务端不支持 Range' }
+  if (total < minBytes) return { ok: false, reason: '文件太小' }
+
+  // 2) 分段（每段至少 256KB，避免连接开销大于收益）
+  const n = Math.max(1, Math.min(threads, Math.ceil(total / (256 * 1024))))
+  const chunk = Math.ceil(total / n)
+  const bufs = new Array(n).fill(null)
+  let done = 0
+  const t0 = Date.now()
+
+  const part = async (i, attempt = 0) => {
+    const start = i * chunk
+    const end = Math.min(total - 1, start + chunk - 1)
+    try {
+      const r = await fetch(url, {
+        headers: { Range: `bytes=${start}-${end}` },
+        signal: AbortSignal.timeout(partTimeoutMs),
+      })
+      if (r.status !== 206 && !r.ok) throw new Error(`status ${r.status}`)
+      const buf = Buffer.from(await r.arrayBuffer())
+      const want = end - start + 1
+      if (buf.length !== want) throw new Error(`长度 ${buf.length}/${want}`)
+      bufs[i] = buf
+      done += 1
+      plog('info', `[dsh-versatileds] 分段 ${done}/${n}（第 ${i + 1} 段 ${Math.round(buf.length / 1048576)} MB）`)
+    } catch (err) {
+      if (attempt < partAttempts) {
+        await new Promise((res) => setTimeout(res, 1000 + attempt * 1000))
+        return part(i, attempt + 1)
+      }
+      throw new Error(`第 ${i + 1} 段失败：${String(err?.message ?? err).slice(0, 60)}`)
+    }
+  }
+
+  try {
+    await Promise.all(Array.from({ length: n }, (_, i) => part(i)))
+  } catch (err) {
+    return { ok: false, reason: String(err?.message ?? err).slice(0, 100) }
+  }
+
+  // 3) 拼接 + 校验
+  const all = Buffer.concat(bufs)
+  if (all.length !== total) return { ok: false, reason: `拼接后 ${all.length} ≠ ${total}` }
+  mkdirSync(dirname(dest), { recursive: true })
+  writeFileSync(dest, all)
+  plog('info', `[dsh-versatileds] 分段下载完成：${Math.round(all.length / 1048576)} MB，${n} 线程，${Math.round((Date.now() - t0) / 1000)} 秒`)
+  return { ok: true, bytes: all.length }
+}
+
 async function downloadViaMirrors(ghUrl, dest, opts = {}) {
   const minBytes = opts.minBytes ?? 100_000
   const officialTimeoutSec = opts.officialTimeoutSec ?? 90
@@ -2274,6 +2349,25 @@ async function downloadViaMirrors(ghUrl, dest, opts = {}) {
     const isOfficial = !prefix
     const t = isOfficial ? officialTimeoutSec : mirrorTimeoutSec
     plog('info', '[dsh-versatileds] 下载：' + url)
+    // 优先多线程分段（2026-10-30）：单连接只有 1~48KB/s，16 段能到 160KB/s
+    const parThreads = Number(opts.threads) || Number(acctCfg(config, 'downloadThreads', 16)) || 16
+    if (parThreads > 1) {
+      const par = await downloadParallel(url, dest, { threads: parThreads, minBytes, partAttempts: opts.partAttempts || 6 })
+      if (par.ok) {
+        let size = 0
+        try { size = statSync(dest).size } catch { size = 0 }
+        if (validateZip && !(await verifyZipFile(dest))) {
+          plog('warn', '[dsh-versatileds] 分段下载的 zip 打不开，换下一个')
+        } else {
+          mirrorState.active = prefix
+          mirrorState.failures.delete(prefix)
+          plog('info', '[dsh-versatileds] 下载完成（' + Math.round(size / 1048576) + ' MB，' + parThreads + ' 线程），当前镜像=' + (prefix || '直连'))
+          return true
+        }
+      } else {
+        plog('info', '[dsh-versatileds] 多线程没成（' + par.reason + '），回退单线程')
+      }
+    }
     const ps = "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
       "Invoke-WebRequest -Uri '" + ghq(url) + "' -OutFile '" + ghq(dest) + "' -Headers @{ 'User-Agent' = 'dsh-versatileds' } -TimeoutSec " + t
     const r = await runPsAsync(ps, (t + 15) * 1000)

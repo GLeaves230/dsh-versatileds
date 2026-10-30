@@ -3228,7 +3228,40 @@ window.__ModuleLoader__.load({
       const qqMainGroups = QQ_GROUPS.map(([key]) => key).filter((key) => key !== 'memory' && key !== 'balance')
       const QqPage = createQqPage(qqForm, qqMainGroups, { personaScope: 'qq' })
       // 通用模块 = 同一套页面，只显示「记忆 / 余额」两组
-      const CommonPage = createQqPage(qqForm, ['memory', 'balance'], { personaScope: 'common' })
+    /** 通用模块：下载线程数（1/8/16/32），QQ 和 NapCat 的更新共用（2026-10-30） */
+    function DownloadThreadsRow({ form }) {
+      const [val, setVal] = React.useState(() => {
+        try { return Number(form.get('downloadThreads')) || 16 } catch { return 16 }
+      })
+      const OPTIONS = [
+        [1, '1（绝对的稳，绝对的慢）'],
+        [8, '8（慢又稳）'],
+        [16, '16（快又稳，推荐）'],
+        [32, '32（极快但可能被镜像限流）'],
+      ]
+      return React.createElement('div', { style: { ...rowStyle, flexWrap: 'wrap' } },
+        React.createElement('span', { style: labelStyle }, '下载线程'),
+        React.createElement('select', {
+          value: String(val),
+          onChange: (e) => {
+            const n = Number(e.target.value) || 16
+            setVal(n)
+            try { form.set('downloadThreads', n) } catch { /* ignore */ }
+          },
+          style: { padding: '4px 8px', borderRadius: '6px', background: 'transparent', color: 'inherit', border: '1px solid rgba(128,128,128,0.3)', fontSize: '13px' },
+        }, OPTIONS.map(([n, label]) => React.createElement('option', { key: n, value: String(n) }, label))),
+        React.createElement('span', { style: hintStyle },
+          '下载 QQ / NapCat 安装包用几路并发：单路只有 1~48KB/s，16 路约 160KB/s；32 路更快但容易被镜像限流断连。'),
+      )
+    }
+
+      const CommonPageInner = createQqPage(qqForm, ['memory', 'balance'], { personaScope: 'common' })
+      const CommonPage = function CommonPageWithTools(props) {
+        return React.createElement(React.Fragment, null,
+          React.createElement('div', { style: { marginBottom: '8px' } },
+            React.createElement(DownloadThreadsRow, { form: qqForm })),
+          React.createElement(CommonPageInner, props))
+      }
       return function VersatiledsPanel() {
         const [mod, setMod] = React.useState('bili')
         // 顶部常驻的 DeepSeek 余额：所有页面都能看到，5 分钟自动刷一次
