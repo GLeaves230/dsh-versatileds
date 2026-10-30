@@ -5382,6 +5382,17 @@ async function killOldStartedNapcat(config) {
     }
   } catch { /* ignore */ }
   // NapCatWinBootMain 守护树也清掉，不然它会把 QQ 再拉回来
+  // launcher.pid / started-pids 里存的可能是「引导进程」，QQ 会重启出新的主进程，那些 pid 早失效了；
+  // 端口持有者才是当前真在跑的那个（2026-10-30 补：不然点登录前永远清不掉旧 QQ）
+  try {
+    const portPids = await napcatPidCandidates(config)
+    for (const pid of portPids) {
+      if (killed.includes(pid)) continue
+      if (!(await isNapcatQqProcess(pid, config))) continue
+      await taskkillTree(pid, false)
+      killed.push(pid)
+    }
+  } catch { /* ignore */ }
   try { await runAsync('taskkill', ['/F', '/T', '/IM', 'NapCatWinBootMain.exe'], 8000) } catch { /* ignore */ }
   // 不再按 -q 模糊杀 QQ：那会误伤日常大号（2026-10-29）
   saveStartedPids([])
