@@ -28,7 +28,7 @@ function plog(level, ...args) {
   fn.call(console, `[${t}] [v${VERSION}]`, ...args)
 }
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { copyFileSync, rmSync, appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, openSync, readSync, closeSync, writeSync } from 'node:fs'
 import { readFile as readFileAsync } from 'node:fs/promises'
@@ -345,8 +345,10 @@ export const Config = Schema.object({
     .description('主动搭话开关'),
   proactiveTargets: Schema.string().default('').volatile()
     .description('主动搭话对象列表，英文逗号分隔的多个 QQ 号；填了它就不用管单个对象'),
+  // 已废弃（2026-10-30）：聚焦聊天实际只读 qq/<账号>/focus.json，这个全局值不再参与判断；
+  // 保留字段只是为了兼容旧配置文件和老 UI 的 form.set（删了会让 form.set 报未知字段）
   focusChatTarget: Schema.string().default('').volatile()
-    .description('手动指定聚焦聊天：填群号或 QQ 号，可以逗号分隔填多个（群和私聊都能聚焦），主动搭话轮流盯；留空＝按活跃度自动挑'),
+    .description('【已废弃】聚焦聊天已改为按账号保存在 qq/<账号>/focus.json，到「主动」页用下拉选；这个全局值不再生效'),
   proactiveMinGapSec: Schema.number().default(7200).volatile()
     .description('两次主动搭话最短间隔（秒）'),
   proactiveMaxGapSec: Schema.number().default(21600).volatile()
@@ -5313,14 +5315,11 @@ function killNapCatWeStarted(config) {
     const f = join(napcatShellRoot(config), 'launcher.pid')
     if (existsSync(f)) {
       const v = Number(String(readFileSync(f, 'utf8')).trim()) || 0
-      // 同步路径：拿进程路径判断是不是 NapCat 那个 QQ（isQqProcess 是异步的，这里不能用）
+      // 用 process.kill(pid, 0) 判存活：syscall 级、微秒出结果，不再 spawnSync 起 PowerShell
+      // （2026-10-30 去掉全插件最后一处 spawnSync；DSH 退出时起 PowerShell 要 200ms~8s，正是「Ctrl+C 没反应」的来源）
+      // launcher.pid 是插件自己 recordStartedPid 写的，可信；killNapcatOnExit 默认 false，这条路本来就不常走
       if (v > 100) {
-        try {
-          const r = spawnSync('powershell', ['-NoProfile', '-Command', `try { (Get-Process -Id ${v} -ErrorAction Stop).Path } catch { }`], { timeout: 8000, windowsHide: true })
-          const exe = String(r.stdout || '').trim().toLowerCase().replace(/\\/g, '/')
-          const shellDir = String(napcatShellRoot(config) || '').toLowerCase().replace(/\\/g, '/')
-          if (/qq\.exe$/.test(exe) && shellDir && exe.startsWith(shellDir)) pid = v
-        } catch { /* ignore */ }
+        try { process.kill(v, 0); pid = v } catch { /* 进程已经没了 */ }
       }
     }
   } catch { /* ignore */ }
