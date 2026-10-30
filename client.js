@@ -123,6 +123,18 @@ window.__ModuleLoader__.load({
           .catch(() => {})
         return () => { alive = false }
       }, [field])
+      // 数据选择切账号时立刻重拉列表（2026-10-30 主人要求：选完就刷新，不等切页）
+      React.useEffect(() => {
+        if (field !== 'proactiveTargets' && field !== 'proactiveGroups') return
+        const onAcct = () => {
+          fetch(QQ_STATUS_URL + (field === 'proactiveTargets' ? '/proactive-targets' : '/proactive-groups'), { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => { if (d && Array.isArray(d.ids)) setAccountIds(d.ids) })
+            .catch(() => {})
+        }
+        window.addEventListener('vds:account-changed', onAcct)
+        return () => window.removeEventListener('vds:account-changed', onAcct)
+      }, [field])
       const parse = (raw) => String(raw || '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
       const list = parse(accountIds ? accountIds.join(',') : value)
       const inputStyle = {
@@ -774,6 +786,20 @@ window.__ModuleLoader__.load({
           })
           .catch(() => {})
         return () => { alive = false }
+      }, [])
+      // 数据选择切账号时立刻重拉聚焦聊天（2026-10-30）
+      React.useEffect(() => {
+        const onAcct = () => {
+          fetch(`${QQ_STATUS_URL}/focus_status`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => {
+              setCandidates(Array.isArray(d.candidates) ? d.candidates : [])
+              if (typeof d.target === 'string') setAccountTarget(d.target)
+            })
+            .catch(() => {})
+        }
+        window.addEventListener('vds:account-changed', onAcct)
+        return () => window.removeEventListener('vds:account-changed', onAcct)
       }, [])
       const value = 'focusChatTarget' in pending ? pending.focusChatTarget : (accountTarget !== null ? accountTarget : initial)
       const save = (next) => {
