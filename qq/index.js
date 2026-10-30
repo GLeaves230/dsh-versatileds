@@ -5538,8 +5538,8 @@ function startStatusServer(config, napcat = null) {
       const sessionNow = Date.now()
       const offAt = Number(session.lastOfflineAt || 0)
       const payload = {
-        account: loginQqCache || '',
-        accountName: await accountNameOf(napcat, loginQqCache).catch(() => ''),
+        account: effectiveAccount(),
+        accountName: await accountNameOf(napcat, effectiveAccount()).catch(() => ''),
         session: {
           lastOnlineAt: Number(session.lastOnlineAt || 0),
           lastOfflineAt: offAt,
