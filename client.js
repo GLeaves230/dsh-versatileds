@@ -241,6 +241,16 @@ window.__ModuleLoader__.load({
       const { form, field, label, hint, value, disabled, secret } = props
       const [draft, setDraft] = React.useState(String(value ?? ''))
       React.useEffect(() => { setDraft(String(value ?? '')) }, [value])
+      // 主动搭话列表按账号读（2026-10-30）：不走全局配置，避免两个号串数据
+      React.useEffect(() => {
+        if (field !== 'proactiveTargets' && field !== 'proactiveGroups') return
+        let alive = true
+        fetch(QQ_STATUS_URL + (field === 'proactiveTargets' ? '/proactive-targets' : '/proactive-groups'), { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (alive && d && Array.isArray(d.ids)) setDraft(d.ids.join(', ')) })
+          .catch(() => {})
+        return () => { alive = false }
+      }, [field])
       const commit = () => {
         const next = draft.trim()
         if (next !== String(value ?? '')) {
@@ -566,6 +576,16 @@ window.__ModuleLoader__.load({
       const { form, field, label, hint, value, disabled } = props
       const [draft, setDraft] = React.useState(String(value ?? ''))
       React.useEffect(() => { setDraft(String(value ?? '')) }, [value])
+      // 主动搭话列表按账号读（2026-10-30）：不走全局配置，避免两个号串数据
+      React.useEffect(() => {
+        if (field !== 'proactiveTargets' && field !== 'proactiveGroups') return
+        let alive = true
+        fetch(QQ_STATUS_URL + (field === 'proactiveTargets' ? '/proactive-targets' : '/proactive-groups'), { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (alive && d && Array.isArray(d.ids)) setDraft(d.ids.join(', ')) })
+          .catch(() => {})
+        return () => { alive = false }
+      }, [field])
       const commit = () => {
         const next = draft.trim()
         if (next !== String(value ?? '')) {

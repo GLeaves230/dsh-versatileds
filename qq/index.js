@@ -6113,6 +6113,12 @@ function startStatusServer(config, napcat = null) {
       })
       return
     }
+    if ((url.pathname === '/proactive-targets' || url.pathname === '/proactive-groups') && req.method === 'GET') {
+      const list = url.pathname === '/proactive-targets' ? proactiveTargetsOf(config) : proactiveGroupsOf(config)
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ids: list, account: effectiveAccount() }))
+      return
+    }
     if (url.pathname === '/proactive-targets' && req.method === 'POST') {
       // 按账号写主动搭话目标（qq/<qq>/proactive-targets.json，2026-10-28）
       let body = ''
