@@ -3243,12 +3243,19 @@ function loadGagSection() {
  * - 超过上限时：开了「分段摘要」（sharedMemorySummary）就留头留尾（身份/锚点在头、最新在尾），
  *   中间标成省略；没开就老实截前面那截。
  */
+// shared-memory.md 全文缓存：每次组装 prompt 都要，14KB 没必要每轮同步读（2026-10-30）
+let sharedMemCache = { mtime: -1, raw: '' }
+
 function loadSharedMemory(config) {
   const file = sharedMemoryPath()
-  if (!existsSync(file)) return ''
   let raw = ''
   try {
-    raw = readFileSync(file, 'utf8').trim()
+    const mtime = statSync(file).mtimeMs
+    if (mtime === sharedMemCache.mtime) raw = sharedMemCache.raw
+    else {
+      raw = readFileSync(file, 'utf8').trim()
+      sharedMemCache = { mtime, raw }
+    }
   } catch {
     return ''
   }
