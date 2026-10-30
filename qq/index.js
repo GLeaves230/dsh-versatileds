@@ -9304,7 +9304,10 @@ async function syncGroupRules(force = false) {
 
   /** 优先走「最高权限」计划任务，绕过 UAC；没建任务就退回直接启动。 */
   async function startNapCat(launcher) {
-    const quick = quickLoginUsable(config)
+    const quick0 = quickLoginUsable(config)
+    // 数据选择里选了具体号（切号登录）→ 即使 napcatQuickLogin 没生效也用它带 -q
+    const qv = String(currentAccountView() || '').trim()
+    const quick = quick0 || (/^\d{5,12}$/.test(qv) ? qv : '')
     napcatStartedQuick = Boolean(quick)
     const noise = (m) => {
       try {
