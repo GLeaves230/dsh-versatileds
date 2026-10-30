@@ -737,12 +737,12 @@ function ownerFilePath() {
 }
 
 function ownerQQOf(config) {
+  // 只认按号文件：qq/<账号>/owner.json（设置里填的）→ local-owner.json（私聊自动认主）。
+  // 不再回退全局 config.ownerQQ，避免两个号串主人（2026-10-30 主人要求）。
   try {
     const j = loadJsonFile(ownerFilePath())
     if (j?.owner) return String(j.owner).trim()
   } catch { /* ignore */ }
-  const fromConfig = String(config?.ownerQQ?.get?.() || '').trim()
-  if (fromConfig) return fromConfig
   try {
     const local = loadJsonFile(localOwnerPath())
     return String(local?.qq || '').trim()
@@ -7476,7 +7476,7 @@ function senderRoleOf(msg, config, selfId, target = '') {
       ? String(config?.selfLabel?.get?.() || 'DS')
       : TAKEOVER_VISIBLE
   }
-  const owners = String(config?.ownerQQ?.get?.() || '').split(/[,，\s]+/).filter(Boolean)
+  const owners = String(ownerQQOf(config) || '').split(/[,，\s]+/).filter(Boolean)
   if (owners.includes(id)) return String(config?.ownerLabel?.get?.() || 'Admin')
   // 别人家养的同类 AI：统一叫「隔壁家的<名字>」，别跟它抢人设
   const neighbor = neighborLabelOf(msg.sender, config, selfId)
@@ -10102,7 +10102,7 @@ async function syncGroupRules(force = false) {
     // 私聊反思期（p:key）不主动搭话，别的会话各管各的（2026-10-26 主人要求）
     if (inQuiet(`p:${target}`)) return false
     try {
-      const ownerQq = String(config.ownerQQ.get() || '').trim()
+      const ownerQq = String(ownerQQOf(config) || '').trim()
       const ownerOpenid = String(config.qqbotOwnerOpenid?.get?.() || '').trim()
       if (voiceWanted) {
         // 主动搭话用语音：本地 GPT-SoVITS 合成后按 record 发
