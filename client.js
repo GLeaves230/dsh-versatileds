@@ -768,8 +768,10 @@ window.__ModuleLoader__.load({
         let alive = true
         fetch(`${QQ_STATUS_URL}/focus_status`, { cache: 'no-store' })
           .then((r) => r.json())
-          .then((d) => { if (alive) setCandidates(Array.isArray(d.candidates) ? d.candidates : []) })
-          if (alive && typeof d.target === 'string') setAccountTarget(d.target)
+          .then((d) => {
+            if (alive) setCandidates(Array.isArray(d.candidates) ? d.candidates : [])
+            if (alive && typeof d.target === 'string') setAccountTarget(d.target)
+          })
           .catch(() => {})
         return () => { alive = false }
       }, [])
