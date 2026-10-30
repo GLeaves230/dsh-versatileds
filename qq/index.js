@@ -5706,14 +5706,23 @@ function startStatusServer(config, napcat = null) {
     if (url.pathname === '/account-view' && req.method === 'POST') {
       let body = ''
       req.on('data', (c) => { body += c })
-      req.on('end', () => {
+      req.on('end', async () => {
         try {
           const j = JSON.parse(body || '{}')
           const view = String(j.view || 'auto')
           mkdirSync(dirname(accountViewFile()), { recursive: true })
           writeFileSync(accountViewFile(), JSON.stringify({ view }, null, 2), 'utf8')
+          // 选具体号 = 切号登录（像 QQ 客户端）；auto/normal 只切数据视图
+          let switching = false
+          if (view && view !== 'auto' && view !== 'normal' && /^\d{5,12}$/.test(view)) {
+            switching = true
+            try { config.napcatQuickLogin.set(view) } catch { /* ignore */ }
+            const p2 = napcatControl.start ? napcatControl.start('switch-account:' + view) : null
+            if (p2 && typeof p2.catch === 'function') p2.catch(() => {})
+            plog('info', `[dsh-versatileds] 切换账号：${view}（重启 NapCat 快速登录）`)
+          }
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
-          res.end(JSON.stringify({ ok: true, view, dataDir: qqDataDir() }))
+          res.end(JSON.stringify({ ok: true, view, switching, dataDir: qqDataDir() }))
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false }))
