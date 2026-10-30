@@ -1734,6 +1734,9 @@ window.__ModuleLoader__.load({
       const [msg, setMsg] = React.useState('')
       const [clearOnLogout, setClearOnLogout] = React.useState(false)
       const [autoEnabled, setAutoEnabled] = React.useState(true)
+      const [switchAuto, setSwitchAuto] = React.useState(() => {
+        try { return form.get('switchAccountAutoLogin') !== false } catch { return true }
+      })
       const load = () => {
         fetch(`${QQ_STATUS_URL}/quick-login`, { cache: 'no-store' })
           .then((r) => r.json())

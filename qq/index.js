@@ -515,6 +515,8 @@ export const Config = Schema.object({
     .description('DSH 退出时顺手关掉我拉起的 NapCat；默认关——NapCat 是提权进程，关它要弹 UAC，会把退出卡住'),
   napcatQuickLogin: Schema.string().default('').volatile()
     .description('快速登录的 QQ 号；填了 launcher 启动时带这个号，不用扫码；留空就是扫码登录'),
+  switchAccountAutoLogin: Schema.boolean().default(true)
+    .description('切换账号后是否立即尝试登录（关掉只切数据，不碰 QQ 登录态）'),
   qqInstallPath: Schema.string().default('C:\\Program Files\\NapCat\\Tencent\\QQNT')
     .description('独立 QQ 安装路径（默认 C:\Program Files\NapCat\Tencent\QQNT；必须在 512 字节扇区的盘上，4Kn 盘跑不了 QQ）'),
   downloadThreads: Schema.number().default(16)
@@ -5714,7 +5716,7 @@ function startStatusServer(config, napcat = null) {
           writeFileSync(accountViewFile(), JSON.stringify({ view }, null, 2), 'utf8')
           // 选具体号 = 切号登录（像 QQ 客户端）；auto/normal 只切数据视图
           let switching = false
-          if (view && view !== 'auto' && view !== 'normal' && /^\d{5,12}$/.test(view)) {
+          if (view && view !== 'auto' && view !== 'normal' && /^\d{5,12}$/.test(view) && config.switchAccountAutoLogin.get() !== false) {
             switching = true
             try { config.napcatQuickLogin.set(view) } catch { /* ignore */ }
             const p2 = napcatControl.start ? napcatControl.start('switch-account:' + view) : null
