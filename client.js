@@ -112,8 +112,19 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = React.useState(false)
       const [items, setItems] = React.useState([])
       const [msg, setMsg] = React.useState('')
+      // 主动搭话的两个列表按账号读（2026-10-30）：其它字段仍走全局配置
+      const [accountIds, setAccountIds] = React.useState(null)
+      React.useEffect(() => {
+        if (field !== 'proactiveTargets' && field !== 'proactiveGroups') { setAccountIds(null); return }
+        let alive = true
+        fetch(QQ_STATUS_URL + (field === 'proactiveTargets' ? '/proactive-targets' : '/proactive-groups'), { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => { if (alive && d && Array.isArray(d.ids)) setAccountIds(d.ids) })
+          .catch(() => {})
+        return () => { alive = false }
+      }, [field])
       const parse = (raw) => String(raw || '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
-      const list = parse(value)
+      const list = parse(accountIds ? accountIds.join(',') : value)
       const inputStyle = {
         flex: 1, padding: '5px 8px', borderRadius: '6px',
         border: '1px solid rgba(128,128,128,0.35)',
@@ -752,15 +763,17 @@ window.__ModuleLoader__.load({
     /** 聚焦聊天：从群/好友里选（按当前账号保存），而不是手填群号（2026-10-28 主人要求）。 */
     function FocusSelectRow({ form, value: initial, pending, setPending, disabled }) {
       const [candidates, setCandidates] = React.useState([]) // 主动搭话列表（按活跃度排序），2026-10-29
+      const [accountTarget, setAccountTarget] = React.useState(null)
       React.useEffect(() => {
         let alive = true
         fetch(`${QQ_STATUS_URL}/focus_status`, { cache: 'no-store' })
           .then((r) => r.json())
           .then((d) => { if (alive) setCandidates(Array.isArray(d.candidates) ? d.candidates : []) })
+          if (alive && typeof d.target === 'string') setAccountTarget(d.target)
           .catch(() => {})
         return () => { alive = false }
       }, [])
-      const value = 'focusChatTarget' in pending ? pending.focusChatTarget : initial
+      const value = 'focusChatTarget' in pending ? pending.focusChatTarget : (accountTarget !== null ? accountTarget : initial)
       const save = (next) => {
         setPending((p) => ({ ...p, focusChatTarget: next }))
         const settle = () => setPending((p) => { const c = { ...p }; delete c.focusChatTarget; return c })
