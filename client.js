@@ -2792,6 +2792,21 @@ window.__ModuleLoader__.load({
               secret: /(token|cookie|key|password|secret)/i.test(field),
             }),
           )
+          if (field === 'proactiveGroups') {
+            children.push(React.createElement('div', { key: 'proactive-run', style: { ...rowStyle } },
+              React.createElement('span', { style: labelStyle }, '手动触发'),
+              React.createElement('button', {
+                type: 'button', style: skipStyle,
+                onClick: () => {
+                  fetch(QQ_STATUS_URL + '/proactive-run', { method: 'POST' })
+                    .then((r) => r.json())
+                    .then((d) => alert(d && d.ok ? ('已触发一次（账号 ' + (d.account || '?') + '，目标 ' + ((d.targets || []).length + (d.groups || []).length) + ' 个）\n' + (d.note || '')) : ('失败：' + ((d && d.error) || '未知'))))
+                    .catch(() => alert('接口没响应'))
+                },
+              }, '立即搭话一次'),
+              React.createElement('span', { style: hintStyle }, '马上按当前账号的目标搭话一次（不等定时器）'),
+            ))
+          }
         }
 
         for (const [field, label, hint] of QQ_TEXT_FIELDS) {

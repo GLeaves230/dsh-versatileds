@@ -6119,6 +6119,34 @@ function startStatusServer(config, napcat = null) {
       res.end(JSON.stringify({ ids: list, account: effectiveAccount() }))
       return
     }
+    if (url.pathname === '/proactive-run') {
+      // 手动触发一次主动搭话（绕过 nextAt 间隔，但保留其余守卫），2026-10-30
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'POST only' }))
+        return
+      }
+      try {
+        const st = loadProactiveState()
+        st.forceNext = true
+        saveProactiveState(st)
+        const targets = proactiveTargetsOf(config)
+        const groups = proactiveGroupsOf(config)
+        await proactiveTick()
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(JSON.stringify({
+          ok: true,
+          account: effectiveAccount(),
+          targets,
+          groups,
+          note: targets.length + groups.length === 0 ? '当前账号没有配置主动搭话目标' : '已触发，看群/私聊是否收到',
+        }))
+      } catch (err) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: String(err?.message ?? err).slice(0, 160) }))
+      }
+      return
+    }
     if (url.pathname === '/proactive-targets' && req.method === 'POST') {
       // 按账号写主动搭话目标（qq/<qq>/proactive-targets.json，2026-10-28）
       let body = ''
