@@ -2765,9 +2765,9 @@ async function backupSystemQqRegistry() {
   const ps = [
     '$out = @{}',
     '$q = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ"',
-    'if (Test-Path $q) { $out.qq = @{}; (Get-ItemProperty $q).PSObject.Properties | Where-Object { $_.Name -notmatch "^PS" } | ForEach-Object { $out.qq[$_.Name] = [string]$_.Value } }',
+    'if (Test-Path $q) { $out.qqExists = $true; $out.qq = @{}; (Get-ItemProperty $q).PSObject.Properties | Where-Object { $_.Name -notmatch "^PS" } | ForEach-Object { $out.qq[$_.Name] = [string]$_.Value } }',
     '$t = "HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT"',
-    'if (Test-Path $t) { $out.qqnt = @{}; (Get-ItemProperty $t).PSObject.Properties | Where-Object { $_.Name -notmatch "^PS" } | ForEach-Object { $out.qqnt[$_.Name] = [string]$_.Value } }',
+    'if (Test-Path $t) { $out.qqntExists = $true; $out.qqnt = @{}; (Get-ItemProperty $t).PSObject.Properties | Where-Object { $_.Name -notmatch "^PS" } | ForEach-Object { $out.qqnt[$_.Name] = [string]$_.Value } }',
     '$out | ConvertTo-Json -Depth 5',
   ].join('; ')
   try {
@@ -2787,16 +2787,24 @@ async function restoreSystemQqRegistry() {
   try { j = JSON.parse(readFileSync(systemQqRegistryFile(), 'utf8')) } catch { return false }
   if (!j) return false
   const parts = []
-  if (j.qq) {
-    parts.push('$q = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ"')
+  // Uninstall\\QQ：备份时不存在 → 装完删掉整个键（恢复“原先空”的状态）
+  parts.push('$q = "HKLM:\\\\SOFTWARE\\\\WOW6432Node\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\QQ"')
+  if (j.qqExists === false) {
+    parts.push('Remove-Item $q -Recurse -Force -ErrorAction SilentlyContinue')
+  } else if (j.qq) {
     parts.push('if (-not (Test-Path $q)) { New-Item -Path $q -Force | Out-Null }')
+    parts.push('(Get-Item $q).Property | ForEach-Object { Remove-ItemProperty -Path $q -Name $_ -Force -ErrorAction SilentlyContinue }')
     for (const [k, v] of Object.entries(j.qq)) {
       parts.push(`New-ItemProperty -Path $q -Name '${k.replace(/'/g, "''")}' -Value '${String(v).replace(/'/g, "''")}' -PropertyType String -Force | Out-Null`)
     }
   }
-  if (j.qqnt) {
-    parts.push('$t = "HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT"')
+  // Tencent\\QQNT：同理
+  parts.push('$t = "HKLM:\\\\SOFTWARE\\\\WOW6432Node\\\\Tencent\\\\QQNT"')
+  if (j.qqntExists === false) {
+    parts.push('Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue')
+  } else if (j.qqnt) {
     parts.push('if (-not (Test-Path $t)) { New-Item -Path $t -Force | Out-Null }')
+    parts.push('(Get-Item $t).Property | ForEach-Object { Remove-ItemProperty -Path $t -Name $_ -Force -ErrorAction SilentlyContinue }')
     for (const [k, v] of Object.entries(j.qqnt)) {
       parts.push(`New-ItemProperty -Path $t -Name '${k.replace(/'/g, "''")}' -Value '${String(v).replace(/'/g, "''")}' -PropertyType String -Force | Out-Null`)
     }
@@ -2805,7 +2813,7 @@ async function restoreSystemQqRegistry() {
   try {
     const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', parts.join('; ')], 60000)
     if (String(r.stdout || '').includes('ok')) {
-      plog('info', '[dsh-versatileds] 已恢复系统 QQ 注册表值（系统 QQ 不受影响）')
+      plog('info', '[dsh-versatileds] 已恢复系统 QQ 注册表（空状态会保持空）')
       return true
     }
   } catch { /* ignore */ }
@@ -2906,6 +2914,18 @@ async function installIsolatedQq(config) {
       await new Promise((r) => setTimeout(r, 5000))
       if (existsSync(join(target, 'QQ.exe'))) {
         qqInstallState.phase = 'finishing'
+        // 先读安装器实际写入的路径（用户可能改过安装位置），2026-10-30 主人要求
+        let realDir = target
+        try {
+          const rq = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+            "(Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ' -ErrorAction SilentlyContinue).UninstallString"], 30000)
+          const raw = String(rq.stdout || '').trim().replace(/^"|"$/g, '')
+          if (raw) {
+            const d = raw.replace(/[\\/][^\\/]+$/, '')
+            if (d && existsSync(join(d, 'QQ.exe'))) realDir = d
+          }
+        } catch { /* 读不到就用配置里的 target */ }
+        plog('info', '[dsh-versatileds] 安装器实际写入的路径：' + realDir)
         // 恢复系统 QQ 目录名
         try {
           if (existsSync(hiddenDir) && !existsSync(sysDir)) {
@@ -2920,8 +2940,8 @@ async function installIsolatedQq(config) {
             '$u = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds"',
             'if (-not (Test-Path $u)) { New-Item -Path $u -Force | Out-Null }',
             `New-ItemProperty -Path $u -Name 'DisplayName' -Value 'dsh-versatileds (isolated QQ for NapCat)' -PropertyType String -Force | Out-Null`,
-            `New-ItemProperty -Path $u -Name 'UninstallString' -Value '"${join(target, 'Uninstall.exe').replace(/\\/g, '\\\\')}"' -PropertyType String -Force | Out-Null`,
-            `New-ItemProperty -Path $u -Name 'InstallLocation' -Value '${target.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
+            `New-ItemProperty -Path $u -Name 'UninstallString' -Value '"${join(realDir, 'Uninstall.exe').replace(/\\/g, '\\\\')}"' -PropertyType String -Force | Out-Null`,
+            `New-ItemProperty -Path $u -Name 'InstallLocation' -Value '${realDir.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
             'Write-Output "ok"',
           ].join('; ')
           await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps2], 60000)
