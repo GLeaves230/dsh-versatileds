@@ -2925,48 +2925,72 @@ async function installIsolatedQq(config) {
     || 'C:\\Program Files\\NapCat\\Tencent\\QQNT'
   qqInstallState = { running: true, phase: 'checking', target, startedAt: Date.now(), error: '' }
 
+  // 环境破坏标记：只有这几步真动过，回滚才去恢复（2026-10-30 主人要求「失败要回滚」）
+  const rollback = { sysDir: '', hiddenDir: '', hiddenDone: false, registryTouched: false, exe: '' }
+
   try {
-    // ② 扇区校验
+    // ① 扇区校验（4Kn 盘装上也跑不起来）
     const sec = await checkSectorSize(target)
     if (!sec.ok) {
       qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: sec.error }
       plog('warn', '[dsh-versatileds] 独立 QQ 安装被拒：' + sec.error)
       return qqInstallState
     }
-    qqInstallState.phase = 'downloading'
 
-    // ③ 备份系统 QQ（注册表整键 + 目录名）
+    // ② 备份系统 QQ 注册表（此时环境还没动）
     await backupSystemQqRegistry()
+
+    // ③ 先把安装包准备好——失败时环境完全没动，不需要回滚
+    qqInstallState.phase = 'downloading'
+    const exe = join(napcatRoot(config), 'qq-installer.exe')
+    rollback.exe = exe
+    const needDownload = !existsSync(exe) || statSync(exe).size < 200 * 1024 * 1024
+    if (needDownload) {
+      const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
+      plog('info', '[dsh-versatileds] 下载 QQ 安装包（' + threads + ' 线程）…')
+      const got = await downloadParallel(QQ_INSTALLER_URL, exe, { threads, minBytes: 200 * 1024 * 1024 })
+      if (!got.ok) {
+        qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装包下载失败：' + got.reason }
+        plog('warn', '[dsh-versatileds] 独立 QQ 安装中止：安装包下载失败（系统环境未改动）')
+        return qqInstallState
+      }
+    }
+    // 显式确认安装器在（主人点名的场景：安装器不存在就别去动系统环境）
+    if (!existsSync(exe)) {
+      qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装器不存在：' + exe }
+      plog('warn', '[dsh-versatileds] 独立 QQ 安装中止：安装器不存在（系统环境未改动）')
+      return qqInstallState
+    }
+    try {
+      if (statSync(exe).size < 200 * 1024 * 1024) {
+        qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装器文件不完整（小于 200MB）' }
+        plog('warn', '[dsh-versatileds] 独立 QQ 安装中止：安装器不完整（系统环境未改动）')
+        return qqInstallState
+      }
+    } catch { /* 拿不到大小就继续，起安装器时会再暴露 */ }
+
+    // ④ 从这里开始才动系统环境：藏系统 QQ 目录 + 改注册表
     const sysDir = await systemQqDir()
     const hiddenDir = sysDir + '.dsh-hidden'
+    rollback.sysDir = sysDir
+    rollback.hiddenDir = hiddenDir
     try {
       if (existsSync(sysDir) && !existsSync(hiddenDir)) {
-        await runAsync('cmd', ['/c', 'move', `"${sysDir}"`, `"${hiddenDir}"`], 60000)
+        await runAsync('cmd', ['/c', 'move', '"' + sysDir + '"', '"' + hiddenDir + '"'], 60000)
+        rollback.hiddenDone = true
         plog('info', '[dsh-versatileds] 已隐藏系统 QQ 目录：' + hiddenDir)
       }
     } catch { /* 藏不了也继续，只是可能被卸 */ }
 
-    // ④ 删 Uninstall\QQ + 改 Install
+    rollback.registryTouched = true
     try {
       const ps = [
         'Remove-Item "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ" -Recurse -Force -ErrorAction SilentlyContinue',
-        `New-ItemProperty -Path 'HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT' -Name 'Install' -Value '${target.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
+        "New-ItemProperty -Path 'HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT' -Name 'Install' -Value '" + target.replace(/\\/g, '\\\\') + "' -PropertyType String -Force | Out-Null",
         'Write-Output "ok"',
       ].join('; ')
       await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 60000)
     } catch { /* ignore */ }
-
-    // ① 下载安装包
-    const exe = join(napcatRoot(config), 'qq-installer.exe')
-    if (!existsSync(exe) || statSync(exe).size < 200 * 1024 * 1024) {
-      const threads = Math.max(1, Math.min(32, Number(acctCfg(config, 'downloadThreads', 16)) || 16))
-      plog('info', `[dsh-versatileds] 下载 QQ 安装包（${threads} 线程）…`)
-      const got = await downloadParallel(QQ_INSTALLER_URL, exe, { threads, minBytes: 200 * 1024 * 1024 })
-      if (!got.ok) {
-        qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装包下载失败：' + got.reason }
-        return qqInstallState
-      }
-    }
 
     // ⑤ 启动安装器（detached，不杀）
     qqInstallState.phase = 'installing'
@@ -2976,7 +3000,8 @@ async function installIsolatedQq(config) {
       child.unref()
     } catch (err) {
       qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: '安装器启动失败：' + String(err?.message ?? err).slice(0, 120) }
-      return qqInstallState
+      plog('warn', '[dsh-versatileds] 安装器启动失败，正在回滚系统环境…')
+      return qqInstallState // finally 负责回滚
     }
 
     // ⑥ 轮询目标目录 → 收尾
@@ -2985,7 +3010,7 @@ async function installIsolatedQq(config) {
       await new Promise((r) => setTimeout(r, 5000))
       if (existsSync(join(target, 'QQ.exe'))) {
         qqInstallState.phase = 'finishing'
-        // 先读安装器实际写入的路径（用户可能改过安装位置），2026-10-30 主人要求
+        // 先读安装器实际写入的路径（用户可能改过安装位置）
         let realDir = target
         try {
           const rq = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
@@ -3000,7 +3025,7 @@ async function installIsolatedQq(config) {
         // 恢复系统 QQ 目录名
         try {
           if (existsSync(hiddenDir) && !existsSync(sysDir)) {
-            await runAsync('cmd', ['/c', 'move', `"${hiddenDir}"`, `"${sysDir}"`], 60000)
+            await runAsync('cmd', ['/c', 'move', '"' + hiddenDir + '"', '"' + sysDir + '"'], 60000)
           }
         } catch { /* ignore */ }
         // 恢复系统 QQ 注册表（含 Uninstall\QQ 整键）
@@ -3010,9 +3035,9 @@ async function installIsolatedQq(config) {
           const ps2 = [
             '$u = "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds"',
             'if (-not (Test-Path $u)) { New-Item -Path $u -Force | Out-Null }',
-            `New-ItemProperty -Path $u -Name 'DisplayName' -Value 'dsh-versatileds (isolated QQ for NapCat)' -PropertyType String -Force | Out-Null`,
-            `New-ItemProperty -Path $u -Name 'UninstallString' -Value '"${join(realDir, 'Uninstall.exe').replace(/\\/g, '\\\\')}"' -PropertyType String -Force | Out-Null`,
-            `New-ItemProperty -Path $u -Name 'InstallLocation' -Value '${realDir.replace(/\\/g, '\\\\')}' -PropertyType String -Force | Out-Null`,
+            "New-ItemProperty -Path $u -Name 'DisplayName' -Value 'dsh-versatileds (isolated QQ for NapCat)' -PropertyType String -Force | Out-Null",
+            "New-ItemProperty -Path $u -Name 'UninstallString' -Value '\"" + join(realDir, 'Uninstall.exe').replace(/\\/g, '\\\\') + "\"' -PropertyType String -Force | Out-Null",
+            "New-ItemProperty -Path $u -Name 'InstallLocation' -Value '" + realDir.replace(/\\/g, '\\\\') + "' -PropertyType String -Force | Out-Null",
             'Write-Output "ok"',
           ].join('; ')
           await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps2], 60000)
@@ -3033,14 +3058,46 @@ async function installIsolatedQq(config) {
         } else {
           plog('warn', '[dsh-versatileds] 独立 QQ 装好了但跑不起来：' + run.error + '（不会启动 NapCat）')
         }
-        return qqInstallState
+        return qqInstallState // finally 会再走一次幂等恢复
       }
     }
     qqInstallState = { ...qqInstallState, running: false, phase: 'timeout', error: '等待安装超时（15 分钟）' }
+    plog('warn', '[dsh-versatileds] 等待安装超时，正在回滚系统环境…')
     return qqInstallState
   } catch (err) {
     qqInstallState = { ...qqInstallState, running: false, phase: 'failed', error: String(err?.message ?? err).slice(0, 160) }
+    plog('warn', '[dsh-versatileds] 独立 QQ 安装异常，正在回滚系统环境：' + qqInstallState.error)
     return qqInstallState
+  } finally {
+    // 无条件回滚（幂等）：装成功也走一遍，确保系统 QQ 一定回到原位
+    await rollbackIsolatedInstall(rollback)
+  }
+}
+
+/**
+ * 回滚独立 QQ 安装过程中对系统环境的改动（幂等，成功/失败都跑）。
+ * 只恢复「真动过」的部分：藏目录、改注册表。
+ */
+async function rollbackIsolatedInstall(state) {
+  if (!state) return
+  if (state.hiddenDone && state.hiddenDir && state.sysDir) {
+    try {
+      if (existsSync(state.hiddenDir) && !existsSync(state.sysDir)) {
+        await runAsync('cmd', ['/c', 'move', '"' + state.hiddenDir + '"', '"' + state.sysDir + '"'], 60000)
+        plog('info', '[dsh-versatileds] 回滚：系统 QQ 目录已恢复 → ' + state.sysDir)
+      }
+    } catch (err) {
+      plog('warn', '[dsh-versatileds] 回滚：系统 QQ 目录改名失败，请手动把 '
+        + state.hiddenDir + ' 改回 ' + state.sysDir + '（' + String(err?.message ?? err).slice(0, 80) + '）')
+    }
+  }
+  if (state.registryTouched) {
+    try {
+      await restoreSystemQqRegistry()
+      plog('info', '[dsh-versatileds] 回滚：系统 QQ 注册表已恢复（原先空则保持空）')
+    } catch (err) {
+      plog('warn', '[dsh-versatileds] 回滚：注册表恢复失败：' + String(err?.message ?? err).slice(0, 100))
+    }
   }
 }
 
@@ -5185,6 +5242,21 @@ async function isQqProcess(pid) {
 }
 
 /** 是不是「NapCat 拉起的那个 QQ」：按进程可执行路径判断，日常大号 QQ 不动（2026-10-29 主人要求）。 */
+/** 保护日常 QQ：进程路径在系统 QQ 目录下就返回 true，任何清理流程都不许碰它（2026-10-30）。 */
+async function isSystemQqProcess(pid, config) {
+  const id = Number(pid)
+  if (!id || id < 100) return false
+  try {
+    const sys = await systemQqDir()
+    const sysd = String(sys || '').toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '')
+    if (!sysd) return false
+    const r = await runAsync('powershell', ['-NoProfile', '-Command',
+      `try { (Get-Process -Id ${id} -ErrorAction Stop).Path } catch { }`], 8000)
+    const exe = String(r.stdout || '').trim().toLowerCase().replace(/\\/g, '/')
+    return Boolean(exe) && exe.startsWith(sysd + '/')
+  } catch { return false }
+}
+
 async function isNapcatQqProcess(pid, config) {
   const id = Number(pid)
   if (!id || id < 100) return false
@@ -5195,10 +5267,26 @@ async function isNapcatQqProcess(pid, config) {
     if (!exe) return false
     const lp = exe.toLowerCase().replace(/\\/g, '/')
     if (!/qq\.exe$/.test(lp)) return false
-    const shell = String(napcatShellRoot(config) || '').toLowerCase().replace(/\\/g, '/')
-    const root = String(napcatRoot(config) || '').toLowerCase().replace(/\\/g, '/')
-    // 路径在 NapCat 自己的目录里才算我们的
-    return (shell && lp.startsWith(shell)) || (root && lp.startsWith(root))
+    // 独立 QQ 装在哪由「自定义注册表键」或配置决定，不在 NapCat 包目录里
+    // 2026-10-30 修：原来只比对 napcatShellRoot/napcatRoot，独立 QQ 永远匹配不上，点登录前一个都清不掉
+    const dirs = []
+    try {
+      const rq = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+        "(Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds' -ErrorAction SilentlyContinue).InstallLocation"], 8000)
+      const d = String(rq.stdout || '').trim()
+      if (d) dirs.push(d)
+    } catch { /* ignore */ }
+    try {
+      const c = String(acctCfg(config, 'qqInstallPath', '') || '').trim()
+      if (c) dirs.push(c)
+    } catch { /* ignore */ }
+    // 老布局兜底：QQ 直接放在 NapCat 包里时
+    dirs.push(napcatShellRoot(config), napcatRoot(config))
+    for (const d of dirs) {
+      const dd = String(d || '').toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '')
+      if (dd && lp.startsWith(dd + '/')) return true
+    }
+    return false
   } catch { return false }
 }
 
@@ -5415,10 +5503,21 @@ async function logoutNapCat(config) {
     return { ok: false, error: '没找到 NapCat 进程（可能本来就没登录）', pids }
   }
   const attempts = []
+  const skipped = []
   for (const pid of pids) {
+    // 日常 QQ 绝不碰：只杀 NapCat 拉起的那份（2026-10-30）
+    if (await isSystemQqProcess(pid, config)) {
+      skipped.push(pid)
+      plog('info', `[dsh-versatileds] 退出登录跳过系统 QQ 进程 ${pid}（不是 NapCat 用的那份）`)
+      continue
+    }
     const plain = await taskkillTree(pid, false)
     const elevated = !plain && await taskkillTree(pid, true)
     attempts.push({ pid, plain, elevated })
+  }
+  if (skipped.length && !attempts.length) {
+    setNapcatLoggedOut(true)
+    return { ok: false, error: '找到的进程是日常 QQ，不是 NapCat 用的那份，已跳过', pids, skipped }
   }
   // 提权是异步的（要等 UAC 点「是」），最多等 10 秒看进程真的没了
   const deadline = Date.now() + 10_000
