@@ -1810,18 +1810,49 @@ window.__ModuleLoader__.load({
         React.createElement('span', { style: labelStyle }, '独立 QQ 安装路径'),
         React.createElement('input', {
           value: installPath,
-          onChange: (e) => {
-            setInstallPath(e.target.value)
-            try { form.set('qqInstallPath', e.target.value) } catch { /* ignore */ }
-          },
+          onChange: (e) => setInstallPath(e.target.value),
           placeholder: 'C:\\Program Files\\NapCat\\Tencent\\QQNT',
           style: { flex: 1, minWidth: '320px', padding: '3px 6px' },
         }),
+        React.createElement('button', {
+          type: 'button',
+          style: skipStyle,
+          disabled: busy,
+          onClick: async () => {
+            setBusy(true)
+            setNote('正在校验…')
+            try {
+              const r = await fetch(QQ_STATUS_URL + '/napcat/check-qq-path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: installPath }),
+              })
+              const d = await r.json()
+              if (d && d.ok) {
+                try { form.set('qqInstallPath', d.path || installPath) } catch { /* ignore */ }
+                setNote('✅ 可以安装（' + (d.path || installPath) + '，扇区 ' + (d.sector || 512) + '）')
+              } else {
+                setNote('❌ ' + ((d && d.error) || '这个路径不能装 QQ'))
+              }
+            } catch {
+              setNote('❌ 校验接口没响应')
+            } finally {
+              setBusy(false)
+            }
+          },
+        }, '保存并校验'),
         React.createElement('span', { style: hintStyle }, '必须放 512 字节扇区的盘（4Kn 盘跑不了 QQ）；默认 C:\\Program Files\\NapCat\\Tencent\\QQNT'),
         React.createElement('span', { style: labelStyle }, '独立 QQ'),
         React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/uninstall-qq') }, '卸载独立 QQ'),
         React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/open-qq-dir') }, '打开独立 QQ 目录'),
-        React.createElement('span', { style: hintStyle }, note || 'NapCat 注入的是独立 QQ（注册表键 dsh-versatileds），系统 QQ 不受影响；卸载只删独立 QQ。'),
+        React.createElement('span', {
+          style: {
+            ...hintStyle,
+            color: note.startsWith('✅') ? '#2e7d32' : (note.startsWith('❌') ? '#c62828' : undefined),
+            opacity: note.startsWith('✅') || note.startsWith('❌') ? 1 : 0.55,
+            fontWeight: note.startsWith('✅') || note.startsWith('❌') ? 600 : 400,
+          },
+        }, note || 'NapCat 注入的是独立 QQ（注册表键 dsh-versatileds），系统 QQ 不受影响；卸载只删独立 QQ。'),
       )
     }
 

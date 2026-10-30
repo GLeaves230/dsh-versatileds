@@ -2828,10 +2828,11 @@ const QQ_INSTALLER_URL = 'https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2
 async function checkSectorSize(targetPath) {
   try {
     const drive = String(targetPath).slice(0, 2)
-    const r = await runAsync('fsutil', ['fsinfo', 'ntfsinfo', drive], 20000)
-    const m = String(r.stdout || '').match(/Bytes Per Physical Sector\s*:\s*(\d+)/i)
-    const sector = m ? Number(m[1]) : 0
-    if (!sector) return { ok: false, sector: 0, error: '读不到扇区大小' }
+    const letter = drive.replace(':', '')
+    const ps = "(Get-Partition -DriveLetter '" + letter + "' -ErrorAction Stop | Get-Disk).PhysicalSectorSize"
+    const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
+    const sector = Number(String(r.stdout || '').trim().split(/\r?\n/).pop()) || 0
+    if (!sector) return { ok: false, sector: 0, error: '读不到扇区大小（盘符可能不存在）' }
     if (sector !== 512) return { ok: false, sector, error: `目标盘是 ${sector} 字节物理扇区（4Kn），QQ 在这种盘上跑不起来，请换一个 512 扇区的盘` }
     return { ok: true, sector }
   } catch (err) {
@@ -5827,6 +5828,35 @@ function startStatusServer(config, napcat = null) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ ...out, qqExists: existsSync(qqExe) }))
+      return
+    }
+    if (url.pathname === '/napcat/check-qq-path') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'POST only' }))
+        return
+      }
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', async () => {
+        let target = ''
+        try { target = String(JSON.parse(body || '{}').path || '').trim() } catch { target = '' }
+        if (!target) {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, error: '路径不能为空' }))
+          return
+        }
+        // 规范成绝对路径
+        let abs = target
+        try { abs = target.length >= 2 && target[1] === ':' ? target : join(versatiledsBase(), target) } catch { /* ignore */ }
+        const drive = abs.slice(0, 2)
+        const sec = await checkSectorSize(abs)
+        const sector = sec.sector
+        let err = ''
+        if (!sec.ok) err = sec.error
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(JSON.stringify({ ok: !err, sector, path: abs, error: err }))
+      })
       return
     }
     if (url.pathname === '/napcat/isolated-qq/status') {
