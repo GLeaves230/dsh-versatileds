@@ -1650,6 +1650,10 @@ function napcatAppDir(config) {
   const custom = String(config?.napcatAppDir?.get?.() || '').trim()
   if (custom) return custom
   const root = napcatShellRoot(config)
+  // Shell 根布局优先：<shell>/napcat.mjs + <shell>/config（34MB 完整包解压到这里，2026-10-30）
+  try {
+    if (existsSync(join(root, 'napcat.mjs')) && existsSync(join(root, 'config'))) return root
+  } catch { /* ignore */ }
   try {
     const versDir = join(root, 'versions')
     if (existsSync(versDir)) {
