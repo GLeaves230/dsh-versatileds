@@ -2135,6 +2135,24 @@ window.__ModuleLoader__.load({
               },
             }, note)
           : null,
+      // 上一次「启动登录服务」的结果：点了没反应时能看出原因（2026-10-30）
+      st.startResult && st.startResult.at > 0
+        ? React.createElement('div', {
+            style: {
+              marginTop: '8px', fontSize: '12px', lineHeight: 1.6,
+              color: st.startResult.ok ? '#2e7d32' : '#c62828',
+              fontWeight: 500,
+            },
+          },
+          '上次启动：'
+            + new Date(st.startResult.at).toLocaleTimeString('zh-CN', { hour12: false })
+            + (st.startResult.ok ? ' ✅ 成功' : ' ❌ 失败'),
+          st.startResult.ok ? null : React.createElement('span', { style: { fontWeight: 400 } },
+            ' —— ' + (st.startResult.error || '没连上 NapCat（快速登录可能失效，点「启动登录服务」会改走扫码）')),
+          st.startResult.reason ? React.createElement('span', { style: { fontWeight: 400, opacity: 0.7 } },
+            `（${String(st.startResult.reason).startsWith('switch-account') ? '切号：' + String(st.startResult.reason).split(':')[1] : st.startResult.reason === 'settings' ? '手动点启动' : st.startResult.reason}）`) : null,
+        )
+        : null,
         React.createElement(
           'div',
           { style: { marginTop: '10px', fontSize: '12px', lineHeight: 1.7, opacity: 0.75 } },
