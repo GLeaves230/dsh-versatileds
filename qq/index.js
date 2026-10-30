@@ -9471,7 +9471,19 @@ async function syncGroupRules(force = false) {
   /** 确保 NapCat 在跑：没跑就拉起、等登录，登录完清掉二维码缓存。openPage=false 时不弹独立网页；force=true 是设置页手动点的，不受 autoStartNapCat 限制。 */
   async function ensureNapCat(reason = '', openPage = true, force = false) {
   // 启动/登录/工具调用前先确保 NapCat 包在（npm 版不自带 118MB 大包，缺了就现下最新的）
-  await ensureNapcatPackage(config).catch(() => {})
+  // 这里必须带超时：它内部有网络/进程探测，一旦卡住整个「点登录」就静默无响应（2026-10-30）
+  const pkgStart = Date.now()
+  try {
+    await Promise.race([
+      ensureNapcatPackage(config),
+      sleep(120_000).then(() => { throw new Error('ensureNapcatPackage 超时 120s') }),
+    ])
+  } catch (err) {
+    plog('warn', '[dsh-versatileds] 准备 NapCat 包失败/超时（继续尝试启动）：' + String(err?.message ?? err).slice(0, 160))
+  } finally {
+    const took = Date.now() - pkgStart
+    if (took > 5000) plog('info', `[dsh-versatileds] 准备 NapCat 包用了 ${Math.round(took / 1000)}s（reason=${reason}）`)
+  }
   // 主人点「登录服务」：先把上一次拉起的旧进程杀干净、清记录，再刷新二维码
   // （2026-10-28 主人要求：不然会报「账号已登录，无法重复登录」）
   if (force) {
