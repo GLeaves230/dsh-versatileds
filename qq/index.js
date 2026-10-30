@@ -9577,8 +9577,14 @@ async function syncGroupRules(force = false) {
           `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ensure launcher=${launcher} reason=${reason}\n`, 'utf8')
       } catch { /* ignore */ }
       await startNapCat(launcher)
-      const gotQr = await waitForQr(qrPath, since)
-      if (!gotQr) return false
+      let gotQr = await waitForQr(qrPath, since)
+      if (!gotQr) {
+        // 免登录/快速登录（-q）成功时根本不产生二维码：再确认一次是否已经连上，
+        // 否则会把「登录成功」误判成「启动失败」（2026-10-30 主人报「切号后登录没拉起来」）
+        if (!(await napcatAlive())) return false
+        gotQr = true
+        plog('info', '[dsh-versatileds] 没有二维码但 NapCat 已连上（快速登录成功）')
+      }
       for (let i = 0; i < 90; i += 1) {
         if (await napcatAlive()) {
           try { unlinkSync(qrPath) } catch { /* ignore */ }
@@ -9891,6 +9897,10 @@ async function syncGroupRules(force = false) {
   // 设置页的「登录」子页面通过这两个钩子直接驱动（手动点按钮，强制拉起）
   napcatControl.alive = () => napcatAlive()
   napcatControl.start = (reason) => {
+    try {
+      appendFileSync(join(qqAccountDir(), 'napcat_start.log'),
+        `- ${new Date().toLocaleString('zh-CN', { hour12: false })} start-called reason=${reason}\n`, 'utf8')
+    } catch { /* ignore */ }
     const p = ensureNapCat(reason, false, true)
     // 记下结果，UI 能显示「为什么点了登录却没起来」（2026-10-30）
     p.then((ok) => {
