@@ -2848,6 +2848,37 @@ async function checkSectorSize(targetPath) {
   }
 }
 
+/**
+ * 运行校验：启动一次 QQ 看能不能活过 12 秒（活=可运行；秒退=环境/盘不兼容）。
+ * 用来决定「安装完成后能不能启动 NapCat」。
+ */
+async function checkQqRunnable(dir) {
+  const exe = join(dir, 'QQ.exe')
+  if (!existsSync(exe)) return { ok: false, error: 'QQ.exe 不存在：' + dir }
+  let pid = 0
+  try {
+    const child = spawn(exe, [], { detached: true, stdio: 'ignore', windowsHide: true })
+    pid = child.pid || 0
+    child.unref()
+  } catch (err) {
+    return { ok: false, error: '启动失败：' + String(err?.message ?? err).slice(0, 120) }
+  }
+  await new Promise((r) => setTimeout(r, 12000))
+  // QQ.exe 引导进程会退出、真正进程是新 pid，所以按「路径」数进程（2026-10-30）
+  let count = 0
+  try {
+    const ps = "Get-Process QQ -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '" + String(dir).replace(/'/g, "''") + "\\*' } | Measure-Object | Select-Object -ExpandProperty Count"
+    const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps], 30000)
+    count = Number(String(r.stdout || '').trim().split(/\r?\n/).pop()) || 0
+  } catch { count = 0 }
+  // 清理这次测试拉起的进程
+  try {
+    const psKill = "Get-Process QQ -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '" + String(dir).replace(/'/g, "''") + "\\*' } | Stop-Process -Force -ErrorAction SilentlyContinue"
+    await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psKill], 30000)
+  } catch { /* ignore */ }
+  return { ok: count > 0, pid, count, error: count > 0 ? '' : 'QQ 启动后立即退出（这个盘的扇区/环境不兼容）' }
+}
+
 async function installIsolatedQq(config) {
   if (qqInstallState.running) return qqInstallState
   const target = String(acctCfg(config, 'qqInstallPath', 'C:\\Program Files\\NapCat\\Tencent\\QQNT') || '').trim()
@@ -2947,8 +2978,21 @@ async function installIsolatedQq(config) {
           await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps2], 60000)
         } catch { /* ignore */ }
         try { rmSync(exe, { force: true }) } catch { /* ignore */ }
-        qqInstallState = { ...qqInstallState, running: false, phase: 'done' }
-        plog('info', '[dsh-versatileds] 独立 QQ 安装完成：' + target)
+        // 运行校验：真启动一次，活下来才算「可运行」
+        qqInstallState.phase = 'verifying'
+        const run = await checkQqRunnable(realDir)
+        qqInstallState = {
+          ...qqInstallState,
+          running: false,
+          phase: run.ok ? 'done' : 'not-runnable',
+          runnable: Boolean(run.ok),
+          error: run.ok ? '' : run.error,
+        }
+        if (run.ok) {
+          plog('info', '[dsh-versatileds] 独立 QQ 安装完成且可运行：' + realDir)
+        } else {
+          plog('warn', '[dsh-versatileds] 独立 QQ 装好了但跑不起来：' + run.error + '（不会启动 NapCat）')
+        }
         return qqInstallState
       }
     }
@@ -5848,6 +5892,30 @@ function startStatusServer(config, napcat = null) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ ...out, qqExists: existsSync(qqExe) }))
+      return
+    }
+    if (url.pathname === '/napcat/check-qq-runnable') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'POST only' }))
+        return
+      }
+      let dir = ''
+      try {
+        const rq = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+          "(Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\dsh-versatileds' -ErrorAction SilentlyContinue).UninstallString"], 30000)
+        const raw = String(rq.stdout || '').trim().replace(/^"|"$/g, '')
+        if (raw) dir = raw.replace(/[\\/][^\\/]+$/, '')
+      } catch { /* ignore */ }
+      if (!dir) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: '找不到独立 QQ（自定义注册表键不存在）' }))
+        return
+      }
+      const run = await checkQqRunnable(dir)
+      qqInstallState = { ...qqInstallState, runnable: Boolean(run.ok), error: run.ok ? '' : run.error }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ ok: run.ok, dir, pid: run.pid, error: run.error }))
       return
     }
     if (url.pathname === '/napcat/check-qq-path') {
@@ -9333,6 +9401,11 @@ async function syncGroupRules(force = false) {
       // 退出登录只是这次不连；免登录时效还在 → 下次启动照常快速登录（2026-10-29）
       if (!quickLoginUsable(config)) return false
       setNapcatLoggedOut(false)
+    }
+    // 独立 QQ 上次验证过「跑不起来」→ 不启动 NapCat（2026-10-30）
+    if (qqInstallState.runnable === false && !force) {
+      plog('warn', '[dsh-versatileds] 独立 QQ 不可运行，跳过启动 NapCat：' + (qqInstallState.error || ''))
+      return false
     }
     // 「免登录自动化」关掉时：不自动拉起，需要手动点「启动登录服务」（2026-10-29）
     if (!force && acctCfg(config, 'quickLoginAutoEnabled', true) === false) return false

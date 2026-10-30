@@ -1792,6 +1792,19 @@ window.__ModuleLoader__.load({
     function IsolatedQqPanel({ form }) {
       const [note, setNote] = React.useState('')
       const [busy, setBusy] = React.useState(false)
+      const [installStatus, setInstallStatus] = React.useState(null)
+      React.useEffect(() => {
+        let alive = true
+        const loadStatus = () => {
+          fetch(QQ_STATUS_URL + '/napcat/isolated-qq/status', { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => { if (alive) setInstallStatus(d) })
+            .catch(() => {})
+        }
+        loadStatus()
+        const t = setInterval(loadStatus, 5000)
+        return () => { alive = false; clearInterval(t) }
+      }, [])
       const [installPath, setInstallPath] = React.useState(() => {
         try { return String(form.get('qqInstallPath') || 'C:\\Program Files\\NapCat\\Tencent\\QQNT') } catch { return 'C:\\Program Files\\NapCat\\Tencent\\QQNT' }
       })
@@ -1843,6 +1856,18 @@ window.__ModuleLoader__.load({
         }, '保存并校验'),
         React.createElement('span', { style: hintStyle }, '必须放 512 字节扇区的盘（4Kn 盘跑不了 QQ）；默认 C:\\Program Files\\NapCat\\Tencent\\QQNT'),
         React.createElement('span', { style: labelStyle }, '独立 QQ'),
+        React.createElement('button', {
+          type: 'button', style: skipStyle, disabled: busy || (installStatus && installStatus.running),
+          onClick: () => {
+            setBusy(true)
+            setNote('正在启动安装流程…（会弹安装器，你点一次「安装」）')
+            fetch(QQ_STATUS_URL + '/napcat/isolated-qq', { method: 'POST' })
+              .then((r) => r.json())
+              .then((d) => setNote(d && d.ok ? '安装流程已启动：' + (d.target || '') : '启动失败'))
+              .catch(() => setNote('❌ 接口没响应'))
+              .finally(() => setBusy(false))
+          },
+        }, (installStatus && installStatus.running) ? ('安装中：' + (installStatus.phase || '…')) : '安装独立 QQ'),
         React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/uninstall-qq') }, '卸载独立 QQ'),
         React.createElement('button', { type: 'button', style: skipStyle, disabled: busy, onClick: () => call('/napcat/open-qq-dir') }, '打开独立 QQ 目录'),
         React.createElement('span', {
