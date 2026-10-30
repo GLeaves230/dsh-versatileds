@@ -1586,17 +1586,12 @@ function loadBiliLog(limit = 8) {
  * 归属来自 appendNote 写的 〔g:群号〕/〔p:QQ号〕，B（群与个人隔离）靠它生效。
  */
 function loadNotes(limit = 30, scope = '', isolate = false) {
-  console.log(`[loadNotes] enter size=${notesMem.length} isolate=${isolate}`)
   try {
     // 只读内存镜像（2026-10-26 读文件会卡死）：为空就当没笔记
     const lines = notesMem
     if (!lines.length) return ''
     if (!isolate || !scope) {
-      const picked = lines.slice(-limit)
-      console.log(`[loadNotes] picked=${picked.length}`)
-      const out = picked.join('\n')
-      console.log(`[loadNotes] joined len=${out.length}`)
-      return out
+      return lines.slice(-limit).join('\n')
     }
     const mine = lines.filter((l) => {
       const m = l.match(/〔([gp]:[^〕]*)〕\s*$/)
@@ -1605,7 +1600,7 @@ function loadNotes(limit = 30, scope = '', isolate = false) {
     })
     return mine.slice(-limit).join('\n')
   } catch (err) {
-    console.log(`[loadNotes] catch ${err?.message ?? err}`)
+
     return ''
   }
 }
@@ -2855,6 +2850,26 @@ async function restoreSystemQqRegistry() {
 
 const QQ_INSTALLER_URL = 'https://qqdl.gtimg.cn/qqfile/QQNT/9.9.33/release/497e2f1f/QQ_9.9.33_260813_x64_01.exe'
 
+/**
+ * 系统 QQ 安装目录：先读 Tencent\\QQNT\\Install，再从 Uninstall\\QQ\\UninstallString 反推，
+ * 都读不到才退回 D: 默认。机器不同盘符可能不同，别再硬编码（2026-10-30）。
+ */
+async function systemQqDir() {
+  try {
+    const r = await runAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+      "$p='HKLM:\\SOFTWARE\\WOW6432Node\\Tencent\\QQNT'; $q='HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QQ'; " +
+      "$a=(Get-ItemProperty $p -ErrorAction SilentlyContinue).Install; $b=(Get-ItemProperty $q -ErrorAction SilentlyContinue).UninstallString; " +
+      "if ($a) { $a } elseif ($b) { $b }"], 30000)
+    let raw = String(r.stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || ''
+    raw = raw.trim().replace(/^"|"$/g, '')
+    if (raw) {
+      const d = raw.replace(/[\\/][^\\/]+$/, '')
+      if (d && existsSync(join(d, 'QQ.exe'))) return d
+    }
+  } catch { /* ignore */ }
+  return 'D:\\Program Files\\Tencent\\QQNT'
+}
+
 /** 目标盘的物理扇区（4096 = 4Kn，QQ 跑不了）。返回 { ok, sector, error } */
 async function checkSectorSize(targetPath) {
   try {
@@ -2920,8 +2935,8 @@ async function installIsolatedQq(config) {
 
     // ③ 备份系统 QQ（注册表整键 + 目录名）
     await backupSystemQqRegistry()
-    const sysDir = 'D:\\Program Files\\Tencent\\QQNT'
-    const hiddenDir = 'D:\\Program Files\\Tencent\\QQNT.dsh-hidden'
+    const sysDir = await systemQqDir()
+    const hiddenDir = sysDir + '.dsh-hidden'
     try {
       if (existsSync(sysDir) && !existsSync(hiddenDir)) {
         await runAsync('cmd', ['/c', 'move', `"${sysDir}"`, `"${hiddenDir}"`], 60000)
@@ -3045,7 +3060,7 @@ async function installShellLayout(config, dir) {
   // 用系统 QQ 的 build 号命名 shell 目录（读不到就用 52230）
   let build = '52230'
   try {
-    const versDir = 'D:\\Program Files\\Tencent\\QQNT\\versions'
+    const versDir = join(await systemQqDir(), 'versions')
     for (const v of readdirSync(versDir)) {
       const m = /-(\d+)$/.exec(v)
       if (m) { build = m[1]; break }
@@ -3199,11 +3214,24 @@ function sharedMemoryPath() {
  * 共享记忆十几 KB，塞进 prompt 中间模型容易忽略；群聊把这一节单独拎出来放前面，
  * 「妈妈」「瓦学弟」这类梗才接得住（2026-10-26 主人：它还在一本正经问「你喊谁妈」）。
  */
+// shared-memory.md 的「黑话」段缓存：每条群消息都会查一次，14KB 同步读没必要每次来（2026-10-30）
+let gagCache = { mtime: 0, text: '' }
+
 function loadGagSection() {
   try {
-    const raw = readFileSync(sharedMemoryPath(), 'utf8')
+    const file = sharedMemoryPath()
+    try {
+      const mtime = statSync(file).mtimeMs
+      if (mtime === gagCache.mtime) return gagCache.text
+      const cached = readFileSync(file, 'utf8').match(/## 黑话、谐音与玩梗[\s\S]*?(?=\n## |$)/)
+      gagCache = { mtime, text: cached ? cached[0].trim() : '' }
+      return gagCache.text
+    } catch { /* 落到下面的老路径 */ }
+    const raw = readFileSync(file, 'utf8')
     const m = raw.match(/## 黑话、谐音与玩梗[\s\S]*?(?=\n## |$)/)
-    return m ? m[0].trim() : ''
+    const text = m ? m[0].trim() : ''
+    try { gagCache = { mtime: statSync(file).mtimeMs, text } } catch { /* ignore */ }
+    return text
   } catch {
     return ''
   }
